@@ -1,0 +1,82 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>AyaHitmarker</AssemblyName>
+    <RootNamespace>AyaHitmarker</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>AyaHitmarker</Product>
+    <Description>Hit / kill feedback overlay for SPTushonka (EFT 1.2.0.0 / IL2CPP).</Description>
+  </PropertyGroup>
+
+  <!-- ref/ 是 Il2CppDumper 产物所在地，必须从所有默认 Item 类型里剔除。
+       尤其是 None：MSBuild 会把 @(None) 传给 ResolveAssemblyReference 的
+       CandidateAssemblyFiles，而它在程序集搜索顺序上排在 HintPath 之前，
+       会把 interop 的同名程序集全部顶掉（DummyDll 的方法体是空的）。 -->
+  <ItemGroup>
+    <Compile Remove="ref/**" />
+    <None Remove="ref/**" />
+    <Content Remove="ref/**" />
+    <EmbeddedResource Remove="ref/**" />
+    <None Remove="ref/Il2CppDumperOutput/**" />
+  </ItemGroup>
+
+  <!-- ===== BepInEx 6 运行时（core/），全部 Private=false，不要拷进插件目录 ===== -->
+  <ItemGroup>
+    <Reference Include="BepInEx.Core"><HintPath>$(BepInExCore)/BepInEx.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP"><HintPath>$(BepInExCore)/BepInEx.Unity.IL2CPP.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(BepInExCore)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Il2CppInterop.Runtime"><HintPath>$(BepInExCore)/Il2CppInterop.Runtime.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- ===== IL2CPP 的 BCL 影子程序集 ===== -->
+  <ItemGroup>
+    <Reference Include="Il2Cppmscorlib"><HintPath>$(InteropDir)/Il2Cppmscorlib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Il2CppSystem"><HintPath>$(InteropDir)/Il2CppSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Il2CppSystem.Core"><HintPath>$(InteropDir)/Il2CppSystem.Core.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- ===== 游戏程序集（interop 代理） ===== -->
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp"><HintPath>$(InteropDir)/Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(InteropDir)/Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Comfort"><HintPath>$(InteropDir)/Comfort.dll</HintPath><Private>false</Private></Reference>
+    <!-- EBodyPart / EBodyPartColliderType / EArmorPlateCollider 等全局枚举在游戏自己的 PlayerEnums 程序集里，
+         不在 Assembly-CSharp。不引用它就会报 CS0246。 -->
+    <Reference Include="PlayerEnums"><HintPath>$(InteropDir)/PlayerEnums.dll</HintPath><Private>false</Private></Reference>
+    <!-- EFT.Player 实现了 IDissonancePlayer，只要碰到 Player 类型就必须能解析这个程序集 -->
+    <Reference Include="DissonanceVoip"><HintPath>$(InteropDir)/DissonanceVoip.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- ===== SPTushonka 官方补丁框架（ModulePatch / PatchManager） ===== -->
+  <ItemGroup>
+    <Reference Include="SPTushonka.Common"><HintPath>$(SptPluginDir)/SPTushonka.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="SPTushonka.Reflection"><HintPath>$(SptPluginDir)/SPTushonka.Reflection.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- ===== Unity（interop 代理，不是 unity-libs 里的原件） ===== -->
+  <ItemGroup>
+    <Reference Include="UnityEngine"><HintPath>$(InteropDir)/UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(InteropDir)/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(InteropDir)/UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(InteropDir)/UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(InteropDir)/UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(InteropDir)/UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(InteropDir)/UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextCoreFontEngineModule"><HintPath>$(InteropDir)/UnityEngine.TextCoreFontEngineModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextCoreTextEngineModule"><HintPath>$(InteropDir)/UnityEngine.TextCoreTextEngineModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(InteropDir)/UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(InteropDir)/UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule"><HintPath>$(InteropDir)/UnityEngine.UnityWebRequestModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule"><HintPath>$(InteropDir)/UnityEngine.UnityWebRequestAudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>$(InteropDir)/Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- ===== 生成后自动部署到游戏 ===== -->
+  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' != 'false'">
+    <MakeDir Directories="$(PluginDeployDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginDeployDir)" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(PluginDeployDir)" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+    <Message Importance="high" Text="[AyaHitmarker] deployed -> $(PluginDeployDir)" />
+  </Target>
+
+</Project>

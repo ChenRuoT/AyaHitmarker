@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+
+# 本地覆盖（GameDir 等）
+Directory.Build.local.props
+
+# Il2CppDumper 的大体积产物（dump.cs 57MB / il2cpp.h 94MB / script.json 173MB / DummyDll 147 个）
+# 注意：这些桩程序集和 interop 同名，必须同时从 MSBuild 的默认 Item globs 里排除，见 AGENTS.md §3.2
+ref/Il2CppDumperOutput/
+
+# 按用户要求：本文件只作本地工作入口，不入库
+AGENTS.md
