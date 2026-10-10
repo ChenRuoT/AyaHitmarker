@@ -192,7 +192,35 @@ Patch a method with its own body instead
 3. `SoundPlayer.Play` 的**每一条提前返回都会 `WarnOnce`**，同类原因每种音效只告警一次。
    静默 return 是这次排查成本这么高的直接原因。
 
-## 9. 已知限制
+## 9. ⚠️ 音效：不要把 AudioSource 配置得"太聪明"
+
+这个版本的 EFT 用 **Meta XR Audio** 接管空间音频（启动日志里能看到）：
+
+```
+[Message: Unity] Applying Acoustic Propagation Settings: [acoustic model = AcousticRayTracing], [diffraction = True]
+[Message: Unity] Meta XR Audio Native Interface initialized with Unity plugin
+[Message: Unity] Setting spatial voice limit: 196
+[Message: Unity] No Meta XR Audio Room found, setting default room
+```
+
+于是"多设几个绕过开关让它更稳"的想法是**反效果**的。Unity 文档里
+`AudioSource.bypassEffects` 会一并绕过 **AudioListener** 上的效果 —— 而那正是 Meta XR Audio
+把声音渲染出来的环节。一次排查中 AudioSource 被设成了：
+
+```csharp
+bypassEffects = true; bypassListenerEffects = true; bypassReverbZones = true;
+```
+
+结果是：clip 真实（`loadState=Loaded`、长度正确）、`AudioListener.volume=1`、`pause=False`、
+`isPlaying=True`，**但完全没有声音，且没有任何 Unity 告警**。
+
+**结论：音频源保持旧 Mono 项目的三行即可**（`playOnAwake=false` / `spatialBlend=0` / `volume=1`）。
+那些绕过开关现在都是默认关闭的排障项（`4. 音频` 分组）。
+
+如果 2D 仍然无声，`4. 音频 → 空间模式` 可以切成「3D 跟随相机」——走游戏自己的声场管线。
+（3D 模式下 `Tick()` 每帧把声源挪到 `Camera.main` 的位置。）
+
+## 10. 已知限制
 
 - **经验值是估算**：击杀事件读不到「这一击给了多少经验」（真实值走 SkillManager / 战局结算）。
   公式沿用旧项目：100 基础 + 爆头 50。旧项目默认就显示它，这里也默认显示。
@@ -204,7 +232,7 @@ Patch a method with its own body instead
   所以从战局销毁到 UI 清空最多有 0.25 秒延迟 —— 实际感知不到（那 0.25 秒里画面已经切走了）。
 - 自己被打**不提示**（只提示「我打中了别人」）。事件里带 `VictimIsLocalPlayer`，想加很容易。
 
-## 10. 排查
+## 11. 排查
 
 见 [`AGENTS.md` §5 排查入口](AGENTS.md#5-排查入口) —— 那里列了所有日志关键字及其含义。
 
@@ -213,7 +241,7 @@ Patch a method with its own body instead
 - `[ui] canvas ready ... font=MISSING` → 字体没解析成功，文本不显示。改 `5. 界面 → 字体名称`。
 - 本局完全没有命中提示 → 看有没有 `[events] 无法解析 GlobalEventDispatcher.Instance`。
 
-## 11. 参考
+## 12. 参考
 
 | 资源 | 地址 |
 |---|---|
@@ -222,10 +250,11 @@ Patch a method with its own body instead
 | `ref/Il2CppDumperOutput/dump.cs` | 全类型/字段/方法 + RVA |
 | 旧 Mono 版 | `E:\EFTDev\Client.0.16.9.5.40743\Dev\SimpleHitMarker` |
 
-## 12. 变更记录
+## 13. 变更记录
 
 | 版本 | 内容 |
 |---|---|
+| 0.2.5 | 音频源配置退回旧项目三行 —— 投机加的 `bypassEffects/bypassListenerEffects/bypassReverbZones` 会绕过 AudioListener 效果，而 Meta XR Audio 正靠它出声；这些改为默认关闭的排障项，并新增「空间模式」2D/3D 切换。加载日志补 PCM 峰值、listener 数量、驱动信息 |
 | 0.2.4 | 修音效无声：`DownloadHandlerAudioClip` 的 clip 被 `request.Dispose()` 一起销毁。改为「能克隆就克隆，否则持有请求保活」；`SoundPlayer` 每条提前返回都告警 |
 | 0.2.3 | 默认参数按旧项目实机 cfg 校准；命中点投影加边界校验（越界退回屏幕中心）；测试快捷键不再被「调试日志」开关连坐；AudioSource 绕过 listener 暂停/音效链；伤害数字补描边颜色 |
 | 0.2.2 | 去掉 `PatchManager` 与 `SPTushonka.Reflection` / `0Harmony` 依赖 —— `autoPatch:true` + 零补丁会抛异常让插件加载失败。初始化改为分步 try/catch |

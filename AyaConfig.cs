@@ -4,6 +4,15 @@ using UnityEngine;
 
 namespace AyaHitmarker;
 
+/// <summary>音效的空间模式。Meta XR Audio 在这个版本接管了空间音频，2D 源在某些配置下会不出声。</summary>
+internal enum SpatialMode
+{
+    /// <summary>2D（旧 Mono 项目就是这么做并且能出声）。</summary>
+    Flat2D = 0,
+    /// <summary>3D，位置跟随主相机 —— 走游戏的空间化管线（Meta XR Audio）。2D 无声时改这个。</summary>
+    FollowCamera3D = 1,
+}
+
 internal enum DamageNumberMode
 {
     /// <summary>只显示打进肉体的部分（旧 Mono 项目的行为）。打中护甲且未穿透时 DidBodyDamage 为 0，数字会被跳过。</summary>
@@ -127,6 +136,9 @@ internal sealed class AyaConfig
     internal ConfigEntry<string> SoundFileHitHeadshot { get; }
     internal ConfigEntry<string> SoundFileKill { get; }
     internal ConfigEntry<string> SoundFileKillHeadshot { get; }
+    internal ConfigEntry<SpatialMode> SoundSpatialMode { get; }
+    internal ConfigEntry<bool> SoundBypassEffects { get; }
+    internal ConfigEntry<bool> SoundIgnoreListenerPause { get; }
 
     // ---- 5. 界面 ----
     internal ConfigEntry<float> UiScale { get; }
@@ -289,6 +301,19 @@ internal sealed class AyaConfig
         SoundFileHitHeadshot = cfg.Bind("4. 音频", "自定义:爆头命中", "", new ConfigDescription(SoundHint("headshot_hit")));
         SoundFileKill = cfg.Bind("4. 音频", "自定义:击杀", "", new ConfigDescription(SoundHint("kill")));
         SoundFileKillHeadshot = cfg.Bind("4. 音频", "自定义:爆头击杀", "", new ConfigDescription(SoundHint("headshot_kill")));
+
+        // ---- 排障开关：默认全部保持旧 Mono 项目的配置（都不开） ----
+        SoundSpatialMode = cfg.Bind("4. 音频", "空间模式", SpatialMode.Flat2D,
+            new ConfigDescription(
+                "2D = 旧项目做法。这个版本的 EFT 用 Meta XR Audio 做空间音频，" +
+                "如果 2D 完全没声音，改成「3D 跟随相机」走游戏的声场管线。"));
+        SoundBypassEffects = cfg.Bind("4. 音频", "绕过效果链(排障)", false,
+            new ConfigDescription(
+                "对应 AudioSource.bypassEffects + bypassListenerEffects + bypassReverbZones。" +
+                "**默认关闭** —— Unity 文档说明它会绕过 AudioListener 上的效果，而这正是 " +
+                "Meta XR Audio 渲染出声的环节，开了可能直接没声。"));
+        SoundIgnoreListenerPause = cfg.Bind("4. 音频", "无视 listener 暂停(排障)", false,
+            new ConfigDescription("对应 AudioSource.ignoreListenerPause。默认关闭。"));
 
         // ---------------------------------------------------------------- 5. 界面
         UiScale = cfg.Bind("5. 界面", "UI 缩放", 1f,

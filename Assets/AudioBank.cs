@@ -199,30 +199,21 @@ internal static class AudioBank
                 yield break;
             }
 
-            // 先试着克隆一份自己拥有的副本，彻底摆脱 handler 的生命周期
-            var owned = TryClone(kind, clip);
-
-            if (owned != null)
-            {
-                _clips[i] = owned;
-                SafeDispose(request);   // 副本独立了，请求可以放掉
-            }
-            else
-            {
-                // 克隆失败 → 必须一直持有请求，否则 handler 被终结器回收时 clip 一起消失
-                _clips[i] = clip;
-                _keepAliveRequests.Add(request);
-                Plugin.Logger.LogWarning($"[audio] {kind} 未能克隆 clip（GetData 失败），改为持有 UnityWebRequest 保活");
-            }
-
+            // 直接用 handler 给的 clip（旧 Mono 项目就是这么做的并且能出声），
+            // 但**必须一直持有请求** —— 否则 handler 被终结器回收时 clip 一起消失。
+            _clips[i] = clip;
+            _keepAliveRequests.Add(request);
             _sources[i] = path;
             _state[i] = 1;
 
-            var kept = _clips[i];
+            // 诊断：量一次 PCM 峰值，用来区分「解码出来就是静音」和「解码没问题但播不出声」
+            float peak = MeasurePeak(clip, out bool readOk);
+
             Plugin.Logger.LogInfo(
                 $"[audio] {kind} <- {Path.GetFileName(path)} " +
-                $"(len={kept!.length:0.###}s samples={kept.samples} ch={kept.channels} " +
-                $"freq={kept.frequency} loadState={SafeState(kept)})");
+                $"(len={clip.length:0.###}s samples={clip.samples} ch={clip.channels} " +
+                $"freq={clip.frequency} loadState={SafeState(clip)} " +
+                $"readOk={readOk} peak={peak:0.####})");
         }
         catch (Exception ex)
         {
@@ -233,41 +224,34 @@ internal static class AudioBank
     }
 
     /// <summary>
-    /// 把 clip 的数据复制进一个自建的 AudioClip。
-    /// 成功返回副本；失败（例如流式压缩的 clip 取不出样本）返回 <c>null</c>。
+    /// 读一次 PCM 并返回峰值（0..1），只用于诊断。
+    /// 用来区分两种情况：解码出来本身就是静音（peak=0），还是解码没问题但播不出声（peak&gt;0）。
     /// </summary>
-    private static AudioClip? TryClone(SoundKind kind, AudioClip src)
+    private static float MeasurePeak(AudioClip clip, out bool readOk)
     {
+        readOk = false;
         try
         {
-            int samples = src.samples;
-            int channels = src.channels;
-            int frequency = src.frequency;
-            if (samples <= 0 || channels <= 0 || frequency <= 0)
+            int samples = clip.samples;
+            int channels = clip.channels;
+            if (samples <= 0 || channels <= 0) return 0f;
+
+            var buffer = new float[samples * channels];
+            if (!clip.GetData(buffer, 0)) return 0f;
+            readOk = true;
+
+            float peak = 0f;
+            for (int i = 0; i < buffer.Length; i++)
             {
-                Plugin.Logger.LogWarning($"[audio] {kind} clip 参数异常: samples={samples} ch={channels} freq={frequency}");
-                return null;
+                float v = buffer[i] < 0f ? -buffer[i] : buffer[i];
+                if (v > peak) peak = v;
             }
-
-            int total = samples * channels;
-            var buffer = new float[total];
-            if (!src.GetData(buffer, 0)) return null;
-
-            var clone = AudioClip.Create($"AyaHitmarker.{kind}", samples, channels, frequency, false);
-            if (clone == null) return null;
-            if (!clone.SetData(buffer, 0))
-            {
-                UnityEngine.Object.Destroy(clone);
-                return null;
-            }
-
-            clone.hideFlags = HideFlags.HideAndDontSave;
-            return clone;
+            return peak;
         }
         catch (Exception ex)
         {
-            Plugin.Logger.LogWarning($"[audio] {kind} 克隆 clip 异常: {ex.Message}");
-            return null;
+            Plugin.Logger.LogWarning($"[audio] 读取 PCM 峰值失败: {ex.Message}");
+            return 0f;
         }
     }
 

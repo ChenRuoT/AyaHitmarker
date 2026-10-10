@@ -56,6 +56,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
             DrainFeedback();
             _ui.Tick();
+            _sound.Tick();   // 3D 空间模式下让声源跟随相机
             DumpDiagnostics();
         }
         catch (Exception ex)
