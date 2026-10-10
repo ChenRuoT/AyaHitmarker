@@ -51,9 +51,6 @@ internal static class GameEvents
 
     internal static bool DispatcherPresent => _lastDispatcher != IntPtr.Zero;
 
-    /// <summary>供 <c>Patches.RaidLifecyclePatch</c> 在 <c>GameWorld.OnDestroy</c> 里调用。</summary>
-    internal static void RaidEndedFromPatch() => Raise(RaidEnded, "raid ended (GameWorld.OnDestroy)");
-
     /// <summary>进程内只需订阅一次（静态事件）。</summary>
     internal static void EnsureStaticSubscribed()
     {
@@ -355,16 +352,42 @@ internal static class GameEvents
         return baseExp;
     }
 
+    /// <summary>
+    /// 触发一个无参事件并记日志。
+    ///
+    /// 日志做了限流：历史上这里被一个错误的补丁(source: 方法体共享)高频调用，
+    /// 刷了 24603 行并拖垮启动。事件本身照常触发，只是相同 reason 每 2 秒最多记一次。
+    /// </summary>
     private static void Raise(Action? handler, string reason)
     {
         try
         {
             handler?.Invoke();
-            Plugin.Logger.LogInfo($"[events] {reason}");
         }
         catch (Exception ex)
         {
             Plugin.Logger.LogError($"[events] {reason} 回调异常: {ex}");
+            return;
         }
+
+        float now = UnityEngine.Time.unscaledTime;
+        if (string.Equals(reason, _lastRaiseReason, StringComparison.Ordinal) && now - _lastRaiseTime < 2f)
+        {
+            _suppressedRaises++;
+            if (_suppressedRaises == 100)
+            {
+                Plugin.Logger.LogWarning($"[events] '{reason}' 正在高频触发（已抑制 100 次）—— 检查是不是有补丁打到了共享方法体上");
+            }
+            return;
+        }
+
+        _lastRaiseReason = reason;
+        _lastRaiseTime = now;
+        _suppressedRaises = 0;
+        Plugin.Logger.LogInfo($"[events] {reason}");
     }
+
+    private static string _lastRaiseReason = string.Empty;
+    private static float _lastRaiseTime = -999f;
+    private static int _suppressedRaises;
 }

@@ -23,6 +23,12 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private readonly List<HitRecord> _hits = new List<HitRecord>(32);
     private readonly List<KillRecord> _kills = new List<KillRecord>(16);
 
+    // 协程相关引用必须自己持有：Il2CppManagedEnumerator 内部用 GCHandle 指向托管迭代器，
+    // 托管侧的包装对象一旦被 GC，原生侧就是 "Handle is not initialized"。
+    private Coroutine? _audioCoroutine;
+    private System.Collections.IEnumerator? _audioEnumerator;
+    private Il2CppSystem.Collections.IEnumerator? _audioWrapped;
+
     private bool _initialized;
     private string _lastFontName = string.Empty;
     private string _lastSoundFingerprint = string.Empty;
@@ -56,6 +62,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         {
             GameEvents.RaidStarted -= OnRaidStarted;
             GameEvents.RaidEnded -= OnRaidEnded;
+            StopAudioLoad();
             _sound.Shutdown();
         }
         catch (Exception ex)
@@ -93,13 +100,31 @@ internal sealed class AyaBehaviour : MonoBehaviour
     {
         try
         {
+            StopAudioLoad();
+
             // WrapToIl2Cpp 把托管迭代器桥到 Unity 协程；解码在 Unity 侧异步完成，主线程不阻塞。
-            StartCoroutine(AudioBank.LoadAll().WrapToIl2Cpp());
+            _audioEnumerator = AudioBank.LoadAll();
+            _audioWrapped = _audioEnumerator.WrapToIl2Cpp();
+            _audioCoroutine = StartCoroutine(_audioWrapped);
         }
         catch (Exception ex)
         {
             Plugin.Logger.LogError($"[audio] 启动音效加载协程失败: {ex}");
         }
+    }
+
+    private void StopAudioLoad()
+    {
+        try
+        {
+            if (_audioCoroutine != null) StopCoroutine(_audioCoroutine);
+            else if (_audioWrapped != null) StopCoroutine(_audioWrapped);
+        }
+        catch { /* ignore */ }
+
+        _audioCoroutine = null;
+        _audioWrapped = null;
+        _audioEnumerator = null;
     }
 
     private void DrainFeedback()

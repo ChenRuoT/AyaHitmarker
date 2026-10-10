@@ -60,8 +60,8 @@ GameWorld.OnDestroy (ModulePatch) ┘                                          +
 
 - **只有一个注入的托管类型**（`Behaviour/AyaBehaviour.cs`）。`BasePlugin` 不是 MonoBehaviour，
   所以由 `Plugin.Load()` 用 `AddComponent<T>()` 注入。其余 UI 全是 interop 自带组件。
-- **只有一个 Harmony 补丁**（`GameWorld.OnDestroy`，用来在撤离/战局销毁时清 UI）。
-  命中与击杀**没有任何 detour 挂在热路径上**，全是事件订阅。
+- **零补丁**。命中和击杀全是事件订阅；战局结束靠轮询 `GlobalEventDispatcher` 实例变化检测。
+  `PatchManager` 的接线保留着，但当前没有任何 `ModulePatch` 子类 —— 原因见 §7「方法体共享」。
 - 音效从 `Sounds/` 异步加载（见上），播放路径里**绝不触发加载**，没加载完就静默不响。
 
 ## 4. 实测结论：命中 / 击杀到底该挂哪儿
@@ -126,7 +126,34 @@ Harmony 把按值传的结构体 marshal 成托管对象时，postfix 拿到的�
 
 PMC 军衔图标（可选）：`BepInEx/plugins/AyaHitmarker/Icons/RankIcons/Rank{1,5,...,75}.png`，没有就不显示。
 
-## 7. 已知限制
+## 7. ⚠️ 不要补 `GameWorld.OnDestroy`（方法体共享）
+
+第一版曾用 `ModulePatch` 补 `EFT.GameWorld.OnDestroy` 来在战局销毁时清 UI。**这会让游戏起不来。**
+
+```
+[Warning:Il2CppInterop] virtual void EFT.GameWorld::OnDestroy() shares its native body with 3360 other methods
+and the detour runs for all of them, the body belongs to TOD_Sky.UpdateAmbient, TOD_Sky.UpdateReflection,
+ExampleSceneController.Start, PaintingTarget.Awake, SnatcherPair.SetWeight.
+Patch a method with its own body instead
+```
+
+**IL2CPP 会把方法体完全相同的方法合并到同一个原生地址。** `EFT.GameWorld.OnDestroy` 是个空 stub，
+它的地址被 **3360 个**方法共用。Harmony 的 detour 装在这个地址上，就等于给那 3360 个方法全部插了桩：
+
+| 症状 | 原因 |
+|---|---|
+| `[events] raid ended` 刷了 **24603** 行 | postfix 被 3360 个无关方法在启动期高频调用 |
+| `InvalidOperationException: Handle is not initialized` 刷屏 | trampoline 试图把无关类型的 `this` 包成 `EFT.GameWorld` 代理，对象池里没有 |
+| `NullReferenceException` 刷屏 | 同上 |
+| 游戏卡死在启动 | 上面三条的叠加 |
+
+**排查口诀：补丁装上后，先在 `LogOutput.log` 里搜 `shares its native body`。** 有这行就说明目标方法
+不可补，必须换目标或者改用轮询/事件。
+
+**当前结论：这个插件不需要任何补丁。** 战局边界由 `GlobalEventDispatcher` 实例变化（`GameEvents.Poll()`，
+限频 4Hz）精确覆盖；如果将来确实需要补丁，先按上面的口诀验证目标方法有独立方法体。
+
+## 8. 已知限制
 
 - **经验值是估算**：击杀事件读不到「这一击给了多少经验」（真实值走 SkillManager / 战局结算）。
   默认关闭显示（`3. 击杀播报 → 显示经验估算`）。
@@ -134,11 +161,11 @@ PMC 军衔图标（可选）：`BepInEx/plugins/AyaHitmarker/Icons/RankIcons/Ran
   环形/辉光的参数改由配置直接提供。想恢复预设时只要把这些字段做成一组配置档即可，事件层不用动。
 - **PMC 军衔图标从未真正存在过**：旧项目代码里会去读 `RankIcons/RankN.png`，但仓库里没有这些文件。
   本仓库补上了加载器，把文件丢进 `Icons/RankIcons/` 就会生效。
-- **战局结束的检测有两路**：轮询 `GlobalEventDispatcher` 实例 + `GameWorld.OnDestroy` 补丁。
-  若某次更新后补丁目标失效，轮询仍能兜住（只是晚一帧）。
+- **战局结束只有一路检测**：轮询 `GlobalEventDispatcher` 实例变化（限频 4Hz）。
+  所以从战局销毁到 UI 清空最多有 0.25 秒延迟 —— 实际感知不到（那 0.25 秒里画面已经切走了）。
 - 自己被打**不提示**（只提示「我打中了别人」）。事件里带 `VictimIsLocalPlayer`，想加很容易。
 
-## 8. 排查
+## 9. 排查
 
 见 [`AGENTS.md` §5 排查入口](AGENTS.md#5-排查入口) —— 那里列了所有日志关键字及其含义。
 
@@ -147,7 +174,7 @@ PMC 军衔图标（可选）：`BepInEx/plugins/AyaHitmarker/Icons/RankIcons/Ran
 - `[ui] canvas ready ... font=MISSING` → 字体没解析成功，文本不显示。改 `5. 界面 → 字体名称`。
 - 本局完全没有命中提示 → 看有没有 `[events] 无法解析 GlobalEventDispatcher.Instance`。
 
-## 9. 参考
+## 10. 参考
 
 | 资源 | 地址 |
 |---|---|
@@ -155,3 +182,11 @@ PMC 军衔图标（可选）：`BepInEx/plugins/AyaHitmarker/Icons/RankIcons/Ran
 | `SPTushonka.Reflection` | `Patching/`（ModulePatch）+ `Il2Cpp/`（Injection / BaseCall / MainThread） |
 | `ref/Il2CppDumperOutput/dump.cs` | 全类型/字段/方法 + RVA |
 | 旧 Mono 版 | `E:\EFTDev\Client.0.16.9.5.40743\Dev\SimpleHitMarker` |
+
+## 11. 变更记录
+
+| 版本 | 内容 |
+|---|---|
+| 0.2.1 | 删掉 `GameWorld.OnDestroy` 补丁 —— IL2CPP 方法体共享导致 detour 命中 3360 个方法，游戏无法启动。现在零补丁 |
+| 0.2.0 | IL2CPP 迁移完成：事件源换成 `GlobalEventDispatcher.OnBeingHit` + `Player.OnPlayerDeadStatic`；uGUI + TMP；Icons/Sounds 资源加载；环形/辉光特效 |
+| 0.1.0 | 探针版：验证 interop 引用链路 + 事件源判决 |
