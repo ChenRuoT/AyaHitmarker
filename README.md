@@ -60,8 +60,8 @@ GameWorld.OnDestroy (ModulePatch) ┘                                          +
 
 - **只有一个注入的托管类型**（`Behaviour/AyaBehaviour.cs`）。`BasePlugin` 不是 MonoBehaviour，
   所以由 `Plugin.Load()` 用 `AddComponent<T>()` 注入。其余 UI 全是 interop 自带组件。
-- **零补丁**。命中和击杀全是事件订阅；战局结束靠轮询 `GlobalEventDispatcher` 实例变化检测。
-  `PatchManager` 的接线保留着，但当前没有任何 `ModulePatch` 子类 —— 原因见 §7「方法体共享」。
+- **零补丁，因此不依赖 `SPTushonka.Reflection`。** 命中和击杀全是事件订阅；
+  战局结束靠轮询 `GlobalEventDispatcher` 实例变化检测。为什么连框架都不引：见 §7。
 - 音效从 `Sounds/` 异步加载（见上），播放路径里**绝不触发加载**，没加载完就静默不响。
 
 ## 4. 实测结论：命中 / 击杀到底该挂哪儿
@@ -150,8 +150,15 @@ Patch a method with its own body instead
 **排查口诀：补丁装上后，先在 `LogOutput.log` 里搜 `shares its native body`。** 有这行就说明目标方法
 不可补，必须换目标或者改用轮询/事件。
 
-**当前结论：这个插件不需要任何补丁。** 战局边界由 `GlobalEventDispatcher` 实例变化（`GameEvents.Poll()`，
-限频 4Hz）精确覆盖；如果将来确实需要补丁，先按上面的口诀验证目标方法有独立方法体。
+**当前结论：这个插件不需要任何补丁，所以也不引用 `SPTushonka.Reflection` / `0Harmony`。**
+战局边界由 `GlobalEventDispatcher` 实例变化（`GameEvents.Poll()`，限频 4Hz）精确覆盖。
+
+顺带避开的第二个坑：`new PatchManager(this, autoPatch: true)` 在「本程序集里一个 `ModulePatch` 都没有」时
+会抛 `PatchException: Could not find any patches defined in the assembly during auto patching`，
+**整个插件加载失败**（第二版就是这么挂的）。所以要么真的有补丁，要么别构造它。
+
+将来确实需要补丁时：加回引用 → 写 `ModulePatch` 子类 → `new PatchManager(this, true)` →
+**先启动一次并搜 `shares its native body`**。
 
 ## 8. 已知限制
 
@@ -187,6 +194,7 @@ Patch a method with its own body instead
 
 | 版本 | 内容 |
 |---|---|
-| 0.2.1 | 删掉 `GameWorld.OnDestroy` 补丁 —— IL2CPP 方法体共享导致 detour 命中 3360 个方法，游戏无法启动。现在零补丁 |
+| 0.2.2 | 去掉 `PatchManager` 与 `SPTushonka.Reflection` / `0Harmony` 依赖 —— `autoPatch:true` + 零补丁会抛异常让插件加载失败。初始化改为分步 try/catch |
+| 0.2.1 | 删掉 `GameWorld.OnDestroy` 补丁 —— IL2CPP 方法体共享导致 detour 命中 3360 个方法，游戏无法启动 |
 | 0.2.0 | IL2CPP 迁移完成：事件源换成 `GlobalEventDispatcher.OnBeingHit` + `Player.OnPlayerDeadStatic`；uGUI + TMP；Icons/Sounds 资源加载；环形/辉光特效 |
 | 0.1.0 | 探针版：验证 interop 引用链路 + 事件源判决 |

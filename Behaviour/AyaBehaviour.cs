@@ -44,17 +44,32 @@ internal sealed class AyaBehaviour : MonoBehaviour
     {
         EnsureInitialized();
 
-        // 事件源存活检查：GlobalEventDispatcher 每个 raid 一个新实例
-        GameEvents.Poll();
+        // 整帧兜底：任何一处异常都不该让 Unity 每帧刷一整页堆栈（限流到 5 秒一次）
+        try
+        {
+            // 事件源存活检查：GlobalEventDispatcher 每个 raid 一个新实例
+            GameEvents.Poll();
 
-        _ui.ApplyScaleIfChanged();
-        ReloadIfConfigurationChanged();
-        HandleHotkeys();
+            _ui.ApplyScaleIfChanged();
+            ReloadIfConfigurationChanged();
+            HandleHotkeys();
 
-        DrainFeedback();
-        _ui.Tick();
-        DumpDiagnostics();
+            DrainFeedback();
+            _ui.Tick();
+            DumpDiagnostics();
+        }
+        catch (Exception ex)
+        {
+            float now = Time.unscaledTime;
+            if (now - _lastUpdateErrorTime > 5f)
+            {
+                _lastUpdateErrorTime = now;
+                Plugin.Logger.LogError($"[behaviour] Update 异常（5 秒内不再重复）: {ex}");
+            }
+        }
     }
+
+    private float _lastUpdateErrorTime = -999f;
 
     private void OnDestroy()
     {
@@ -71,25 +86,44 @@ internal sealed class AyaBehaviour : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 分步初始化。每一步都独立 try/catch —— 插图/字体/事件/音频互不阻塞，
+    /// 某个环节炸了也能从日志一眼看出是哪一个，而不是整个插件静默失效。
+    /// </summary>
     private void EnsureInitialized()
     {
         if (_initialized) return;
         _initialized = true;
 
-        IconBank.Load();
-        _ui.Ensure();
+        Step("icons", () => IconBank.Load());
+        Step("ui", () => _ui.Ensure());
 
-        GameEvents.EnsureStaticSubscribed();
-        GameEvents.RaidStarted += OnRaidStarted;
-        GameEvents.RaidEnded += OnRaidEnded;
+        Step("events", () =>
+        {
+            GameEvents.EnsureStaticSubscribed();
+            GameEvents.RaidStarted += OnRaidStarted;
+            GameEvents.RaidEnded += OnRaidEnded;
+        });
 
         _lastFontName = Plugin.Cfg.UiFontName.Value;
         _lastSoundFingerprint = SoundFingerprint();
         _lastGlowFingerprint = GlowFingerprint();
 
-        StartAudioLoad();
+        Step("audio", StartAudioLoad);
 
         Plugin.Logger.LogInfo("[behaviour] initialized");
+    }
+
+    private static void Step(string label, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogError($"[behaviour] 初始化步骤 '{label}' 失败（其余功能继续）: {ex}");
+        }
     }
 
     private void OnRaidStarted() => _ui.ResetAll();

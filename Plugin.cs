@@ -2,7 +2,6 @@ using System;
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
-using SPTushonka.Reflection.Patching;
 
 namespace AyaHitmarker;
 
@@ -12,23 +11,30 @@ namespace AyaHitmarker;
 /// 注意：<see cref="BasePlugin"/> **不是** MonoBehaviour（实测基类是 <c>System.Object</c>），
 /// 所以 Unity 生命周期要另起组件，用 <c>AddComponent&lt;T&gt;()</c> 注入。
 ///
-/// 关于补丁：本插件目前**没有任何补丁**（<c>Enabled 0 patches</c>）。
-/// 唯一一个候选 <c>EFT.GameWorld.OnDestroy</c> 已经因为 IL2CPP 的「方法体共享」被证明有害 —— 见 README §7。
-/// 这里仍然保留 <see cref="PatchManager"/> 的接线，方便以后确实需要时一个文件就能挂上去；
-/// 挂之前**务必**先在日志里搜 <c>shares its native body</c>。
+/// <para>
+/// **本插件零补丁，因此不依赖 <c>SPTushonka.Reflection</c>。**
+/// 命中和击杀都是 IL2CPP 事件订阅，战局边界靠轮询 <c>GlobalEventDispatcher</c> 实例变化。
+/// 曾试图用 <c>ModulePatch</c> 补 <c>EFT.GameWorld.OnDestroy</c>，结果因为 IL2CPP 的「方法体共享」
+/// 让 detour 命中 3360 个无关方法，游戏直接起不来 —— 详见 README §7。
+/// </para>
+///
+/// <para>
+/// 如果将来确实需要补丁：加回 <c>SPTushonka.Reflection</c> 引用 → 写一个 <c>ModulePatch</c> 子类 →
+/// 用 <c>new PatchManager(this, true)</c>。**但必须先启动一次并在日志里搜 <c>shares its native body</c>**。
+/// 注意 <c>PatchManager(this, true)</c> 在「本程序集里一个 ModulePatch 都没有」时会抛
+/// <c>PatchException</c> 让插件加载失败，所以要么真的有补丁，要么就别构造它。
+/// </para>
 /// </summary>
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 public sealed class Plugin : BasePlugin
 {
     public const string PluginGuid = "com.aya.ayahitmarker";
     public const string PluginName = "AyaHitmarker";
-    public const string PluginVersion = "0.2.1";
+    public const string PluginVersion = "0.2.2";
 
     internal static Plugin Instance { get; private set; } = null!;
     internal static ManualLogSource Logger { get; private set; } = null!;
     internal static AyaConfig Cfg { get; private set; } = null!;
-
-    internal static PatchManager Patches { get; private set; } = null!;
 
     /// <summary>插件所在目录（BepInEx/plugins/AyaHitmarker）。</summary>
     internal static string PluginDirectory { get; private set; } = string.Empty;
@@ -57,24 +63,18 @@ public sealed class Plugin : BasePlugin
         }
 
         Logger.LogInfo($"{PluginName} {PluginVersion} :: target EFT 1.2.0.0 (IL2CPP) / BepInEx 6 / net10.0");
+        Logger.LogInfo($"{PluginName} :: plugin dir = {PluginDirectory}");
 
-        // SPTushonka 官方补丁框架（autoPatch=true 会扫描本程序集里所有 ModulePatch 子类）。
-        // 当前没有 ModulePatch 子类 —— 这是有意的，见类注释。
-        Patches = new PatchManager(this, true);
-        Patches.EnablePatches();
-
+        // 零补丁 —— 不构造 PatchManager（详见类注释）。
         AddComponent<Behaviour.AyaBehaviour>();
 
-        Logger.LogInfo($"{PluginName} :: loaded");
+        Logger.LogInfo($"{PluginName} :: loaded (0 patches)");
     }
 
     public override bool Unload()
     {
         try { Game.GameEvents.Shutdown(); }
         catch (Exception ex) { Logger.LogWarning($"shutdown: {ex.Message}"); }
-
-        try { Patches?.DisablePatches(); }
-        catch (Exception ex) { Logger.LogWarning($"unpatch: {ex.Message}"); }
 
         return true;
     }

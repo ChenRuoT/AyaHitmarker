@@ -24,7 +24,8 @@
   <ItemGroup>
     <Reference Include="BepInEx.Core"><HintPath>$(BepInExCore)/BepInEx.Core.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="BepInEx.Unity.IL2CPP"><HintPath>$(BepInExCore)/BepInEx.Unity.IL2CPP.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="0Harmony"><HintPath>$(BepInExCore)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <!-- 本插件零补丁，所以不引用 0Harmony / SPTushonka.Reflection。
+         将来真要加补丁时再放开，并先读 AGENTS.md §3.0。 -->
     <Reference Include="Il2CppInterop.Runtime"><HintPath>$(BepInExCore)/Il2CppInterop.Runtime.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
@@ -45,12 +46,6 @@
     <Reference Include="PlayerEnums"><HintPath>$(InteropDir)/PlayerEnums.dll</HintPath><Private>false</Private></Reference>
     <!-- EFT.Player 实现了 IDissonancePlayer，只要碰到 Player 类型就必须能解析这个程序集 -->
     <Reference Include="DissonanceVoip"><HintPath>$(InteropDir)/DissonanceVoip.dll</HintPath><Private>false</Private></Reference>
-  </ItemGroup>
-
-  <!-- ===== SPTushonka 官方补丁框架（ModulePatch / PatchManager） ===== -->
-  <ItemGroup>
-    <Reference Include="SPTushonka.Common"><HintPath>$(SptPluginDir)/SPTushonka.Common.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="SPTushonka.Reflection"><HintPath>$(SptPluginDir)/SPTushonka.Reflection.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
   <!-- ===== Unity（interop 代理，不是 unity-libs 里的原件） ===== -->
