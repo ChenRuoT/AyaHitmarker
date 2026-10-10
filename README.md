@@ -166,7 +166,33 @@ Patch a method with its own body instead
 将来确实需要补丁时：加回引用 → 写 `ModulePatch` 子类 → `new PatchManager(this, true)` →
 **先启动一次并搜 `shares its native body`**。
 
-## 8. 已知限制
+## 8. ⚠️ 音效：`UnityWebRequest.Dispose()` 会把 AudioClip 一起销毁
+
+症状极其反直觉：
+
+```
+[audio] Hit <- hit.ogg            ← 加载阶段一切正常
+[audio] 加载完成 hit=True ...      ← 四个 clip 全 True
+[debug] 测试命中                   ← 播放被调用
+（然后什么都没有 —— 没有报错、没有声音）
+```
+
+原因：`DownloadHandlerAudioClip` **持有**它解出来的 `AudioClip`。加载完顺手
+`request.Dispose()` 会连 handler 一起释放，那个 clip 的原生对象随之销毁。
+之后 `AudioBank.Get()` 拿到的是一个 **Unity 假 null** —— 托管包装还在、`!= null` 在 C# 意义上成立，
+但 Unity 重载的 `== null` 返回 true，于是 `Play()` 静默 return 了。
+
+旧 Mono 项目从不 dispose 请求，所以没踩到；是我自己加了个 `finally { request.Dispose(); }`。
+
+**修法**（`Assets/AudioBank.cs`）：
+1. 首选**克隆**：`clip.GetData()` → `AudioClip.Create()` → `SetData()`，得到一份自己拥有的副本，
+   之后才能安全地 dispose 请求。
+2. 克隆失败（例如流式压缩取不出样本）就把请求塞进 `_keepAliveRequests` **一直持有**，
+   靠 handler 的存活保住 clip。
+3. `SoundPlayer.Play` 的**每一条提前返回都会 `WarnOnce`**，同类原因每种音效只告警一次。
+   静默 return 是这次排查成本这么高的直接原因。
+
+## 9. 已知限制
 
 - **经验值是估算**：击杀事件读不到「这一击给了多少经验」（真实值走 SkillManager / 战局结算）。
   公式沿用旧项目：100 基础 + 爆头 50。旧项目默认就显示它，这里也默认显示。
@@ -178,7 +204,7 @@ Patch a method with its own body instead
   所以从战局销毁到 UI 清空最多有 0.25 秒延迟 —— 实际感知不到（那 0.25 秒里画面已经切走了）。
 - 自己被打**不提示**（只提示「我打中了别人」）。事件里带 `VictimIsLocalPlayer`，想加很容易。
 
-## 9. 排查
+## 10. 排查
 
 见 [`AGENTS.md` §5 排查入口](AGENTS.md#5-排查入口) —— 那里列了所有日志关键字及其含义。
 
@@ -187,7 +213,7 @@ Patch a method with its own body instead
 - `[ui] canvas ready ... font=MISSING` → 字体没解析成功，文本不显示。改 `5. 界面 → 字体名称`。
 - 本局完全没有命中提示 → 看有没有 `[events] 无法解析 GlobalEventDispatcher.Instance`。
 
-## 10. 参考
+## 11. 参考
 
 | 资源 | 地址 |
 |---|---|
@@ -196,10 +222,11 @@ Patch a method with its own body instead
 | `ref/Il2CppDumperOutput/dump.cs` | 全类型/字段/方法 + RVA |
 | 旧 Mono 版 | `E:\EFTDev\Client.0.16.9.5.40743\Dev\SimpleHitMarker` |
 
-## 11. 变更记录
+## 12. 变更记录
 
 | 版本 | 内容 |
 |---|---|
+| 0.2.4 | 修音效无声：`DownloadHandlerAudioClip` 的 clip 被 `request.Dispose()` 一起销毁。改为「能克隆就克隆，否则持有请求保活」；`SoundPlayer` 每条提前返回都告警 |
 | 0.2.3 | 默认参数按旧项目实机 cfg 校准；命中点投影加边界校验（越界退回屏幕中心）；测试快捷键不再被「调试日志」开关连坐；AudioSource 绕过 listener 暂停/音效链；伤害数字补描边颜色 |
 | 0.2.2 | 去掉 `PatchManager` 与 `SPTushonka.Reflection` / `0Harmony` 依赖 —— `autoPatch:true` + 零补丁会抛异常让插件加载失败。初始化改为分步 try/catch |
 | 0.2.1 | 删掉 `GameWorld.OnDestroy` 补丁 —— IL2CPP 方法体共享导致 detour 命中 3360 个方法，游戏无法启动 |

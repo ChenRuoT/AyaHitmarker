@@ -43,19 +43,39 @@ internal sealed class SoundPlayer
     private void Play(SoundKind kind)
     {
         var cfg = Plugin.Cfg;
-        if (!cfg.SoundEnabled.Value) return;
+
+        // 每一条提前返回都必须说得出理由。
+        // 之前 `clip == null` 那条是静默的，于是「加载日志说成功、播放却无声」查了很久 ——
+        // 实际是 Unity 的假 null（clip 的原生对象被 handler 的 Dispose 一起销毁了）。
+        if (!cfg.SoundEnabled.Value)
+        {
+            WarnOnce(kind, "总开关关闭");
+            return;
+        }
 
         bool isKill = kind == SoundKind.Kill || kind == SoundKind.KillHeadshot;
-        if (isKill ? !cfg.SoundKillEnabled.Value : !cfg.SoundHitEnabled.Value) return;
+        if (isKill ? !cfg.SoundKillEnabled.Value : !cfg.SoundHitEnabled.Value)
+        {
+            WarnOnce(kind, isKill ? "击杀音效开关关闭" : "命中音效开关关闭");
+            return;
+        }
 
         try
         {
-            // 还没加载完就静默跳过，绝不在这里触发加载（那会把 IO 拉进战斗热路径）
+            // 还没加载完就跳过，绝不在这里触发加载（那会把 IO 拉进战斗热路径）
             var clip = AudioBank.Get(kind);
-            if (clip == null) return;
+            if (clip == null)
+            {
+                WarnOnce(kind, "clip 不可用（未加载，或原生对象已销毁 → 见 AudioBank 关于 Dispose 的注释）");
+                return;
+            }
 
             var source = EnsureSource();
-            if (source == null) return;
+            if (source == null)
+            {
+                WarnOnce(kind, "AudioSource 创建失败");
+                return;
+            }
 
             float vol = cfg.SoundMasterVolume.Value * (kind switch
             {
@@ -65,15 +85,43 @@ internal sealed class SoundPlayer
                 _ => cfg.SoundKillHeadshotVolume.Value,
             });
 
-            if (vol <= 0.0001f) return;
+            if (vol <= 0.0001f)
+            {
+                WarnOnce(kind, "音量算下来是 0");
+                return;
+            }
+
+            // 数据没进内存时 PlayOneShot 会静默失败
+            try
+            {
+                if (clip.loadState != AudioDataLoadState.Loaded)
+                {
+                    bool ok = clip.LoadAudioData();
+                    Plugin.Logger.LogWarning($"[audio] {kind} clip.loadState={clip.loadState}，LoadAudioData() -> {ok}");
+                }
+            }
+            catch { /* 拿不到状态就照常播放 */ }
+
             source.PlayOneShot(clip, Mathf.Clamp(vol, 0f, 1f));
 
             if (cfg.DebugEnabled.Value) LogPlayback(kind, clip, source, vol);
+            _warned[(int)kind] = false;
         }
         catch (Exception ex)
         {
             Plugin.Logger.LogError($"[audio] 播放 {kind} 失败: {ex}");
         }
+    }
+
+    private static readonly bool[] _warned = new bool[4];
+
+    /// <summary>同一种原因每种音效只告警一次，避免战斗里每枪刷屏。</summary>
+    private static void WarnOnce(SoundKind kind, string reason)
+    {
+        int i = (int)kind;
+        if (_warned[i]) return;
+        _warned[i] = true;
+        Plugin.Logger.LogWarning($"[audio] {kind} 未播放: {reason}（同类原因只提示一次）");
     }
 
     private AudioSource? EnsureSource()

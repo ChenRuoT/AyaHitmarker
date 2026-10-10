@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -15,14 +16,31 @@ internal enum SoundKind
 }
 
 /// <summary>
-/// 音效库。默认从 <c>BepInEx/plugins/AyaHitmarker/Sounds/</c> 读取。
-///
+/// 音效库。默认从 <c>BepInEx/plugins/AyaHitmarker/Sounds/</c> 读取，
 /// 解码交给 Unity（<see cref="UnityWebRequestMultimedia"/> + <c>DownloadHandlerAudioClip</c>），
-/// 所以 ogg / wav / mp3 都能吃，不需要自己写解码器。
+/// 所以 ogg / wav / mp3 都能吃。
 ///
-/// 关键：**用协程，不要同步轮询**。旧 Mono 项目用 <c>Thread.Sleep(10)</c> 死等
-/// <c>UnityWebRequest</c>，结果进图和首次命中时冻主线程。这里走 BepInEx 的
-/// <c>WrapToIl2Cpp()</c> 把托管迭代器挂到 Unity 协程上，主线程全程不阻塞。
+/// <para>
+/// **两个必须记住的坑**
+/// </para>
+///
+/// <para>
+/// 1. <b>不能 dispose <c>UnityWebRequest</c></b>。<c>DownloadHandlerAudioClip</c> 持有它解出来的
+/// AudioClip，一旦 handler 被 dispose（或因为没人引用而被终结器 dispose），那个 clip 的原生对象
+/// 就一起没了 —— 表现为「加载时日志说成功，播放时 <c>clip == null</c>（Unity 的假 null）却一条报错都没有」。
+/// 旧 Mono 项目从不 dispose，所以没踩到；我加了个 <c>finally { request.Dispose(); }</c> 就踩了。
+/// </para>
+///
+/// <para>
+/// 2. 因此这里采取「能克隆就克隆」的策略：<c>GetData</c> + <c>AudioClip.Create</c> + <c>SetData</c>
+/// 复制出一份自己拥有的 clip，成功后就能安全地 dispose 请求；失败则把请求放进
+/// <see cref="_keepAliveRequests"/> 一直留着，靠 handler 的存活来保住 clip。
+/// </para>
+///
+/// <para>
+/// 另外：整个加载走协程（<c>WrapToIl2Cpp()</c>），主线程不阻塞 —— 旧项目用 <c>Thread.Sleep</c>
+/// 死等 <c>UnityWebRequest</c>，进图和首次命中时会冻住游戏。
+/// </para>
 /// </summary>
 internal static class AudioBank
 {
@@ -34,15 +52,27 @@ internal static class AudioBank
     /// <summary>0 = 未尝试，1 = 成功，2 = 失败（不重试）。</summary>
     private static readonly int[] _state = new int[SlotCount];
 
+    /// <summary>
+    /// 这些请求不能 dispose —— 它们持有的 DownloadHandlerAudioClip 就是对应 clip 的所有者。
+    /// 只有在成功克隆出副本的情况下才允许放掉请求。
+    /// </summary>
+    private static readonly List<UnityWebRequest> _keepAliveRequests = new List<UnityWebRequest>(4);
+
     private static bool _loading;
 
     internal static bool IsLoading => _loading;
 
     internal static void Invalidate()
     {
+        // 旧提交即将被替换，可以安全释放
+        for (int i = 0; i < _keepAliveRequests.Count; i++)
+        {
+            try { _keepAliveRequests[i].Dispose(); } catch { /* ignore */ }
+        }
+        _keepAliveRequests.Clear();
+        _state[0] = _state[1] = _state[2] = _state[3] = 0;
         for (int i = 0; i < SlotCount; i++)
         {
-            _state[i] = 0;
             _clips[i] = null;
             _sources[i] = string.Empty;
         }
@@ -51,7 +81,12 @@ internal static class AudioBank
     internal static AudioClip? Get(SoundKind kind)
     {
         int i = (int)kind;
-        return _state[i] == 1 ? _clips[i] : null;
+        if (_state[i] != 1) return null;
+
+        var clip = _clips[i];
+        // Unity 的假 null：托管包装还在，原生对象已经销毁
+        if (clip == null) return null;
+        return clip;
     }
 
     internal static string SourceOf(SoundKind kind)
@@ -129,8 +164,6 @@ internal static class AudioBank
         }
 
         // 注意：yield return 不能出现在带 catch 的 try 里（CS1626），所以等待循环必须裸在外面。
-        // 用轮询而不是 yield return op，是因为托管迭代器经 WrapToIl2Cpp 桥接时，
-        // yield null 是唯一完全无歧义的用法。
         UnityWebRequestAsyncOperation? op = null;
         try
         {
@@ -140,7 +173,7 @@ internal static class AudioBank
         {
             _state[i] = 2;
             Plugin.Logger.LogError($"[audio] {kind} 发送请求失败: {ex.Message}");
-            try { request.Dispose(); } catch { /* ignore */ }
+            SafeDispose(request);
             yield break;
         }
 
@@ -153,6 +186,7 @@ internal static class AudioBank
             {
                 _state[i] = 2;
                 Plugin.Logger.LogError($"[audio] {kind} 加载失败: {error} ({path})");
+                SafeDispose(request);
                 yield break;
             }
 
@@ -161,24 +195,92 @@ internal static class AudioBank
             {
                 _state[i] = 2;
                 Plugin.Logger.LogError($"[audio] {kind} 解码结果为空: {path}");
+                SafeDispose(request);
                 yield break;
             }
 
-            clip.name = $"AyaHitmarker.{kind}";
-            _clips[i] = clip;
+            // 先试着克隆一份自己拥有的副本，彻底摆脱 handler 的生命周期
+            var owned = TryClone(kind, clip);
+
+            if (owned != null)
+            {
+                _clips[i] = owned;
+                SafeDispose(request);   // 副本独立了，请求可以放掉
+            }
+            else
+            {
+                // 克隆失败 → 必须一直持有请求，否则 handler 被终结器回收时 clip 一起消失
+                _clips[i] = clip;
+                _keepAliveRequests.Add(request);
+                Plugin.Logger.LogWarning($"[audio] {kind} 未能克隆 clip（GetData 失败），改为持有 UnityWebRequest 保活");
+            }
+
             _sources[i] = path;
             _state[i] = 1;
-            Plugin.Logger.LogInfo($"[audio] {kind} <- {Path.GetFileName(path)}");
+
+            var kept = _clips[i];
+            Plugin.Logger.LogInfo(
+                $"[audio] {kind} <- {Path.GetFileName(path)} " +
+                $"(len={kept!.length:0.###}s samples={kept.samples} ch={kept.channels} " +
+                $"freq={kept.frequency} loadState={SafeState(kept)})");
         }
         catch (Exception ex)
         {
             _state[i] = 2;
             Plugin.Logger.LogError($"[audio] {kind} 加载异常: {ex}");
+            SafeDispose(request);
         }
-        finally
+    }
+
+    /// <summary>
+    /// 把 clip 的数据复制进一个自建的 AudioClip。
+    /// 成功返回副本；失败（例如流式压缩的 clip 取不出样本）返回 <c>null</c>。
+    /// </summary>
+    private static AudioClip? TryClone(SoundKind kind, AudioClip src)
+    {
+        try
         {
-            try { request.Dispose(); } catch { /* ignore */ }
+            int samples = src.samples;
+            int channels = src.channels;
+            int frequency = src.frequency;
+            if (samples <= 0 || channels <= 0 || frequency <= 0)
+            {
+                Plugin.Logger.LogWarning($"[audio] {kind} clip 参数异常: samples={samples} ch={channels} freq={frequency}");
+                return null;
+            }
+
+            int total = samples * channels;
+            var buffer = new float[total];
+            if (!src.GetData(buffer, 0)) return null;
+
+            var clone = AudioClip.Create($"AyaHitmarker.{kind}", samples, channels, frequency, false);
+            if (clone == null) return null;
+            if (!clone.SetData(buffer, 0))
+            {
+                UnityEngine.Object.Destroy(clone);
+                return null;
+            }
+
+            clone.hideFlags = HideFlags.HideAndDontSave;
+            return clone;
         }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogWarning($"[audio] {kind} 克隆 clip 异常: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string SafeState(AudioClip clip)
+    {
+        try { return clip.loadState.ToString(); }
+        catch { return "?"; }
+    }
+
+    private static void SafeDispose(UnityWebRequest? request)
+    {
+        if (request == null) return;
+        try { request.Dispose(); } catch { /* ignore */ }
     }
 
     private static AudioType AudioTypeFor(string path)
