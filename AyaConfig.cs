@@ -6,21 +6,24 @@ namespace AyaHitmarker;
 
 internal enum DamageNumberMode
 {
+    /// <summary>只显示打进肉体的部分（旧 Mono 项目的行为）。打中护甲且未穿透时 DidBodyDamage 为 0，数字会被跳过。</summary>
+    BodyOnly = 0,
     /// <summary>肉体 + 护甲，即本次命中造成的总伤害。</summary>
-    Total = 0,
-    /// <summary>只显示打进肉体的部分（旧 Mono 项目的行为；打中护甲会显示 0，因此会被跳过不画）。</summary>
-    BodyOnly = 1,
+    Total = 1,
 }
 
 /// <summary>
-/// 全部可调项。分组与旧 Mono 项目对齐，方便对照迁移。
+/// 全部可调项。
+///
+/// **默认值对齐旧 Mono 项目实际使用的 <c>com.shiunaya.simplehitmarker.cfg</c>**
+/// （不是它的代码默认值 —— 是那份已经调过的实机配置）。
 /// UI 每帧读 config，不要缓存值。
 /// </summary>
 internal sealed class AyaConfig
 {
     // ---- 0. 诊断 ----
     internal ConfigEntry<bool> DebugEnabled { get; }
-    internal ConfigEntry<bool> DebugVerbose { get; }
+    internal ConfigEntry<bool> TestHotkeysEnabled { get; }
     internal ConfigEntry<KeyboardShortcut> TestHitKey { get; }
     internal ConfigEntry<KeyboardShortcut> TestKillKey { get; }
 
@@ -38,7 +41,9 @@ internal sealed class AyaConfig
     internal ConfigEntry<DamageNumberMode> DamageTextMode { get; }
     internal ConfigEntry<int> DamageTextSize { get; }
     internal ConfigEntry<string> DamageTextColor { get; }
-    internal ConfigEntry<string> DamageTextHeadshotColor { get; }
+    internal ConfigEntry<string> DamageTextOutlineColor { get; }
+    internal ConfigEntry<string> DamageTextHeadshotOutlineColor { get; }
+    internal ConfigEntry<float> DamageTextOutlineWidth { get; }
     internal ConfigEntry<float> DamageTextPadding { get; }
     internal ConfigEntry<float> DamageMultiTextPadding { get; }
     internal ConfigEntry<float> DamageTextLifetime { get; }
@@ -111,6 +116,8 @@ internal sealed class AyaConfig
 
     // ---- 4. 音效 ----
     internal ConfigEntry<bool> SoundEnabled { get; }
+    internal ConfigEntry<bool> SoundHitEnabled { get; }
+    internal ConfigEntry<bool> SoundKillEnabled { get; }
     internal ConfigEntry<float> SoundMasterVolume { get; }
     internal ConfigEntry<float> SoundHitVolume { get; }
     internal ConfigEntry<float> SoundHitHeadshotVolume { get; }
@@ -129,155 +136,171 @@ internal sealed class AyaConfig
     internal AyaConfig(ConfigFile cfg)
     {
         // ---------------------------------------------------------------- 0. 诊断
-        DebugEnabled = cfg.Bind("0. 诊断", "启用诊断日志", false,
-            new ConfigDescription("把每次命中/击杀的原始字段写进 BepInEx/LogOutput.log。排查问题时再打开。"));
-        DebugVerbose = cfg.Bind("0. 诊断", "详细诊断日志", false);
-        TestHitKey = cfg.Bind("0. 诊断", "测试命中快捷键", new KeyboardShortcut(KeyCode.F8),
-            new ConfigDescription("只在「启用诊断日志」打开时生效。"));
-        TestKillKey = cfg.Bind("0. 诊断", "测试击杀快捷键", new KeyboardShortcut(KeyCode.F9));
+        DebugEnabled = cfg.Bind("0. 调试", "启用调试日志", false,
+            new ConfigDescription("把每次命中/击杀/播放音效的原始字段写进 BepInEx/LogOutput.log。排查问题时再打开。"));
+        TestHotkeysEnabled = cfg.Bind("0. 调试", "启用测试快捷键", true,
+            new ConfigDescription("按下面的键立刻造一次命中/击杀反馈，不需要真的打架。与调试日志开关无关。"));
+        TestHitKey = cfg.Bind("0. 调试", "测试命中快捷键", new KeyboardShortcut(KeyCode.F8));
+        TestKillKey = cfg.Bind("0. 调试", "测试击杀快捷键", new KeyboardShortcut(KeyCode.F9));
 
         // ---------------------------------------------------------------- 1. 命中提示
+        // 旧 cfg: 基础大小 71 / 显示时长 0.868 / 中心偏移 (0,5) / 动画缩放 1
         HitMarkerEnabled = cfg.Bind("1. 命中提示", "启用", true);
-        HitBaseSize = cfg.Bind("1. 命中提示", "图标基础尺寸", 64f,
-            new ConfigDescription("Icons/hit.png 的绘制尺寸（像素）。", null, new object[] { 8f, 400f }));
-        HitDuration = cfg.Bind("1. 命中提示", "显示时长(秒)", 0.35f,
-            new ConfigDescription("图标从出现到完全消失的时间，也是伤害数字的默认存活时长参照。", null, new object[] { 0.05f, 3f }));
-        HitMarkerAnimationScale = cfg.Bind("1. 命中提示", "出现时缩放", 0.7f,
-            new ConfigDescription("出现瞬间的比例，在显示时长内放大到 1.0。", null, new object[] { 0.1f, 3f }));
-        HitMarkerCenterOffset = cfg.Bind("1. 命中提示", "屏幕中心偏移(X,Y)", "0,0",
-            new ConfigDescription("只在「显示在命中点」关闭时使用。比如往上挪 20 像素写 0,-20。"));
+        HitBaseSize = cfg.Bind("1. 命中提示", "基础大小", 71f,
+            new ConfigDescription("Icons/hit.png 的绘制尺寸（像素）。", null, new object[] { 8f, 512f }));
+        HitDuration = cfg.Bind("1. 命中提示", "显示时长(秒)", 0.868f,
+            new ConfigDescription("图标从出现到完全消失的时间。", null, new object[] { 0.05f, 5f }));
+        HitMarkerAnimationScale = cfg.Bind("1. 命中提示", "动画缩放", 1f,
+            new ConfigDescription("出现瞬间的比例，在显示时长内放大到 1.0。旧配置就是 1（即不做缩放动画）。", null, new object[] { 1f, 2f }));
+        HitMarkerCenterOffset = cfg.Bind("1. 命中提示", "中心偏移(X,Y)", "0,5",
+            new ConfigDescription("相对屏幕中心的像素偏移，负 Y 向上。只在「显示在命中点」关闭时生效。"));
         HitMarkerColor = cfg.Bind("1. 命中提示", "着色", "#FFFFFFFF",
             new ConfigDescription("对 hit.png 做整体着色，白色 = 保持原图。"));
-        HitMarkerAtHitPoint = cfg.Bind("1. 命中提示", "显示在命中点", true,
+        HitMarkerAtHitPoint = cfg.Bind("1. 命中提示", "显示在命中点", false,
             new ConfigDescription(
-                "true = 把 DamageInfo.HitPoint 投影到屏幕（准星实际落点，会随弹道/后座偏移）；" +
-                "false = 固定在屏幕中心 + 上面的偏移。"));
+                "false（默认，与旧项目一致）= 固定在屏幕中心 + 上面的偏移；" +
+                "true = 把 DamageInfo.HitPoint 投影到屏幕（准星实际落点）。" +
+                "true 时若投影结果落在屏幕外会退回屏幕中心。"));
 
         // ---------------------------------------------------------------- 2. 伤害数字
+        // 旧 cfg: 字号 21 / 间距 8 / 多段间距 12 / 颜色 FFFFFF / 描边白 25% 不透明 / 爆头描边 FF0000
         DamageTextEnabled = cfg.Bind("2. 伤害数字", "启用", true);
-        DamageTextMode = cfg.Bind("2. 伤害数字", "取值", DamageNumberMode.Total,
+        DamageTextMode = cfg.Bind("2. 伤害数字", "取值", DamageNumberMode.BodyOnly,
             new ConfigDescription(
-                "Total = 肉体+护甲总伤害；BodyOnly = 旧 Mono 项目的行为（只算肉体，打中护甲时显示 0，「0」会被跳过不画）。"));
-        DamageTextSize = cfg.Bind("2. 伤害数字", "字号", 28,
+                "BodyOnly（默认，与旧项目一致）= 只算肉体伤害，打中护甲未穿透时数字为 0 → 不绘制；" +
+                "Total = 肉体 + 护甲，任何命中都有数字。"));
+        DamageTextSize = cfg.Bind("2. 伤害数字", "字号", 21,
             new ConfigDescription("", null, new object[] { 8, 120 }));
-        DamageTextColor = cfg.Bind("2. 伤害数字", "普通颜色", "#FFFFFFFF");
-        DamageTextHeadshotColor = cfg.Bind("2. 伤害数字", "爆头颜色", "#FFC94DFF");
-        DamageTextPadding = cfg.Bind("2. 伤害数字", "距图标间距", 12f,
+        DamageTextColor = cfg.Bind("2. 伤害数字", "颜色", "#FFFFFFFF");
+        DamageTextOutlineColor = cfg.Bind("2. 伤害数字", "描边颜色", "#FFFFFF40",
+            new ConfigDescription("旧配置是白色 ~25% 不透明。末两位是透明度，设成 00 等于不描边。"));
+        DamageTextHeadshotOutlineColor = cfg.Bind("2. 伤害数字", "爆头描边颜色", "#FF0000FF");
+        DamageTextOutlineWidth = cfg.Bind("2. 伤害数字", "描边宽度", 0.2f,
+            new ConfigDescription("TMP 的归一化描边宽度（0 = 关闭，0.2 约等于旧项目的 1.4 像素）。", null, new object[] { 0f, 1f }));
+        DamageTextPadding = cfg.Bind("2. 伤害数字", "距图标间距", 8f,
             new ConfigDescription("第一个数字相对命中图标右缘的间距。", null, new object[] { 0f, 200f }));
-        DamageMultiTextPadding = cfg.Bind("2. 伤害数字", "数字之间间距", 24f,
-            new ConfigDescription("连续命中时多个数字排成一行，这是彼此的间隔。", null, new object[] { 0f, 200f }));
-        DamageTextLifetime = cfg.Bind("2. 伤害数字", "存活时长(秒)", 0.6f,
+        DamageMultiTextPadding = cfg.Bind("2. 伤害数字", "多段伤害间距", 12f,
+            new ConfigDescription("同一窗口内多个数字排成一行，这是彼此的间隔。", null, new object[] { 0f, 200f }));
+        DamageTextLifetime = cfg.Bind("2. 伤害数字", "存活时长(秒)", 0.868f,
             new ConfigDescription("旧项目与命中图标共用时长；这里独立，想一致就设成和「显示时长」相同。", null, new object[] { 0.1f, 5f }));
 
         // ---------------------------------------------------------------- 3. 击杀播报
-        KillFeedEnabled = cfg.Bind("3. 击杀播报", "启用", true);
-        KillFeedHorizontalOffset = cfg.Bind("3. 击杀播报", "水平偏移", 220f,
-            new ConfigDescription("锚点在屏幕中心**左侧**的像素数。越大越靠左。", null, new object[] { -400f, 900f }));
-        KillFeedVerticalOffset = cfg.Bind("3. 击杀播报", "垂直偏移", 0f,
-            new ConfigDescription("正数向下。", null, new object[] { -500f, 500f }));
-        KillFeedBlockWidth = cfg.Bind("3. 击杀播报", "文本块宽度", 420f,
-            new ConfigDescription("右对齐文本的可用宽度。", null, new object[] { 100f, 1200f }));
-        KillFeedLineSpacing = cfg.Bind("3. 击杀播报", "行间距", 8f);
-        KillFeedDuration = cfg.Bind("3. 击杀播报", "文字停留(秒)", 5f,
-            new ConfigDescription("文字在这段时间内线性淡出。", null, new object[] { 0.5f, 30f }));
+        // 旧 cfg: 水平偏移 107 / 垂直 0 / 行间距 0 / 内容宽度 420 / 显示时长 6
+        KillFeedEnabled = cfg.Bind("3. 击杀信息", "启用", true);
+        KillFeedHorizontalOffset = cfg.Bind("3. 击杀信息", "水平中心偏移", 107f,
+            new ConfigDescription("锚点在屏幕中心**左侧**的像素数。正值向左，负值向右。", null, new object[] { -2000f, 2000f }));
+        KillFeedVerticalOffset = cfg.Bind("3. 击杀信息", "垂直中心偏移", 0f,
+            new ConfigDescription("正值向下，负值向上。", null, new object[] { -2000f, 2000f }));
+        KillFeedBlockWidth = cfg.Bind("3. 击杀信息", "内容宽度", 420f,
+            new ConfigDescription("右对齐文本的可用宽度。", null, new object[] { 100f, 1000f }));
+        KillFeedLineSpacing = cfg.Bind("3. 击杀信息", "行间距", 0f,
+            new ConfigDescription("", null, new object[] { 0f, 50f }));
+        KillFeedDuration = cfg.Bind("3. 击杀信息", "显示时长(秒)", 6f,
+            new ConfigDescription("文字在这段时间内线性淡出。", null, new object[] { 1f, 30f }));
 
-        ShowSkull = cfg.Bind("3. 击杀播报", "显示骷髅图标", true);
-        SkullSize = cfg.Bind("3. 击杀播报", "骷髅尺寸", 64f,
-            new ConfigDescription("", null, new object[] { 8f, 200f }));
-        SkullSpacing = cfg.Bind("3. 击杀播报", "骷髅间距", 60f,
-            new ConfigDescription("连杀时已有骷髅向左推的距离增量（还会加上骷髅尺寸）。", null, new object[] { 0f, 300f }));
-        SkullDisplayDuration = cfg.Bind("3. 击杀播报", "骷髅停留(秒)", 2f,
-            new ConfigDescription("", null, new object[] { 0.1f, 20f }));
-        SkullFadeDuration = cfg.Bind("3. 击杀播报", "骷髅淡出(秒)", 0.3f,
-            new ConfigDescription("停留时间末尾这段用于淡出。", null, new object[] { 0.01f, 5f }));
-        StreakWindow = cfg.Bind("3. 击杀播报", "连杀窗口(秒)", 10f,
+        // 旧 cfg: 骷髅 40 / 间距 20 / 停留 2 / 淡出 0.3 / 连杀窗口 10 / 推挤速度 7
+        ShowSkull = cfg.Bind("3. 击杀信息", "显示骷髅头", true);
+        SkullSize = cfg.Bind("3. 击杀信息", "骷髅头大小", 40f,
+            new ConfigDescription("", null, new object[] { 8f, 256f }));
+        SkullSpacing = cfg.Bind("3. 击杀信息", "骷髅头间距", 20f,
+            new ConfigDescription("连杀时已有骷髅向左推的距离增量（还会加上骷髅尺寸）。", null, new object[] { 0f, 200f }));
+        SkullDisplayDuration = cfg.Bind("3. 击杀信息", "骷髅头显示时长(秒)", 2f,
+            new ConfigDescription("", null, new object[] { 0.5f, 10f }));
+        SkullFadeDuration = cfg.Bind("3. 击杀信息", "骷髅头淡出时长(秒)", 0.3f,
+            new ConfigDescription("", null, new object[] { 0.1f, 2f }));
+        StreakWindow = cfg.Bind("3. 击杀信息", "连杀时间窗口(秒)", 10f,
             new ConfigDescription("两次击杀间隔小于这个值就算连杀，会把之前的骷髅推向左。", null, new object[] { 1f, 60f }));
-        SkullPushAnimationSpeed = cfg.Bind("3. 击杀播报", "推动动画速度", 5f,
-            new ConfigDescription("", null, new object[] { 0.5f, 30f }));
-        KillFeedMaxSkulls = cfg.Bind("3. 击杀播报", "最多骷髅数", 8,
+        SkullPushAnimationSpeed = cfg.Bind("3. 击杀信息", "骷髅头推挤动画速度", 7f,
+            new ConfigDescription("", null, new object[] { 1f, 30f }));
+        KillFeedMaxSkulls = cfg.Bind("3. 击杀信息", "最多骷髅数", 8,
             new ConfigDescription("", null, new object[] { 1, 24 }));
 
-        ShowFaction = cfg.Bind("3. 击杀播报", "显示阵营行", true);
-        ShowFactionIcon = cfg.Bind("3. 击杀播报", "显示阵营图标", true,
-            new ConfigDescription("需要 Icons/RankIcons/RankN.png 之类的图标文件；没有就不显示。"));
-        ShowPlayerName = cfg.Bind("3. 击杀播报", "显示玩家名", true);
-        ShowKillDetails = cfg.Bind("3. 击杀播报", "显示详情行", true);
-        ShowExperience = cfg.Bind("3. 击杀播报", "显示经验估算", false,
-            new ConfigDescription("客户端拿不到权威经验值，这里只是估算。"));
+        ShowFaction = cfg.Bind("3. 击杀信息", "显示阵营文字", true);
+        ShowFactionIcon = cfg.Bind("3. 击杀信息", "显示阵营图标", true,
+            new ConfigDescription("需要 Icons/RankIcons/RankN.png；没有文件就不显示（文本会自动补位）。"));
+        ShowPlayerName = cfg.Bind("3. 击杀信息", "显示玩家名字", true);
+        ShowKillDetails = cfg.Bind("3. 击杀信息", "显示击杀详情", true);
+        ShowExperience = cfg.Bind("3. 击杀信息", "显示经验值", true,
+            new ConfigDescription("客户端拿不到权威经验值，这是按旧项目公式的估算（100 基础，爆头 +50）。"));
 
-        FontSizeFaction = cfg.Bind("3. 击杀播报", "字号:阵营", 16, new ConfigDescription("", null, new object[] { 6, 60 }));
-        FontSizePlayerName = cfg.Bind("3. 击杀播报", "字号:玩家名", 18, new ConfigDescription("", null, new object[] { 6, 60 }));
-        FontSizeKillDetails = cfg.Bind("3. 击杀播报", "字号:详情", 14, new ConfigDescription("", null, new object[] { 6, 60 }));
-        FontSizeExperience = cfg.Bind("3. 击杀播报", "字号:经验", 20f, new ConfigDescription("", null, new object[] { 6f, 60f }));
-        FactionIconSize = cfg.Bind("3. 击杀播报", "阵营图标尺寸", 24f);
-        FactionIconVerticalOffset = cfg.Bind("3. 击杀播报", "阵营图标垂直偏移", -20f);
-        ExperienceTextWidth = cfg.Bind("3. 击杀播报", "经验文本宽度", 180f);
-        KillFeedExperienceHorizontalOffset = cfg.Bind("3. 击杀播报", "经验水平偏移", 40f,
-            new ConfigDescription("相对锚点向右的距离。"));
-        NameOutlineThickness = cfg.Bind("3. 击杀播报", "玩家名描边", 1.5f,
-            new ConfigDescription("0 = 不描边。内部按 0..1 归一化喂给 TMP。", null, new object[] { 0f, 10f }));
+        // 旧 cfg: 阵营 20 / 经验 20 / 名字 18 / 详情 20
+        FontSizeFaction = cfg.Bind("3. 击杀信息", "阵营文字字号", 20, new ConfigDescription("", null, new object[] { 8, 48 }));
+        FontSizePlayerName = cfg.Bind("3. 击杀信息", "玩家名字号", 18, new ConfigDescription("", null, new object[] { 8, 48 }));
+        FontSizeKillDetails = cfg.Bind("3. 击杀信息", "击杀详情字号", 20, new ConfigDescription("", null, new object[] { 8, 48 }));
+        FontSizeExperience = cfg.Bind("3. 击杀信息", "经验值字号", 20f, new ConfigDescription("", null, new object[] { 8f, 48f }));
+        FactionIconSize = cfg.Bind("3. 击杀信息", "阵营图标大小", 86f, new ConfigDescription("", null, new object[] { 8f, 128f }));
+        FactionIconVerticalOffset = cfg.Bind("3. 击杀信息", "阵营图标垂直偏移", -30f,
+            new ConfigDescription("负值向上，正值向下。", null, new object[] { -200f, 200f }));
+        ExperienceTextWidth = cfg.Bind("3. 击杀信息", "经验值文字宽度", 180f, new ConfigDescription("", null, new object[] { 50f, 500f }));
+        KillFeedExperienceHorizontalOffset = cfg.Bind("3. 击杀信息", "经验值水平偏移", 35f,
+            new ConfigDescription("相对锚点向右的距离。", null, new object[] { -500f, 500f }));
+        NameOutlineThickness = cfg.Bind("3. 击杀信息", "玩家名字描边厚度", 1.1f,
+            new ConfigDescription("0 = 不描边；按「像素 / 8」归一化喂给 TMP。", null, new object[] { 0f, 10f }));
 
-        ColorFaction = cfg.Bind("3. 击杀播报", "颜色:阵营默认", "#FFFFFFFF");
-        ColorPlayerName = cfg.Bind("3. 击杀播报", "颜色:玩家名", "#FF4D4DFF");
-        ColorKillDetails = cfg.Bind("3. 击杀播报", "颜色:详情", "#CCCCCCFF");
-        ColorExperience = cfg.Bind("3. 击杀播报", "颜色:经验", "#FFFFCCFF");
-        ColorUSEC = cfg.Bind("3. 击杀播报", "颜色:USEC", "#4DA6FFFF");
-        ColorBEAR = cfg.Bind("3. 击杀播报", "颜色:BEAR", "#FF6B6BFF");
-        ColorSCAV = cfg.Bind("3. 击杀播报", "颜色:SCAV", "#C8C8C8FF");
-        ColorBOSS = cfg.Bind("3. 击杀播报", "颜色:BOSS", "#FF3B3BFF");
-        ColorFollower = cfg.Bind("3. 击杀播报", "颜色:Follower", "#FFAA66FF");
-        ColorRAIDER = cfg.Bind("3. 击杀播报", "颜色:Raider", "#E0B0FFFF");
-        ColorRouges = cfg.Bind("3. 击杀播报", "颜色:Rouges", "#7FD4FFFF");
-        ColorSectant = cfg.Bind("3. 击杀播报", "颜色:Sectant", "#B6FF6BFF");
+        // 旧 cfg 的 Color 是 RGBA hex，本项目的解析器同样是 RRGGBBAA，可直接照搬
+        ColorFaction = cfg.Bind("3. 击杀信息", "阵营文字颜色", "#FFFFFFFF");
+        ColorPlayerName = cfg.Bind("3. 击杀信息", "玩家名字颜色", "#FF000FFF");
+        ColorKillDetails = cfg.Bind("3. 击杀信息", "击杀详情颜色", "#CCCCCCFF");
+        ColorExperience = cfg.Bind("3. 击杀信息", "经验值颜色", "#FFCCFFFF");
+        ColorUSEC = cfg.Bind("3. 击杀信息", "颜色_USEC", "#003399FF");
+        ColorBEAR = cfg.Bind("3. 击杀信息", "颜色_BEAR", "#FF8C00FF");
+        ColorSCAV = cfg.Bind("3. 击杀信息", "颜色_SCAV", "#FFE600FF");
+        ColorBOSS = cfg.Bind("3. 击杀信息", "颜色_BOSS", "#FF0000FF");
+        ColorFollower = cfg.Bind("3. 击杀信息", "颜色_Follower", "#E63333FF");
+        ColorRAIDER = cfg.Bind("3. 击杀信息", "颜色_RAIDER", "#FF66B2FF");
+        ColorRouges = cfg.Bind("3. 击杀信息", "颜色_Rouges", "#333333FF");
+        ColorSectant = cfg.Bind("3. 击杀信息", "颜色_Sectant", "#006600FF");
 
         // ---------------------------------------------------------------- 3b. 击杀图标特效
-        EnableRingEffect = cfg.Bind("3. 击杀播报 · 特效", "启用环形特效", true);
-        RingHeadshotEnabled = cfg.Bind("3. 击杀播报 · 特效", "爆头时触发", true);
-        RingEffectDelay = cfg.Bind("3. 击杀播报 · 特效", "延迟(秒)", 0.1f);
-        RingEffectDuration = cfg.Bind("3. 击杀播报 · 特效", "时长(秒)", 0.3f);
-        RingExplosionSecondRingDelay = cfg.Bind("3. 击杀播报 · 特效", "爆炸第二环延迟", 0.1f);
-        RingHeadshotRadius = cfg.Bind("3. 击杀播报 · 特效", "爆头半径", 42f);
-        RingHeadshotThickness = cfg.Bind("3. 击杀播报 · 特效", "爆头粗细", 3f);
-        RingHeadshotColor = cfg.Bind("3. 击杀播报 · 特效", "爆头颜色", "#D4B800FF");
-        RingCritRadius = cfg.Bind("3. 击杀播报 · 特效", "暴击半径", 42f);
-        RingCritThickness = cfg.Bind("3. 击杀播报 · 特效", "暴击粗细", 1.8f);
-        RingCritColor = cfg.Bind("3. 击杀播报 · 特效", "暴击颜色", "#9CCB65FF");
-        RingExplosionRadius = cfg.Bind("3. 击杀播报 · 特效", "爆炸半径", 42f);
-        RingExplosionThickness = cfg.Bind("3. 击杀播报 · 特效", "爆炸粗细", 5.4f);
-        RingExplosionColor = cfg.Bind("3. 击杀播报 · 特效", "爆炸颜色", "#F77F00FF");
+        EnableRingEffect = cfg.Bind("3b. 击杀特效", "启用环形特效", true);
+        RingHeadshotEnabled = cfg.Bind("3b. 击杀特效", "爆头时触发", true);
+        RingEffectDelay = cfg.Bind("3b. 击杀特效", "延迟(秒)", 0.1f);
+        RingEffectDuration = cfg.Bind("3b. 击杀特效", "时长(秒)", 0.3f);
+        RingExplosionSecondRingDelay = cfg.Bind("3b. 击杀特效", "爆炸第二环延迟", 0.1f);
+        RingHeadshotRadius = cfg.Bind("3b. 击杀特效", "爆头半径", 42f);
+        RingHeadshotThickness = cfg.Bind("3b. 击杀特效", "爆头粗细", 3f);
+        RingHeadshotColor = cfg.Bind("3b. 击杀特效", "爆头颜色", "#D4B800FF");
+        RingCritRadius = cfg.Bind("3b. 击杀特效", "暴击半径", 42f);
+        RingCritThickness = cfg.Bind("3b. 击杀特效", "暴击粗细", 1.8f);
+        RingCritColor = cfg.Bind("3b. 击杀特效", "暴击颜色", "#9CCB65FF");
+        RingExplosionRadius = cfg.Bind("3b. 击杀特效", "爆炸半径", 42f);
+        RingExplosionThickness = cfg.Bind("3b. 击杀特效", "爆炸粗细", 5.4f);
+        RingExplosionColor = cfg.Bind("3b. 击杀特效", "爆炸颜色", "#F77F00FF");
 
-        EnableIconGlow = cfg.Bind("3. 击杀播报 · 特效", "启用图标辉光", true);
-        IconGlowColor = cfg.Bind("3. 击杀播报 · 特效", "辉光颜色", "#FFFFFFFF");
-        IconGlowIntensity = cfg.Bind("3. 击杀播报 · 特效", "辉光强度", 0.45f,
+        EnableIconGlow = cfg.Bind("3b. 击杀特效", "启用图标辉光", true);
+        IconGlowColor = cfg.Bind("3b. 击杀特效", "辉光颜色", "#FFFFFFFF");
+        IconGlowIntensity = cfg.Bind("3b. 击杀特效", "辉光强度", 0.45f,
             new ConfigDescription("", null, new object[] { 0f, 2f }));
-        IconGlowSize = cfg.Bind("3. 击杀播报 · 特效", "辉光扩散(像素)", 4f,
+        IconGlowSize = cfg.Bind("3b. 击杀特效", "辉光扩散(像素)", 4f,
             new ConfigDescription("改动会触发辉光纹理重烘（有缓存）。", null, new object[] { 0f, 32f }));
 
         // ---------------------------------------------------------------- 4. 音效
-        SoundEnabled = cfg.Bind("4. 音效", "启用", true);
-        SoundMasterVolume = cfg.Bind("4. 音效", "总音量", 0.75f, new ConfigDescription("", null, new object[] { 0f, 1f }));
-        SoundHitVolume = cfg.Bind("4. 音效", "命中音量", 0.55f, new ConfigDescription("", null, new object[] { 0f, 2f }));
-        SoundHitHeadshotVolume = cfg.Bind("4. 音效", "爆头命中音量", 0.75f, new ConfigDescription("", null, new object[] { 0f, 2f }));
-        SoundKillVolume = cfg.Bind("4. 音效", "击杀音量", 0.85f, new ConfigDescription("", null, new object[] { 0f, 2f }));
-        SoundKillHeadshotVolume = cfg.Bind("4. 音效", "爆头击杀音量", 1f, new ConfigDescription("", null, new object[] { 0f, 2f }));
+        // 旧 cfg: 命中 0.5 / 击杀 0.7，爆头不做区分
+        SoundEnabled = cfg.Bind("4. 音频", "启用音效", true);
+        SoundHitEnabled = cfg.Bind("4. 音频", "启用命中音效", true);
+        SoundKillEnabled = cfg.Bind("4. 音频", "启用击杀音效", true);
+        SoundMasterVolume = cfg.Bind("4. 音频", "总音量", 1f, new ConfigDescription("", null, new object[] { 0f, 1f }));
+        SoundHitVolume = cfg.Bind("4. 音频", "命中音效音量", 0.5f, new ConfigDescription("", null, new object[] { 0f, 1f }));
+        SoundHitHeadshotVolume = cfg.Bind("4. 音频", "爆头命中音效音量", 0.5f, new ConfigDescription("", null, new object[] { 0f, 1f }));
+        SoundKillVolume = cfg.Bind("4. 音频", "击杀音效音量", 0.7f, new ConfigDescription("", null, new object[] { 0f, 1f }));
+        SoundKillHeadshotVolume = cfg.Bind("4. 音频", "爆头击杀音效音量", 0.7f, new ConfigDescription("", null, new object[] { 0f, 1f }));
 
-        SoundFileHit = cfg.Bind("4. 音效", "自定义:命中", "",
-            new ConfigDescription(BuildSoundHint("hit"), null, null));
-        SoundFileHitHeadshot = cfg.Bind("4. 音效", "自定义:爆头命中", "", new ConfigDescription(BuildSoundHint("headshot_hit")));
-        SoundFileKill = cfg.Bind("4. 音效", "自定义:击杀", "", new ConfigDescription(BuildSoundHint("kill")));
-        SoundFileKillHeadshot = cfg.Bind("4. 音效", "自定义:爆头击杀", "", new ConfigDescription(BuildSoundHint("headshot_kill")));
+        SoundFileHit = cfg.Bind("4. 音频", "自定义:命中", "", new ConfigDescription(SoundHint("hit")));
+        SoundFileHitHeadshot = cfg.Bind("4. 音频", "自定义:爆头命中", "", new ConfigDescription(SoundHint("headshot_hit")));
+        SoundFileKill = cfg.Bind("4. 音频", "自定义:击杀", "", new ConfigDescription(SoundHint("kill")));
+        SoundFileKillHeadshot = cfg.Bind("4. 音频", "自定义:爆头击杀", "", new ConfigDescription(SoundHint("headshot_kill")));
 
         // ---------------------------------------------------------------- 5. 界面
         UiScale = cfg.Bind("5. 界面", "UI 缩放", 1f,
             new ConfigDescription("整体缩放命中提示 / 伤害数字 / 击杀播报。", null, new object[] { 0.5f, 3f }));
         UiSortingOrder = cfg.Bind("5. 界面", "画布层级", 9000,
             new ConfigDescription("越大越靠前。EFT 自己的 HUD 一般在这个值以下。"));
-        UiFontName = cfg.Bind("5. 界面", "字体名称", "Microsoft YaHei",
+        UiFontName = cfg.Bind("5. 界面", "字体名称", "",
             new ConfigDescription(
-                "从系统字体创建 TMP 字体资源，默认微软雅黑可同时覆盖拉丁/西里尔/中文。" +
-                "留空则用游戏自带的 TMP 默认字体（可能缺中文字形）。"));
+                "留空 = 用游戏自带的 TMP 字体（实测可用，含西里尔字母）。" +
+                "想显示中文就填系统字体名，比如 Microsoft YaHei（会运行时创建 TMP 字体资源）。"));
     }
 
-    private static string BuildSoundHint(string fileName)
+    private static string SoundHint(string fileName)
         => $"留空 = 自动到 Sounds/ 找 {fileName}.ogg / .wav / .mp3。也可以写绝对路径或相对插件目录的路径。";
 }

@@ -111,7 +111,15 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
         Step("audio", StartAudioLoad);
 
-        Plugin.Logger.LogInfo("[behaviour] initialized");
+        var hit = Plugin.Cfg.TestHitKey.Value;
+        var kill = Plugin.Cfg.TestKillKey.Value;
+        Plugin.Logger.LogInfo(
+            $"[behaviour] initialized | 测试快捷键: {hit.MainKey}=命中 {kill.MainKey}=击杀 " +
+            $"(启用={Plugin.Cfg.TestHotkeysEnabled.Value}, 需 DebugEnabled=False 也生效)");
+
+        // 主动探一次键盘：旧版 Input 后端被游戏禁用时这里就能报出来，
+        // 而不是等玩家按了半天没反应才发现。
+        Step("input-probe", () => { _ = UnityEngine.Input.anyKey; });
     }
 
     private static void Step(string label, Action action)
@@ -200,27 +208,50 @@ internal sealed class AyaBehaviour : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 测试快捷键。**独立于「启用调试日志」** —— 之前两者绑在一起，
+    /// 结果日志开关默认关闭时按 F8/F9 毫无反应，看起来像快捷键坏了。
+    /// </summary>
     private void HandleHotkeys()
     {
-        if (!Plugin.Cfg.DebugEnabled.Value) return;
+        if (!Plugin.Cfg.TestHotkeysEnabled.Value) return;
+        if (_inputUnavailable) return;
 
-        var hitKey = Plugin.Cfg.TestHitKey.Value;
-        if (hitKey.MainKey != KeyCode.None && hitKey.IsDown())
+        try
         {
-            _ui.Hitmarker.Show(Vector2.zero);
-            _ui.DamageNumbers.Show(Vector2.zero, 76f, false);
-            _sound.PlayHit(false);
+            var hitKey = Plugin.Cfg.TestHitKey.Value;
+            if (hitKey.MainKey != KeyCode.None && hitKey.IsDown())
+            {
+                Plugin.Logger.LogInfo("[debug] 测试命中");
+                _ui.Hitmarker.Show(Vector2.zero);
+                _ui.DamageNumbers.Show(Vector2.zero, 76f, false);
+                _sound.PlayHit(false);
+            }
+
+            var killKey = Plugin.Cfg.TestKillKey.Value;
+            if (killKey.MainKey != KeyCode.None && killKey.IsDown())
+            {
+                Plugin.Logger.LogInfo("[debug] 测试击杀");
+                _ui.Hitmarker.Show(Vector2.zero);
+                _ui.KillFeed.Show(new KillRecord(
+                    "Nikita", 42, EFT.WildSpawnType.pmcUSEC, false, false,
+                    "胸部", "M4A1", 87.4f, 100, Time.unscaledTime));
+                _ui.KillFeed.Show(new KillRecord(
+                    "Target", 35, EFT.WildSpawnType.pmcBEAR, true, false,
+                    "头部", "SR-25", 142.7f, 150, Time.unscaledTime));
+                _sound.PlayKill(false);
+                _sound.PlayKill(true);
+            }
         }
-
-        var killKey = Plugin.Cfg.TestKillKey.Value;
-        if (killKey.MainKey != KeyCode.None && killKey.IsDown())
+        catch (Exception ex)
         {
-            _ui.KillFeed.Show(new KillRecord(
-                "Nikita", 42, EFT.WildSpawnType.pmcUSEC, true, false,
-                "头部", "M4A1", 87.4f, 150, Time.unscaledTime));
-            _sound.PlayKill(true);
+            _inputUnavailable = true;
+            Plugin.Logger.LogError(
+                $"[debug] 读取键盘失败，测试快捷键已停用（游戏可能禁用了旧版 Input 后端）: {ex.Message}");
         }
     }
+
+    private bool _inputUnavailable;
 
     /// <summary>字体名变了要重建 TMP 字体资源；音效路径/辉光扩散变了要重建对应缓存。</summary>
     private void ReloadIfConfigurationChanged()

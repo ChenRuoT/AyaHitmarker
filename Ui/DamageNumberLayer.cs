@@ -67,6 +67,15 @@ internal sealed class DamageNumberLayer
 
         e.Text.text = text;
         e.Text.fontSize = Mathf.Max(6f, Plugin.Cfg.DamageTextSize.Value);
+
+        // 描边：旧项目是白色 ~25% 不透明、爆头改红色。uGUI/TMP 下描边走 SDF，几乎零成本，
+        // 不像旧项目那样需要 8 次额外 GUI.Label。
+        var cfg = Plugin.Cfg;
+        e.Text.outlineWidth = Mathf.Clamp(cfg.DamageTextOutlineWidth.Value, 0f, 1f);
+        Color outline = headshot
+            ? UiTheme.Parse(cfg.DamageTextHeadshotOutlineColor.Value, new Color(1f, 0f, 0f, 1f))
+            : UiTheme.Parse(cfg.DamageTextOutlineColor.Value, new Color(1f, 1f, 1f, 0.25f));
+        e.Text.outlineColor = outline;   // 隐式转 Color32，alpha 在这里体现
         // 量一次真实宽度，用于同一行内的排列
         e.Text.ForceMeshUpdate();
         e.Width = e.Text.preferredWidth > 1f
@@ -121,9 +130,8 @@ internal sealed class DamageNumberLayer
             if (e.LastAlpha < 0f || Mathf.Abs(alpha - e.LastAlpha) > 0.01f)
             {
                 e.LastAlpha = alpha;
-                Color color = e.Headshot
-                    ? UiTheme.Parse(cfg.DamageTextHeadshotColor.Value, new Color(1f, 0.79f, 0.30f))
-                    : UiTheme.Parse(cfg.DamageTextColor.Value, Color.white);
+                // 旧项目填充色不分爆头，爆头只改描边颜色（在 Show 里设）
+                Color color = UiTheme.Parse(cfg.DamageTextColor.Value, Color.white);
                 e.Text.color = UiTheme.WithAlpha(color, alpha);
             }
 

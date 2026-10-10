@@ -92,7 +92,12 @@ internal sealed class OverlayRoot
             screenPoint.y / sf - size.y * 0.5f);
     }
 
-    /// <summary>世界坐标 → 画布局部坐标。相机不可用时返回 <c>null</c>。</summary>
+    /// <summary>
+    /// 世界坐标 → 画布局部坐标。任何一种"结果不可信"的情况都返回 <c>null</c>，
+    /// 调用方会退回屏幕中心 —— 宁可显示在准星，也不要画到屏幕外或边角上。
+    ///
+    /// 会拒绝的情况：相机拿不到 / 点在相机背后 / 投影结果超出屏幕（留 10% 余量）。
+    /// </summary>
     internal Vector2? WorldToCanvas(Vector3 world)
     {
         try
@@ -102,6 +107,13 @@ internal sealed class OverlayRoot
 
             Vector3 sp = cam.WorldToScreenPoint(world);
             if (sp.z <= 0f) return null;   // 在相机背后
+
+            float marginX = Screen.width * 0.1f;
+            float marginY = Screen.height * 0.1f;
+            if (float.IsNaN(sp.x) || float.IsNaN(sp.y)) return null;
+            if (sp.x < -marginX || sp.x > Screen.width + marginX) return null;
+            if (sp.y < -marginY || sp.y > Screen.height + marginY) return null;
+
             return ScreenToCanvas(sp);
         }
         catch

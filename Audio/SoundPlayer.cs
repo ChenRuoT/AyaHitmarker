@@ -6,13 +6,24 @@ namespace AyaHitmarker.Audio;
 
 /// <summary>
 /// 唯一的 AudioSource 宿主。
-/// EFT 切场景会连 GameObject 一起销毁，所以 DontDestroyOnLoad + 每次播放前做存活检查，
+///
+/// 两个与"听不到声音"直接相关的设置：
+/// <list type="bullet">
+///   <item><c>ignoreListenerPause = true</c> —— EFT 会在若干状态下暂停 AudioListener（例如读盘、
+///     某些 UI 状态）。普通声源在暂停期间是**静音**的，插件音效不应该被这个状态连带。</item>
+///   <item><c>bypassEffects / bypassListenerEffects / bypassReverbZones = true</c> ——
+///     EFT 给 listener 挂了室内混响、耳鸣低通、耳机滤波等效果链；不绕过的话插件音效会被
+///     那些效果染色甚至压得很低。</item>
+/// </list>
+///
+/// GameObject 标记 <c>DontDestroyOnLoad</c> 并在每次播放前做存活检查，
 /// 而不是像旧项目那样再挂一个 2 秒轮询去"恢复"它。
 /// </summary>
 internal sealed class SoundPlayer
 {
     private GameObject? _go;
     private AudioSource? _source;
+    private bool _envLogged;
 
     internal void Shutdown()
     {
@@ -22,6 +33,7 @@ internal sealed class SoundPlayer
             try { UnityEngine.Object.Destroy(_go); } catch { /* ignore */ }
             _go = null;
         }
+        _envLogged = false;
     }
 
     internal void PlayHit(bool headshot) => Play(headshot ? SoundKind.HitHeadshot : SoundKind.Hit);
@@ -30,7 +42,11 @@ internal sealed class SoundPlayer
 
     private void Play(SoundKind kind)
     {
-        if (!Plugin.Cfg.SoundEnabled.Value) return;
+        var cfg = Plugin.Cfg;
+        if (!cfg.SoundEnabled.Value) return;
+
+        bool isKill = kind == SoundKind.Kill || kind == SoundKind.KillHeadshot;
+        if (isKill ? !cfg.SoundKillEnabled.Value : !cfg.SoundHitEnabled.Value) return;
 
         try
         {
@@ -41,16 +57,18 @@ internal sealed class SoundPlayer
             var source = EnsureSource();
             if (source == null) return;
 
-            float vol = Plugin.Cfg.SoundMasterVolume.Value * kind switch
+            float vol = cfg.SoundMasterVolume.Value * (kind switch
             {
-                SoundKind.Hit => Plugin.Cfg.SoundHitVolume.Value,
-                SoundKind.HitHeadshot => Plugin.Cfg.SoundHitHeadshotVolume.Value,
-                SoundKind.Kill => Plugin.Cfg.SoundKillVolume.Value,
-                _ => Plugin.Cfg.SoundKillHeadshotVolume.Value,
-            };
+                SoundKind.Hit => cfg.SoundHitVolume.Value,
+                SoundKind.HitHeadshot => cfg.SoundHitHeadshotVolume.Value,
+                SoundKind.Kill => cfg.SoundKillVolume.Value,
+                _ => cfg.SoundKillHeadshotVolume.Value,
+            });
 
             if (vol <= 0.0001f) return;
-            source.PlayOneShot(clip, Mathf.Clamp(vol, 0f, 4f));
+            source.PlayOneShot(clip, Mathf.Clamp(vol, 0f, 1f));
+
+            if (cfg.DebugEnabled.Value) LogPlayback(kind, clip, source, vol);
         }
         catch (Exception ex)
         {
@@ -61,15 +79,67 @@ internal sealed class SoundPlayer
     private AudioSource? EnsureSource()
     {
         // Unity 对已销毁对象的重载 == 会返回 true，所以这里能正确识别"原生对象已没了"
-        if (_go != null && _source != null) return _source;
+        if (_go != null && _source != null)
+        {
+            if (!_envLogged) LogEnvironment(_source);
+            return _source;
+        }
 
-        _go = new GameObject("AyaHitmarker.Audio");
+        _go = new GameObject("AyaHitmarker.AudioSource");
         UnityEngine.Object.DontDestroyOnLoad(_go);
 
         _source = _go.AddComponent<AudioSource>();
         _source.playOnAwake = false;
-        _source.spatialBlend = 0f;   // 2D
+        _source.spatialBlend = 0f;            // 2D
         _source.volume = 1f;
+        _source.priority = 0;                 // 最高优先级，不被音频语音数上限挤掉
+        _source.ignoreListenerPause = true;
+        _source.bypassEffects = true;
+        _source.bypassListenerEffects = true;
+        _source.bypassReverbZones = true;
+
+        LogEnvironment(_source);
         return _source;
+    }
+
+    private void LogEnvironment(AudioSource source)
+    {
+        _envLogged = true;
+        try
+        {
+            Plugin.Logger.LogInfo(
+                $"[audio] AudioSource ready: enabled={source.enabled} volume={source.volume} " +
+                $"spatialBlend={source.spatialBlend} mute={source.mute} " +
+                $"| AudioListener.volume={AudioListener.volume} pause={AudioListener.pause}");
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogWarning($"[audio] 读取 AudioListener 状态失败: {ex.Message}");
+        }
+    }
+
+    private static void LogPlayback(SoundKind kind, AudioClip clip, AudioSource source, float vol)
+    {
+        try
+        {
+            string state;
+            try { state = clip.loadState.ToString(); } catch { state = "?"; }
+
+            Plugin.Logger.LogInfo(
+                $"[audio] play {kind}: clip={clip.name} len={clip.length:0.###}s samples={clip.samples} " +
+                $"ch={clip.channels} freq={clip.frequency} loadState={state} " +
+                $"vol={vol:0.##} srcVol={source.volume} isPlaying={source.isPlaying}");
+
+            // loadState 不是 Loaded 说明数据还没进内存，PlayOneShot 会静默失败
+            if (!string.Equals(state, "Loaded", StringComparison.Ordinal))
+            {
+                bool ok = clip.LoadAudioData();
+                Plugin.Logger.LogWarning($"[audio] {kind} 的 clip.loadState={state}，已尝试 LoadAudioData() -> {ok}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogWarning($"[audio] 播放诊断日志失败: {ex.Message}");
+        }
     }
 }
