@@ -155,26 +155,13 @@ internal sealed class DamageNumberLayer
         if (_parent == null) return null;
 
         e = new Entry();
-        var go = new GameObject("AyaHitmarker.Damage");
-        var text = go.AddComponent<TextMeshProUGUI>();
-
-        text.font = UiTheme.Font;
-        text.alignment = TextAlignmentOptions.Left;
-        text.enableWordWrapping = false;
-        text.overflowMode = TextOverflowModes.Overflow;
-        text.raycastTarget = false;
+        var text = UiTheme.CreateTextObject("AyaHitmarker.Damage", _parent, TextAlignmentOptions.Left);
         text.fontStyle = FontStyles.Bold;
-        text.fontMaterial.EnableKeyword("OUTLINE_ON");
         text.outlineWidth = 0.15f;
+        UiTheme.EnableTextOutline(text);
 
+        var go = text.gameObject;
         var rt = UiTheme.Rect(go);
-        if (rt != null)
-        {
-            rt.SetParent(_parent, false);
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-        }
 
         e.Go = go;
         e.Text = text;

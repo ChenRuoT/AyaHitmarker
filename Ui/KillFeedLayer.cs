@@ -84,8 +84,8 @@ internal sealed class KillFeedLayer
         _parent = parent;
         _ring.Attach(parent);
 
-        _factionGo = UiTheme.CreateContainer("AyaHitmarker.KillFaction", parent);
-        _factionText = AddText(_factionGo, TextAlignmentOptions.Right);
+        _factionText = UiTheme.CreateTextObject("AyaHitmarker.KillFaction", parent, TextAlignmentOptions.Right);
+        _factionGo = _factionText.gameObject;
         _factionRt = UiTheme.Rect(_factionGo);
 
         _factionIconGo = UiTheme.CreateContainer("AyaHitmarker.KillFactionIcon", parent);
@@ -93,30 +93,19 @@ internal sealed class KillFeedLayer
         _factionIconRt = UiTheme.Rect(_factionIconGo);
         _factionIconGo.SetActive(false);
 
-        _nameGo = UiTheme.CreateContainer("AyaHitmarker.KillName", parent);
-        _nameText = AddText(_nameGo, TextAlignmentOptions.Right);
+        _nameText = UiTheme.CreateTextObject("AyaHitmarker.KillName", parent, TextAlignmentOptions.Right);
+        _nameGo = _nameText.gameObject;
         _nameRt = UiTheme.Rect(_nameGo);
 
-        _detailsGo = UiTheme.CreateContainer("AyaHitmarker.KillDetails", parent);
-        _detailsText = AddText(_detailsGo, TextAlignmentOptions.Right);
+        _detailsText = UiTheme.CreateTextObject("AyaHitmarker.KillDetails", parent, TextAlignmentOptions.Right);
+        _detailsGo = _detailsText.gameObject;
         _detailsRt = UiTheme.Rect(_detailsGo);
 
-        _expGo = UiTheme.CreateContainer("AyaHitmarker.KillExp", parent);
-        _expText = AddText(_expGo, TextAlignmentOptions.Left);
+        _expText = UiTheme.CreateTextObject("AyaHitmarker.KillExp", parent, TextAlignmentOptions.Left);
+        _expGo = _expText.gameObject;
         _expRt = UiTheme.Rect(_expGo);
 
         SetTextVisible(false);
-    }
-
-    private static TextMeshProUGUI AddText(GameObject go, TextAlignmentOptions align)
-    {
-        var text = go.AddComponent<TextMeshProUGUI>();
-        text.font = UiTheme.Font;
-        text.alignment = align;
-        text.enableWordWrapping = false;
-        text.overflowMode = TextOverflowModes.Overflow;
-        text.raycastTarget = false;
-        return text;
     }
 
     // ------------------------------------------------------------------ 新增击杀

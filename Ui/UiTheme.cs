@@ -165,4 +165,46 @@ internal static class UiTheme
         }
         return go;
     }
+
+    /// <summary>
+    /// 创建一个纯文本对象。
+    /// 一定要走这里，**不要**在 <see cref="CreateContainer"/> 的物体上再加 TMP ——
+    /// 那样同一个 GameObject 上会有两个 <c>Graphic</c>（Image + TextMeshProUGUI），
+    /// 两者会争同一个 CanvasRenderer。
+    /// </summary>
+    internal static TextMeshProUGUI CreateTextObject(string name, RectTransform? parent, TextAlignmentOptions align)
+    {
+        var go = new GameObject(name);
+        var text = go.AddComponent<TextMeshProUGUI>();
+        text.alignment = align;
+        text.enableWordWrapping = false;
+        text.overflowMode = TextOverflowModes.Overflow;
+        text.raycastTarget = false;
+        text.font = Font;
+
+        var rt = Rect(go);
+        if (rt != null && parent != null)
+        {
+            rt.SetParent(parent, false);
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+        }
+        return text;
+    }
+
+    /// <summary>TMP 描边靠材质关键字，不打开 OUTLINE_ON 就算设了 outlineWidth 也没效果。</summary>
+    internal static void EnableTextOutline(TextMeshProUGUI text)
+    {
+        try
+        {
+            var mat = text.fontMaterial;
+            if (mat != null) mat.EnableKeyword("OUTLINE_ON");
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogWarning($"[ui] 启用 TMP 描边失败（不影响其他功能）: {ex.Message}");
+        }
+    }
 }
