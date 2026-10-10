@@ -52,6 +52,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
             _ui.ApplyScaleIfChanged();
             ReloadIfConfigurationChanged();
+            HandleAudioReloadRequest();
             HandleHotkeys();
 
             DrainFeedback();
@@ -254,6 +255,26 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     private bool _inputUnavailable;
 
+    /// <summary>
+    /// 播放时发现某个 clip 被销毁（Unity 假 null）→ 重新加载一次。
+    /// 场景切换有可能把 handler 的 clip 带走，这条是自愈路径，重试次数有上限。
+    /// </summary>
+    private void HandleAudioReloadRequest()
+    {
+        if (!AudioBank.ReloadRequested) return;
+
+        AudioBank.ConsumeReloadRequest();
+
+        if (!AudioBank.HasRetryableFailure())
+        {
+            Plugin.Logger.LogWarning("[audio] clip 已多次不可用，不再重试");
+            return;
+        }
+
+        Plugin.Logger.LogWarning("[audio] clip 不可用，重新加载一次");
+        StartAudioLoad();
+    }
+
     /// <summary>字体名变了要重建 TMP 字体资源；音效路径/辉光扩散变了要重建对应缓存。</summary>
     private void ReloadIfConfigurationChanged()
     {
@@ -269,7 +290,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         if (!string.Equals(sound, _lastSoundFingerprint, StringComparison.Ordinal))
         {
             _lastSoundFingerprint = sound;
-            AudioBank.Invalidate();
+            AudioBank.Invalidate(resetRetries: true);
             StartAudioLoad();
         }
 
@@ -303,7 +324,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             $"[diag] dispatcher={(GameEvents.DispatcherPresent ? "present" : "absent")} " +
             $"droppedHits={FeedbackBus.DroppedHits} droppedKills={FeedbackBus.DroppedKills} " +
             $"font={(UiTheme.Font != null ? "ok" : "MISSING")} " +
-            $"audioLoading={AudioBank.IsLoading} " +
+            $"audioLoading={AudioBank.IsLoading} audio[{AudioBank.DebugStatus()}] " +
             $"hit={AudioBank.SourceOf(SoundKind.Hit)}");
     }
 }

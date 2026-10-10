@@ -166,7 +166,41 @@ Patch a method with its own body instead
 将来确实需要补丁时：加回引用 → 写 `ModulePatch` 子类 → `new PatchManager(this, true)` →
 **先启动一次并搜 `shares its native body`**。
 
-## 8. ⚠️ 音效：`UnityWebRequest.Dispose()` 会把 AudioClip 一起销毁
+## 8. ⚠️ 音效为什么这么难：三个独立的坑叠在一起
+
+排查分了四轮。按踩到的顺序：
+
+| # | 坑 | 症状 | 修法 |
+|---|---|---|---|
+| 1 | `UnityWebRequest.Dispose()` 会连 `DownloadHandlerAudioClip` 的 clip 一起销毁 | 加载日志正常，播放时 Unity 假 null | 克隆成功才放请求，否则一直持有 |
+| 2 | **`DownloadHandlerAudioClip.compressed` 默认是 `true`** | `GetData()` 全是 0 → 用这些 0 克隆出来的副本就是静音 | 显式设 `compressed = false` / `streamAudio = false` |
+| 3 | `bypassEffects / bypassListenerEffects / bypassReverbZones` | 绕过 **AudioListener** 效果链，而 Meta XR Audio 正靠它出声 | 退回旧项目那三行配置 |
+
+第 2 条最隐蔽：**Unity 的 `UnityWebRequestMultimedia.GetAudioClip()` 内部把 `compressed` 写死为 `true`** ——
+音频以压缩态留在内存里、播放时才解压。于是
+`AudioClip.GetData()` 返回 `true` 但数据**全是 0**（`peak=0`），
+而那正是"自己克隆一份"这条路拿到的原料。旧 Mono 项目直接用 handler 的 clip 播放，
+所以既不需要 `GetData`、也就不会撞上这一条。
+
+现在的流程（`Assets/AudioBank.cs`）：
+
+```
+GetAudioClip(url, type)
+  → handler.compressed = false      // ★ 关键，否则后面拿到的全是 0
+  → handler.streamAudio = false
+  → SendWebRequest / 轮询 isDone
+  → GetContent(request)             // 解压进内存的 clip
+  → LoadAudioData() + GetData()      // 量一次峰值，确认不是静音
+  → AudioClip.Create + SetData       // 克隆成自己拥有的副本 → dispose 请求
+     （克隆失败才退回「用 handler 的 clip + 持有请求保活」）
+```
+
+日志会打出 `srcPeak` / `clonePeak`，**非 0 才代表 PCM 真的拿到了**。
+
+另外 `SoundPlayer` 在播放失败时会区分「未加载」和「已被销毁」，并且 clip 被销毁时
+会自动请求重载（每个槽位最多 3 次，`Game.Get → ReloadRequested → AyaBehaviour` 自愈）。
+
+## 8b. ⚠️ 音效：`UnityWebRequest.Dispose()` 会把 AudioClip 一起销毁
 
 症状极其反直觉：
 
@@ -254,6 +288,7 @@ bypassEffects = true; bypassListenerEffects = true; bypassReverbZones = true;
 
 | 版本 | 内容 |
 |---|---|
+| 0.2.6 | **`DownloadHandlerAudioClip.compressed` 必须显式设 false** —— Unity 的 `GetAudioClip()` 内部写死为 true，数据保持压缩态使 `GetData()` 全为 0，克隆出来的副本必然静音。同时补上 clip 被销毁后的自愈重载 |
 | 0.2.5 | 音频源配置退回旧项目三行 —— 投机加的 `bypassEffects/bypassListenerEffects/bypassReverbZones` 会绕过 AudioListener 效果，而 Meta XR Audio 正靠它出声；这些改为默认关闭的排障项，并新增「空间模式」2D/3D 切换。加载日志补 PCM 峰值、listener 数量、驱动信息 |
 | 0.2.4 | 修音效无声：`DownloadHandlerAudioClip` 的 clip 被 `request.Dispose()` 一起销毁。改为「能克隆就克隆，否则持有请求保活」；`SoundPlayer` 每条提前返回都告警 |
 | 0.2.3 | 默认参数按旧项目实机 cfg 校准；命中点投影加边界校验（越界退回屏幕中心）；测试快捷键不再被「调试日志」开关连坐；AudioSource 绕过 listener 暂停/音效链；伤害数字补描边颜色 |

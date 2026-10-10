@@ -30,7 +30,7 @@ public sealed class Plugin : BasePlugin
 {
     public const string PluginGuid = "com.aya.ayahitmarker";
     public const string PluginName = "AyaHitmarker";
-    public const string PluginVersion = "0.2.5";
+    public const string PluginVersion = "0.2.6";
 
     internal static Plugin Instance { get; private set; } = null!;
     internal static ManualLogSource Logger { get; private set; } = null!;

@@ -17,29 +17,31 @@ internal enum SoundKind
 
 /// <summary>
 /// 音效库。默认从 <c>BepInEx/plugins/AyaHitmarker/Sounds/</c> 读取，
-/// 解码交给 Unity（<see cref="UnityWebRequestMultimedia"/> + <c>DownloadHandlerAudioClip</c>），
-/// 所以 ogg / wav / mp3 都能吃。
+/// 解码交给 Unity（<see cref="UnityWebRequestMultimedia"/> + <c>DownloadHandlerAudioClip</c>）。
+///
+/// <para><b>踩过的三个坑（都是"日志一切正常但没声音"）</b></para>
 ///
 /// <para>
-/// **两个必须记住的坑**
+/// 1. <b>`DownloadHandlerAudioClip.compressed` 必须显式设成 <c>false</c>。</b>
+/// Unity 的 <c>UnityWebRequestMultimedia.GetAudioClip()</c> 内部把它写死为 <c>true</c>：
+/// 音频以**压缩态**留在内存里，播放时才解压。后果是 <c>AudioClip.GetData()</c> 拿到的**全是 0**
+/// （用这堆 0 克隆出来的副本必然是静音），而且 clip 的数据绑在 handler 的压缩缓冲上。
+/// 设成 <c>false</c> 才会在下载完成时解压进内存。
 /// </para>
 ///
 /// <para>
-/// 1. <b>不能 dispose <c>UnityWebRequest</c></b>。<c>DownloadHandlerAudioClip</c> 持有它解出来的
-/// AudioClip，一旦 handler 被 dispose（或因为没人引用而被终结器 dispose），那个 clip 的原生对象
-/// 就一起没了 —— 表现为「加载时日志说成功，播放时 <c>clip == null</c>（Unity 的假 null）却一条报错都没有」。
-/// 旧 Mono 项目从不 dispose，所以没踩到；我加了个 <c>finally { request.Dispose(); }</c> 就踩了。
+/// 2. <b>不能 dispose <c>UnityWebRequest</c></b>。handler 一被释放，它持有的 clip 就没了 ——
+/// 表现为「加载成功、播放时 Unity 假 null」。所以克隆成功才放掉请求，否则把请求一直持有。
 /// </para>
 ///
 /// <para>
-/// 2. 因此这里采取「能克隆就克隆」的策略：<c>GetData</c> + <c>AudioClip.Create</c> + <c>SetData</c>
-/// 复制出一份自己拥有的 clip，成功后就能安全地 dispose 请求；失败则把请求放进
-/// <see cref="_keepAliveRequests"/> 一直留着，靠 handler 的存活来保住 clip。
+/// 3. 加载走协程（<c>WrapToIl2Cpp()</c>），主线程不阻塞 —— 旧项目用 <c>Thread.Sleep</c> 死等，
+/// 进图和首次命中时会冻住游戏。
 /// </para>
 ///
 /// <para>
-/// 另外：整个加载走协程（<c>WrapToIl2Cpp()</c>），主线程不阻塞 —— 旧项目用 <c>Thread.Sleep</c>
-/// 死等 <c>UnityWebRequest</c>，进图和首次命中时会冻住游戏。
+/// 策略：<b>解压 → 读 PCM 量峰值 → 克隆成自己拥有的 clip</b>。克隆成功就彻底不依赖 handler；
+/// 克隆失败（拿不到 PCM）则退回「直接用 handler 的 clip + 持有请求保活」。
 /// </para>
 /// </summary>
 internal static class AudioBank
@@ -52,9 +54,14 @@ internal static class AudioBank
     /// <summary>0 = 未尝试，1 = 成功，2 = 失败（不重试）。</summary>
     private static readonly int[] _state = new int[SlotCount];
 
+    /// <summary>每个槽位自己失败后允许的重试次数（场景切换可能带走 clip）。</summary>
+    private static readonly int[] _retries = new int[SlotCount];
+
+    private const int MaxRetries = 3;
+
     /// <summary>
-    /// 这些请求不能 dispose —— 它们持有的 DownloadHandlerAudioClip 就是对应 clip 的所有者。
-    /// 只有在成功克隆出副本的情况下才允许放掉请求。
+    /// 这些请求不能 dispose —— 它们持有的 DownloadHandlerAudioClip 就是对应 clip 的所有者
+    /// （只有在成功克隆出副本后才允许放掉）。
     /// </summary>
     private static readonly List<UnityWebRequest> _keepAliveRequests = new List<UnityWebRequest>(4);
 
@@ -62,19 +69,35 @@ internal static class AudioBank
 
     internal static bool IsLoading => _loading;
 
-    internal static void Invalidate()
+    /// <summary>播放时发现 clip 不可用 → 置位；由 <c>AyaBehaviour</c> 在主线程重新起加载协程。</summary>
+    internal static bool ReloadRequested { get; private set; }
+
+    internal static void ConsumeReloadRequest() => ReloadRequested = false;
+
+    /// <summary>有没有任何一个槽位是「已失败但还没用满重试次数」——用于决定要不要重新加载。</summary>
+    internal static bool HasRetryableFailure()
     {
-        // 旧提交即将被替换，可以安全释放
+        for (int i = 0; i < SlotCount; i++)
+        {
+            if (_state[i] != 1 && _retries[i] < MaxRetries) return true;
+        }
+        return false;
+    }
+
+    internal static void Invalidate(bool resetRetries = false)
+    {
         for (int i = 0; i < _keepAliveRequests.Count; i++)
         {
             try { _keepAliveRequests[i].Dispose(); } catch { /* ignore */ }
         }
         _keepAliveRequests.Clear();
-        _state[0] = _state[1] = _state[2] = _state[3] = 0;
+
         for (int i = 0; i < SlotCount; i++)
         {
+            _state[i] = 0;
             _clips[i] = null;
             _sources[i] = string.Empty;
+            if (resetRetries) _retries[i] = 0;
         }
     }
 
@@ -85,7 +108,17 @@ internal static class AudioBank
 
         var clip = _clips[i];
         // Unity 的假 null：托管包装还在，原生对象已经销毁
-        if (clip == null) return null;
+        if (clip == null)
+        {
+            // 说明 clip 被销毁了。允许重载，但别无限刷。
+            if (_retries[i] < MaxRetries && !_loading)
+            {
+                _state[i] = 0;
+                _retries[i]++;
+                ReloadRequested = true;
+            }
+            return null;
+        }
         return clip;
     }
 
@@ -93,6 +126,18 @@ internal static class AudioBank
     {
         var s = _sources[(int)kind];
         return string.IsNullOrEmpty(s) ? "<未加载>" : s;
+    }
+
+    internal static string DebugStatus()
+    {
+        var parts = new string[SlotCount];
+        for (int i = 0; i < SlotCount; i++)
+        {
+            var clip = _clips[i];
+            string alive = _state[i] != 1 ? "missing" : (clip == null ? "destroyed" : "ok");
+            parts[i] = $"{(SoundKind)i}={alive}(retry {_retries[i]})";
+        }
+        return string.Join(" ", parts);
     }
 
     /// <summary>托管迭代器。调用方负责 <c>StartCoroutine(LoadAll().WrapToIl2Cpp())</c>。</summary>
@@ -103,18 +148,19 @@ internal static class AudioBank
 
         try
         {
-            string dir = Plugin.SoundsDirectory;
-            Plugin.Logger.LogInfo($"[audio] 开始加载音效: {dir}");
+            Plugin.Logger.LogInfo($"[audio] 开始加载音效: {Plugin.SoundsDirectory}");
 
             for (int i = 0; i < SlotCount; i++)
             {
                 if (_state[i] == 1 && _clips[i] != null) continue;
+                if (_state[i] == 2 && _retries[i] >= MaxRetries) continue;
 
                 var kind = (SoundKind)i;
                 string? path = ResolvePath(kind);
                 if (path == null)
                 {
                     _state[i] = 2;
+                    _retries[i] = MaxRetries;
                     Plugin.Logger.LogWarning($"[audio] {kind}: 在 Sounds/ 下没找到文件（候选: {string.Join(", ", CandidateNames(kind))}）");
                     continue;
                 }
@@ -122,9 +168,7 @@ internal static class AudioBank
                 yield return LoadOne(kind, path);
             }
 
-            Plugin.Logger.LogInfo(
-                $"[audio] 加载完成 hit={_state[0] == 1} headshot_hit={_state[1] == 1} " +
-                $"kill={_state[2] == 1} headshot_kill={_state[3] == 1}");
+            Plugin.Logger.LogInfo($"[audio] 加载完成 {DebugStatus()}");
         }
         finally
         {
@@ -148,6 +192,28 @@ internal static class AudioBank
         try
         {
             request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, type);
+
+            // ★ 关键：Unity 的 GetAudioClip 把 compressed 写死为 true（数据保持压缩态），
+            //   于是 GetData() 只会给出全 0，而且 clip 的生命周期绑在 handler 的压缩缓冲上。
+            //   显式改成「下载完成即解压」，我们才能读到真实 PCM 并自己拥有它。
+            try
+            {
+                var handler = request.downloadHandler;
+                var audioHandler = handler?.TryCast<DownloadHandlerAudioClip>();
+                if (audioHandler != null)
+                {
+                    audioHandler.compressed = false;
+                    audioHandler.streamAudio = false;
+                }
+                else
+                {
+                    Plugin.Logger.LogWarning($"[audio] {kind}: downloadHandler 不是 DownloadHandlerAudioClip（{handler?.GetType().Name ?? "null"}），无法关闭压缩模式");
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogWarning($"[audio] {kind}: 设置 compressed=false 失败: {ex.Message}");
+            }
         }
         catch (Exception ex)
         {
@@ -199,21 +265,41 @@ internal static class AudioBank
                 yield break;
             }
 
-            // 直接用 handler 给的 clip（旧 Mono 项目就是这么做的并且能出声），
-            // 但**必须一直持有请求** —— 否则 handler 被终结器回收时 clip 一起消失。
-            _clips[i] = clip;
-            _keepAliveRequests.Add(request);
-            _sources[i] = path;
-            _state[i] = 1;
+            // 确保数据在内存里（compressed=false 时通常已经是）
+            try
+            {
+                if (clip.loadState != AudioDataLoadState.Loaded) clip.LoadAudioData();
+            }
+            catch { /* 忽略 */ }
 
-            // 诊断：量一次 PCM 峰值，用来区分「解码出来就是静音」和「解码没问题但播不出声」
             float peak = MeasurePeak(clip, out bool readOk);
 
-            Plugin.Logger.LogInfo(
-                $"[audio] {kind} <- {Path.GetFileName(path)} " +
-                $"(len={clip.length:0.###}s samples={clip.samples} ch={clip.channels} " +
-                $"freq={clip.frequency} loadState={SafeState(clip)} " +
-                $"readOk={readOk} peak={peak:0.####})");
+            // 优先克隆：副本完全由我们拥有，不依赖 handler 的生命周期
+            float clonePeak = 0f;
+            AudioClip? owned = null;
+            if (peak > 0.0001f) owned = TryClone(kind, clip, out clonePeak);
+
+            if (owned != null)
+            {
+                _clips[i] = owned;
+                SafeDispose(request);
+                Plugin.Logger.LogInfo(
+                    $"[audio] {kind} <- {Path.GetFileName(path)} " +
+                    $"(len={owned.length:0.###}s samples={owned.samples} ch={owned.channels} " +
+                    $"freq={owned.frequency} srcPeak={peak:0.####} clonePeak={clonePeak:0.####}) [自持副本]");
+            }
+            else
+            {
+                _clips[i] = clip;
+                _keepAliveRequests.Add(request);
+                Plugin.Logger.LogWarning(
+                    $"[audio] {kind} <- {Path.GetFileName(path)} 未能取得 PCM（readOk={readOk} peak={peak:0.####}），" +
+                    "退回使用 handler 的 clip 并持有请求保活");
+            }
+
+            _sources[i] = path;
+            _state[i] = 1;
+            _retries[i] = 0;
         }
         catch (Exception ex)
         {
@@ -223,10 +309,48 @@ internal static class AudioBank
         }
     }
 
-    /// <summary>
-    /// 读一次 PCM 并返回峰值（0..1），只用于诊断。
-    /// 用来区分两种情况：解码出来本身就是静音（peak=0），还是解码没问题但播不出声（peak&gt;0）。
-    /// </summary>
+    /// <summary>把 PCM 复制进一个自建 AudioClip。拿不到数据返回 <c>null</c>。</summary>
+    private static AudioClip? TryClone(SoundKind kind, AudioClip src, out float peak)
+    {
+        peak = 0f;
+        try
+        {
+            int samples = src.samples;
+            int channels = src.channels;
+            int frequency = src.frequency;
+            if (samples <= 0 || channels <= 0 || frequency <= 0)
+            {
+                Plugin.Logger.LogWarning($"[audio] {kind} clip 参数异常: samples={samples} ch={channels} freq={frequency}");
+                return null;
+            }
+
+            var buffer = new float[samples * channels];
+            if (!src.GetData(buffer, 0)) return null;
+
+            for (int k = 0; k < buffer.Length; k++)
+            {
+                float v = buffer[k] < 0f ? -buffer[k] : buffer[k];
+                if (v > peak) peak = v;
+            }
+
+            var clone = AudioClip.Create($"AyaHitmarker.{kind}", samples, channels, frequency, false);
+            if (clone == null) return null;
+            if (!clone.SetData(buffer, 0))
+            {
+                UnityEngine.Object.Destroy(clone);
+                return null;
+            }
+
+            clone.hideFlags = HideFlags.HideAndDontSave;
+            return clone;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogWarning($"[audio] {kind} 克隆 clip 异常: {ex.Message}");
+            return null;
+        }
+    }
+
     private static float MeasurePeak(AudioClip clip, out bool readOk)
     {
         readOk = false;
@@ -248,17 +372,10 @@ internal static class AudioBank
             }
             return peak;
         }
-        catch (Exception ex)
+        catch
         {
-            Plugin.Logger.LogWarning($"[audio] 读取 PCM 峰值失败: {ex.Message}");
             return 0f;
         }
-    }
-
-    private static string SafeState(AudioClip clip)
-    {
-        try { return clip.loadState.ToString(); }
-        catch { return "?"; }
     }
 
     private static void SafeDispose(UnityWebRequest? request)

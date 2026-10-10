@@ -66,7 +66,10 @@ internal sealed class SoundPlayer
             var clip = AudioBank.Get(kind);
             if (clip == null)
             {
-                WarnOnce(kind, "clip 不可用（未加载，或原生对象已被销毁）");
+                // 注意这里要区分两种完全不同的失败：还没加载好 vs clip 被销毁。
+                // 上一版把两者写成同一句话，多花了一轮排查。
+                WarnOnce(kind, $"clip 不可用 [{AudioBank.DebugStatus()}]" +
+                               (AudioBank.ReloadRequested ? "，已请求重载" : ""));
                 return;
             }
 
