@@ -272,6 +272,9 @@ internal static class AudioBank
             }
             catch { /* 忽略 */ }
 
+            // handler 给的 clip 没有名字，补一个方便日志辨认
+            try { if (string.IsNullOrEmpty(clip.name)) clip.name = $"AyaHitmarker.{kind}"; } catch { /* ignore */ }
+
             float peak = MeasurePeak(clip, out bool readOk);
 
             // 优先克隆：副本完全由我们拥有，不依赖 handler 的生命周期
@@ -290,11 +293,16 @@ internal static class AudioBank
             }
             else
             {
+                // 这条是**正常路径**，不是异常：实测这个 Unity/IL2CPP 组合下
+                // AudioClip.GetData() 对 DownloadHandlerAudioClip 产出的 clip 恒为全 0
+                // （即使把 handler.compressed 设成 false 也一样），所以拿不到 PCM 就直接用
+                // handler 的 clip —— 旧 Mono 项目就是这么做的。代价是必须一直持有请求。
                 _clips[i] = clip;
                 _keepAliveRequests.Add(request);
-                Plugin.Logger.LogWarning(
-                    $"[audio] {kind} <- {Path.GetFileName(path)} 未能取得 PCM（readOk={readOk} peak={peak:0.####}），" +
-                    "退回使用 handler 的 clip 并持有请求保活");
+                Plugin.Logger.LogInfo(
+                    $"[audio] {kind} <- {Path.GetFileName(path)} " +
+                    $"(len={clip.length:0.###}s samples={clip.samples} ch={clip.channels} freq={clip.frequency} " +
+                    $"loadState={SafeState(clip)} dataPeak={peak:0.####} readOk={readOk}) [持有请求保活]");
             }
 
             _sources[i] = path;
@@ -349,6 +357,12 @@ internal static class AudioBank
             Plugin.Logger.LogWarning($"[audio] {kind} 克隆 clip 异常: {ex.Message}");
             return null;
         }
+    }
+
+    private static string SafeState(AudioClip clip)
+    {
+        try { return clip.loadState.ToString(); }
+        catch { return "?"; }
     }
 
     private static float MeasurePeak(AudioClip clip, out bool readOk)

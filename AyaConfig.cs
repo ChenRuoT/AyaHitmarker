@@ -291,11 +291,15 @@ internal sealed class AyaConfig
         SoundEnabled = cfg.Bind("4. 音频", "启用音效", true);
         SoundHitEnabled = cfg.Bind("4. 音频", "启用命中音效", true);
         SoundKillEnabled = cfg.Bind("4. 音频", "启用击杀音效", true);
-        SoundMasterVolume = cfg.Bind("4. 音频", "总音量", 1f, new ConfigDescription("", null, new object[] { 0f, 1f }));
-        SoundHitVolume = cfg.Bind("4. 音频", "命中音效音量", 0.5f, new ConfigDescription("", null, new object[] { 0f, 1f }));
-        SoundHitHeadshotVolume = cfg.Bind("4. 音频", "爆头命中音效音量", 0.5f, new ConfigDescription("", null, new object[] { 0f, 1f }));
-        SoundKillVolume = cfg.Bind("4. 音频", "击杀音效音量", 0.7f, new ConfigDescription("", null, new object[] { 0f, 1f }));
-        SoundKillHeadshotVolume = cfg.Bind("4. 音频", "爆头击杀音效音量", 0.7f, new ConfigDescription("", null, new object[] { 0f, 1f }));
+        // 注意：音量必须用 AcceptableValueRange 而不是 ConfigDescription 的 tags。
+        // tags 只给 ConfigurationManager 画滑条用，**不做钳制** —— 曾经有人把音量填成 80，
+        // 于是 vol 算出来 6400，全靠代码里 Mathf.Clamp 才没变成噪音。
+        var unitRange = new AcceptableValueRange<float>(0f, 1f);
+        SoundMasterVolume = cfg.Bind("4. 音频", "总音量", 1f, new ConfigDescription("0..1", unitRange));
+        SoundHitVolume = cfg.Bind("4. 音频", "命中音效音量", 0.5f, new ConfigDescription("0..1", unitRange));
+        SoundHitHeadshotVolume = cfg.Bind("4. 音频", "爆头命中音效音量", 0.5f, new ConfigDescription("0..1", unitRange));
+        SoundKillVolume = cfg.Bind("4. 音频", "击杀音效音量", 0.7f, new ConfigDescription("0..1", unitRange));
+        SoundKillHeadshotVolume = cfg.Bind("4. 音频", "爆头击杀音效音量", 0.7f, new ConfigDescription("0..1", unitRange));
 
         SoundFileHit = cfg.Bind("4. 音频", "自定义:命中", "", new ConfigDescription(SoundHint("hit")));
         SoundFileHitHeadshot = cfg.Bind("4. 音频", "自定义:爆头命中", "", new ConfigDescription(SoundHint("headshot_hit")));

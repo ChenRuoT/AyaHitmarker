@@ -166,93 +166,51 @@ Patch a method with its own body instead
 将来确实需要补丁时：加回引用 → 写 `ModulePatch` 子类 → `new PatchManager(this, true)` →
 **先启动一次并搜 `shares its native body`**。
 
-## 8. ⚠️ 音效为什么这么难：三个独立的坑叠在一起
+## 8. ⚠️ 音效为什么这么难：三个坑，且第一个判断错了两次
 
-排查分了四轮。按踩到的顺序：
+排查花了五轮。按**结论可信度**排序：
 
-| # | 坑 | 症状 | 修法 |
+| # | 事实 | 证据 | 修法 |
 |---|---|---|---|
-| 1 | `UnityWebRequest.Dispose()` 会连 `DownloadHandlerAudioClip` 的 clip 一起销毁 | 加载日志正常，播放时 Unity 假 null | 克隆成功才放请求，否则一直持有 |
-| 2 | **`DownloadHandlerAudioClip.compressed` 默认是 `true`** | `GetData()` 全是 0 → 用这些 0 克隆出来的副本就是静音 | 显式设 `compressed = false` / `streamAudio = false` |
-| 3 | `bypassEffects / bypassListenerEffects / bypassReverbZones` | 绕过 **AudioListener** 效果链，而 Meta XR Audio 正靠它出声 | 退回旧项目那三行配置 |
+| 1 | **主菜单场景里创建的 AudioClip 会随场景切换被销毁** | 加载日志说 `ok`，进 raid 后 `clip 不可用 [Hit=missing ... destroyed ...]`；播放失败触发兜底重载**在 raid 内**重建后立刻正常 | **每个 raid 开始时清掉重载**（`OnRaidStarted`） |
+| 2 | **`UnityWebRequest.Dispose()` 会连 handler 的 clip 一起销毁** | 更早一版 `finally { request.Dispose(); }` → 加载正常、播放时假 null | 不 dispose；请求一直持有（`_keepAliveRequests`） |
+| 3 | **`bypassEffects` 会绕过 AudioListener 效果链** | Unity 文档；而本版本 EFT 用 Meta XR Audio 靠那条链出声 | 去掉，退回旧项目那三行配置 |
 
-第 2 条最隐蔽：**Unity 的 `UnityWebRequestMultimedia.GetAudioClip()` 内部把 `compressed` 写死为 `true`** ——
-音频以压缩态留在内存里、播放时才解压。于是
-`AudioClip.GetData()` 返回 `true` 但数据**全是 0**（`peak=0`），
-而那正是"自己克隆一份"这条路拿到的原料。旧 Mono 项目直接用 handler 的 clip 播放，
-所以既不需要 `GetData`、也就不会撞上这一条。
+### 被证伪的两个判断（留着别再走一遍）
 
-现在的流程（`Assets/AudioBank.cs`）：
+**（a）`AudioClip.GetData()` 在这个 comb 下恒为全 0。** 我曾以为原因是
+`DownloadHandlerAudioClip.compressed`（Unity 的 `GetAudioClip()` 内部写死为 `true`），
+于是显式设成 `false` 并"克隆一份自己拥有的 PCM"。
+**实测无效**：`readOk=True` 但 `peak` 始终是 `0`，改 `compressed` 也不变。
+
+结论：**不要试图克隆。** 直接用 handler 给的那个 clip（旧 Mono 项目就是这么做的），
+代价是必须一直持有 `UnityWebRequest`。`GetData` 的峰值现在只作为诊断信息保留。
+
+**（b）「2D 一定行」没有在本版本验证过。** 唯一确认能出声的配置是
+`空间模式 = FollowCamera3D`。2D 那几次尝试都撞在"clip 已死"上，所以无法判断 2D 本身行不行。
+默认值仍按旧项目设成 `Flat2D`；如果 2D 真的无声，就保持 `FollowCamera3D`
+（`SoundPlayer.Tick` 每帧把声源挪到 `Camera.main`）。
+
+现在的加载流程（`Assets/AudioBank.cs`）：
 
 ```
-GetAudioClip(url, type)
-  → handler.compressed = false      // ★ 关键，否则后面拿到的全是 0
-  → handler.streamAudio = false
+GetAudioClip(url, type) → handler.compressed=false / streamAudio=false（保险，非必需）
   → SendWebRequest / 轮询 isDone
-  → GetContent(request)             // 解压进内存的 clip
-  → LoadAudioData() + GetData()      // 量一次峰值，确认不是静音
-  → AudioClip.Create + SetData       // 克隆成自己拥有的副本 → dispose 请求
-     （克隆失败才退回「用 handler 的 clip + 持有请求保活」）
+  → GetContent(request)              // 直接用它的 clip
+  → 量一次 GetData 峰值（仅诊断，实测恒 0）
+  → 持有 request 保活（_keepAliveRequests）
+每个 raid 开始 → Invalidate() + 重新加载
 ```
 
-日志会打出 `srcPeak` / `clonePeak`，**非 0 才代表 PCM 真的拿到了**。
+日志会打 `dataPeak` / `readOk`。**这两个值哪怕看着不对也不影响出声** ——
+它们只是诊断；能出声靠的是"用 handler 的 clip + 持有请求 + 进图重载"。
 
-另外 `SoundPlayer` 在播放失败时会区分「未加载」和「已被销毁」，并且 clip 被销毁时
-会自动请求重载（每个槽位最多 3 次，`Game.Get → ReloadRequested → AyaBehaviour` 自愈）。
+### 音量项的坑
 
-## 8b. ⚠️ 音效：`UnityWebRequest.Dispose()` 会把 AudioClip 一起销毁
-
-症状极其反直觉：
-
-```
-[audio] Hit <- hit.ogg            ← 加载阶段一切正常
-[audio] 加载完成 hit=True ...      ← 四个 clip 全 True
-[debug] 测试命中                   ← 播放被调用
-（然后什么都没有 —— 没有报错、没有声音）
-```
-
-原因：`DownloadHandlerAudioClip` **持有**它解出来的 `AudioClip`。加载完顺手
-`request.Dispose()` 会连 handler 一起释放，那个 clip 的原生对象随之销毁。
-之后 `AudioBank.Get()` 拿到的是一个 **Unity 假 null** —— 托管包装还在、`!= null` 在 C# 意义上成立，
-但 Unity 重载的 `== null` 返回 true，于是 `Play()` 静默 return 了。
-
-旧 Mono 项目从不 dispose 请求，所以没踩到；是我自己加了个 `finally { request.Dispose(); }`。
-
-**修法**（`Assets/AudioBank.cs`）：
-1. 首选**克隆**：`clip.GetData()` → `AudioClip.Create()` → `SetData()`，得到一份自己拥有的副本，
-   之后才能安全地 dispose 请求。
-2. 克隆失败（例如流式压缩取不出样本）就把请求塞进 `_keepAliveRequests` **一直持有**，
-   靠 handler 的存活保住 clip。
-3. `SoundPlayer.Play` 的**每一条提前返回都会 `WarnOnce`**，同类原因每种音效只告警一次。
-   静默 return 是这次排查成本这么高的直接原因。
-
-## 9. ⚠️ 音效：不要把 AudioSource 配置得"太聪明"
-
-这个版本的 EFT 用 **Meta XR Audio** 接管空间音频（启动日志里能看到）：
-
-```
-[Message: Unity] Applying Acoustic Propagation Settings: [acoustic model = AcousticRayTracing], [diffraction = True]
-[Message: Unity] Meta XR Audio Native Interface initialized with Unity plugin
-[Message: Unity] Setting spatial voice limit: 196
-[Message: Unity] No Meta XR Audio Room found, setting default room
-```
-
-于是"多设几个绕过开关让它更稳"的想法是**反效果**的。Unity 文档里
-`AudioSource.bypassEffects` 会一并绕过 **AudioListener** 上的效果 —— 而那正是 Meta XR Audio
-把声音渲染出来的环节。一次排查中 AudioSource 被设成了：
-
-```csharp
-bypassEffects = true; bypassListenerEffects = true; bypassReverbZones = true;
-```
-
-结果是：clip 真实（`loadState=Loaded`、长度正确）、`AudioListener.volume=1`、`pause=False`、
-`isPlaying=True`，**但完全没有声音，且没有任何 Unity 告警**。
-
-**结论：音频源保持旧 Mono 项目的三行即可**（`playOnAwake=false` / `spatialBlend=0` / `volume=1`）。
-那些绕过开关现在都是默认关闭的排障项（`4. 音频` 分组）。
-
-如果 2D 仍然无声，`4. 音频 → 空间模式` 可以切成「3D 跟随相机」——走游戏自己的声场管线。
-（3D 模式下 `Tick()` 每帧把声源挪到 `Camera.main` 的位置。）
+`ConfigDescription(desc, null, new object[]{0f,1f})` 里的 tags **只给 ConfigurationManager 画滑条用，
+不做钳制**。曾有人把音量填成 `80`，于是 `vol = 80 × 80 = 6400`，
+全靠代码里 `Mathf.Clamp(vol, 0f, 1f)` 才没变成噪音。
+音量项现在改用 `new AcceptableValueRange<float>(0f, 1f)`，这才是真正会钳制的写法。
 
 ## 10. 已知限制
 
@@ -288,6 +246,7 @@ bypassEffects = true; bypassListenerEffects = true; bypassReverbZones = true;
 
 | 版本 | 内容 |
 |---|---|
+| 0.2.7 | 音效在**进图时重载** —— 主菜单场景创建的 clip 会随场景切换被销毁，这是"加载正常但播放无效"的最终原因；音量项改用 `AcceptableValueRange` 真正钳制；兜底路径不再当告警 |
 | 0.2.6 | **`DownloadHandlerAudioClip.compressed` 必须显式设 false** —— Unity 的 `GetAudioClip()` 内部写死为 true，数据保持压缩态使 `GetData()` 全为 0，克隆出来的副本必然静音。同时补上 clip 被销毁后的自愈重载 |
 | 0.2.5 | 音频源配置退回旧项目三行 —— 投机加的 `bypassEffects/bypassListenerEffects/bypassReverbZones` 会绕过 AudioListener 效果，而 Meta XR Audio 正靠它出声；这些改为默认关闭的排障项，并新增「空间模式」2D/3D 切换。加载日志补 PCM 峰值、listener 数量、驱动信息 |
 | 0.2.4 | 修音效无声：`DownloadHandlerAudioClip` 的 clip 被 `request.Dispose()` 一起销毁。改为「能克隆就克隆，否则持有请求保活」；`SoundPlayer` 每条提前返回都告警 |

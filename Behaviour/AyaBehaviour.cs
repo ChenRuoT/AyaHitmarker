@@ -136,7 +136,20 @@ internal sealed class AyaBehaviour : MonoBehaviour
         }
     }
 
-    private void OnRaidStarted() => _ui.ResetAll();
+    /// <summary>
+    /// 进图时重新加载音效。
+    ///
+    /// **这是音效能不能用的关键**：实测在**主菜单场景**里创建出来的 AudioClip 会随场景切换
+    /// 被销毁（加载日志说 ok，进 raid 后全是 Unity 假 null）。所以每个 raid 开始时重建一批。
+    /// 之前靠"播放失败 → 兜底重载"也能自愈，但代价是第一次命中/按 F8 没声音 + 一堆告警。
+    /// </summary>
+    private void OnRaidStarted()
+    {
+        _ui.ResetAll();
+
+        AudioBank.Invalidate(resetRetries: true);
+        StartAudioLoad();
+    }
 
     private void OnRaidEnded() => _ui.ResetAll();
 
