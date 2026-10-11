@@ -337,7 +337,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         EFT.WildSpawnType role,
         int level,
         bool headshot,
-        string bodyPart,
+        EBodyPart bodyPart,
         string weapon,
         string method,
         bool methodNotable,
@@ -355,7 +355,9 @@ internal sealed class AyaBehaviour : MonoBehaviour
             BotTypeMapping.IsPmc(botType),
             BotTypeMapping.IsBoss(botType),
             headshot,
-            bodyPart,
+            // 走和真实击杀完全相同的部位解析（Game/BodyPartNames.cs）——
+            // 这样按 F9 就能直接看到映射结果，不用等真打一枪
+            GameEvents.LocalizeBodyPart(bodyPart),
             weapon,
             method,
             methodNotable,
@@ -367,18 +369,18 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     private static readonly KillRecord[] TestKillScript =
     {
-        // 普通 PMC 击杀：看阵营着色 + 军衔徽章 + 得分基础值
-        MakeTestKill("Nikita", EFT.WildSpawnType.pmcUSEC, 42, false, "胸部", "M4A1", "枪械", false, false, false, 87.4f),
-        // PMC 爆头：爆头描边 + Headshot 环
-        MakeTestKill("Target", EFT.WildSpawnType.pmcBEAR, 35, true, "头部", "SR-25", "狙击", true, false, false, 142.7f),
+        // 普通 PMC 击杀：看阵营着色 + 军衔徽章 + 得分基础值（部位会显示「胸部」）
+        MakeTestKill("Nikita", EFT.WildSpawnType.pmcUSEC, 42, false, EBodyPart.Chest, "M4A1", "枪械", false, false, false, 87.4f),
+        // PMC 爆头：爆头描边 + Headshot 环（部位显示「爆头」而不是部位名）
+        MakeTestKill("Target", EFT.WildSpawnType.pmcBEAR, 35, true, EBodyPart.Head, "SR-25", "狙击", true, false, false, 142.7f),
         // 远程 + 爆头 → 神射手（史诗缎带 + 爆炸环）
-        MakeTestKill("Sniper", EFT.WildSpawnType.pmcUSEC, 55, true, "头部", "M700", "狙击", true, false, false, 268f),
-        // SCAV 近战 → 冷兵器
-        MakeTestKill("Scav", EFT.WildSpawnType.assault, 0, false, "胸部", "砍刀", "近战", true, true, false, 1.2f),
+        MakeTestKill("Sniper", EFT.WildSpawnType.pmcUSEC, 55, true, EBodyPart.Head, "M700", "狙击", true, false, false, 268f),
+        // SCAV 近战 → 冷兵器；**左腿**用来验部位映射（曾经会显示成 EBodyPart/LeftLeg）
+        MakeTestKill("Scav", EFT.WildSpawnType.assault, 0, false, EBodyPart.LeftLeg, "砍刀", "近战", true, true, false, 1.2f),
         // 首领 + 爆炸 → 首领猎杀者
-        MakeTestKill("Killa", EFT.WildSpawnType.bossKilla, 0, false, "胸部", "F-1 手雷", "爆炸", true, false, true, 12.5f),
-        // 再连推几次 F9 就会看到双杀 / 三杀 / 狂战士 与连杀进度条
-        MakeTestKill("Guard", EFT.WildSpawnType.pmcBot, 0, false, "胸部", "AK-74M", "枪械", false, false, false, 33f),
+        MakeTestKill("Killa", EFT.WildSpawnType.bossKilla, 0, false, EBodyPart.Stomach, "F-1 手雷", "爆炸", true, false, true, 12.5f),
+        // 右臂：再验一次部位映射；再连推几次 F9 就会看到双杀 / 三杀 / 狂战士 与连杀进度条
+        MakeTestKill("Guard", EFT.WildSpawnType.pmcBot, 0, false, EBodyPart.RightArm, "AK-74M", "枪械", false, false, false, 33f),
     };
 
     private bool _inputUnavailable;

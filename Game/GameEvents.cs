@@ -352,16 +352,16 @@ internal static class GameEvents
         catch { return 0f; }
     }
 
-    private static string LocalizeBodyPart(EBodyPart part)
-    {
-        try
-        {
-            var localized = EFT.LocalizationExtensions.Localized(part);
-            if (!string.IsNullOrWhiteSpace(localized) && localized != part.ToString()) return localized!;
-        }
-        catch { /* fallthrough */ }
-        return part.ToString();
-    }
+    /// <summary>
+    /// <c>EBodyPart</c> → 中文部位名。
+    ///
+    /// **不要写成 <c>LocalizationExtensions.Localized(part)</c>。** 那里有一组泛型重载，
+    /// 这个调用会命中 <c>Localized&lt;TEnum&gt;(TEnum, EStringCase)</c> —— 它用「枚举类型名/成员名」
+    /// 拼 key 查本地化表，**查不到就把 key 原样返回**，于是击杀详情里会出现
+    /// <c>EBodyPart/LeftLeg</c> 这种字符串（实测 bug）。改走 <see cref="BodyPartNames"/> 的确定性查表。
+    /// </summary>
+    internal static string LocalizeBodyPart(EBodyPart part)
+        => BodyPartNames.Describe(part.ToString(), (int)part);
 
     /// <summary>
     /// 触发一个无参事件并记日志。
