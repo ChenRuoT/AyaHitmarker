@@ -18,6 +18,7 @@ internal sealed class HitmarkerLayer
 
     private float _start = -999f;
     private bool _shown;
+    private bool _headshot;
     private Vector2 _anchor;
 
     internal void Attach(RectTransform parent)
@@ -41,9 +42,10 @@ internal sealed class HitmarkerLayer
     }
 
     /// <summary><paramref name="canvasAnchor"/> 是画布局部坐标（原点 = 屏幕中心）。</summary>
-    internal void Show(Vector2 canvasAnchor)
+    internal void Show(Vector2 canvasAnchor, bool headshot)
     {
         _anchor = canvasAnchor;
+        _headshot = headshot;
         _start = Time.unscaledTime;
         _shown = true;
     }
@@ -62,7 +64,8 @@ internal sealed class HitmarkerLayer
         }
 
         float duration = Mathf.Max(0.02f, cfg.HitDuration.Value);
-        float t = (Time.unscaledTime - _start) / duration;
+        float elapsed = Time.unscaledTime - _start;
+        float t = elapsed / duration;
         if (t < 0f || t >= 1f)
         {
             Hide();
@@ -72,11 +75,27 @@ internal sealed class HitmarkerLayer
         if (!_go.activeSelf) _go.SetActive(true);
 
         float alpha = 1f - t;
+
+        // 旧项目的「动画缩放」：出现瞬间是 scaleStart，在显示时长内放大到 1
         float scale = Mathf.Lerp(cfg.HitMarkerAnimationScale.Value, 1f, t);
+
+        // 叠加一层「弹出」：先把图标撑到 PopScale 再回弹到 1（不改尺寸属性的写频，见 §3.5）
+        float popScale = Mathf.Max(1f, cfg.HitMarkerPopScale.Value);
+        if (popScale > 1.0001f)
+        {
+            float popT = UiAnim.OutBack(UiAnim.Clamp01(elapsed / Mathf.Max(0.01f, cfg.HitMarkerPopDuration.Value)));
+            scale *= popScale + (1f - popScale) * popT;
+        }
+
+        if (_headshot) scale *= Mathf.Max(1f, cfg.HitMarkerHeadshotScale.Value);
+
         float size = Mathf.Max(1f, cfg.HitBaseSize.Value) * scale;
+        Color tint = _headshot
+            ? UiTheme.Parse(cfg.HitMarkerHeadshotColor.Value, new Color(1f, 0.3f, 0.3f))
+            : UiTheme.Parse(cfg.HitMarkerColor.Value, Color.white);
 
         if (_img.sprite != sprite) _img.sprite = sprite;
-        _img.color = UiTheme.WithAlpha(UiTheme.Parse(cfg.HitMarkerColor.Value, Color.white), alpha);
+        _img.color = UiTheme.WithAlpha(tint, alpha);
 
         _rt.sizeDelta = new Vector2(size, size);
         _rt.anchoredPosition = _anchor + UiTheme.ParseOffset(cfg.HitMarkerCenterOffset.Value, Vector2.zero);

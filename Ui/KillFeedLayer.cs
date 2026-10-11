@@ -4,78 +4,96 @@ using System.Text;
 using AyaHitmarker.Game;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace AyaHitmarker.Ui;
 
 /// <summary>
-/// 击杀播报。逐行移植旧项目 <c>KillFeedUI</c> 的布局与动效。
+/// 击杀播报卡片。在旧项目那套「阵营 / 骷髅 / 名字 / 详情」的基础上，按战地 6 的击杀反馈补上
+/// **得分弹窗**、**成就缎带**（复仇者 / 狂战士 / 双杀 …）与**连杀进度条**，并给所有元素加动效。
 ///
-/// 布局（锚点在屏幕中心左侧 <c>KillFeedHorizontalOffset</c> 像素处，垂直 <c>KillFeedVerticalOffset</c>）：
+/// 布局（锚点在屏幕中心左侧 <c>KillFeedHorizontalOffset</c> 像素、垂直 <c>KillFeedVerticalOffset</c> 处）：
 /// <code>
-///                    [阵营图标][等级] USEC      ← 阵营行（右对齐于锚点上方）
-///                                                      [经验]      ← 锚点右侧
-///                            💀 💀 💀                ← 骷髅行，垂直居中于锚点，向**左**生长
-///                       玩家名字                    ← 右对齐于锚点下方
-///                   部位 · 距离 · 武器               ← 再下一行
+///                        ▏复仇者 · 142m ▕          ← 成就缎带（只有触发成就时才出现）
+///                    [☠] [等级] 阵营 [军衔徽章]      ← 阵营行（右对齐于锚点上方）
+///              ☠ ☠ ☠  +150                          ← 骷髅行（向左生长）+ 得分弹窗（锚点右侧）
+///         ────────────────────────                  ← 连杀进度条
+///                        玩家名字                    ← 右对齐于锚点下方
+///              头部 · 142m · M4A1 · 枪械             ← 再下一行
 /// </code>
 ///
-/// 动效：
+/// 动效（对齐 AGENTS.md §3.5 的「每帧写入纪律」）：
 /// <list type="bullet">
-///   <item>新的击杀在 <c>StreakWindow</c> 内连上时算连杀，已有的骷髅整体左移
-///     <c>SkullSize + SkullSpacing</c>，用 <c>Lerp(dt * SkullPushAnimationSpeed)</c> 平滑过去；</item>
-///   <item>骷髅只在 <c>SkullDisplayDuration</c> 内显示，最后 <c>SkullFadeDuration</c> 淡出；</item>
-///   <item>文字只画**最新**那一条，在 <c>KillFeedDuration</c> 内线性淡出（旧版就是这样，不是每杀一行）；</item>
-///   <item>爆头击杀在最新骷髅上放环形特效。</item>
+///   <item>入场：各行按 <c>CardRowStagger</c> 依次从右侧 <c>CardEnterDistance</c> 像素滑入，
+///     透明度走五次方缓出；</item>
+///   <item>骷髅：新骷髅用 <c>SkullPopScale</c> 回弹弹出，连杀时已有骷髅整体左移（<c>SkullPushAnimationSpeed</c> 平滑）；</item>
+///   <item>得分：从 0 滚到最终值（<c>ScoreCountDuration</c>），并向上漂移 <c>ScoreRiseDistance</c>；</item>
+///   <item>成就缎带：从左往右「擦除式」展开（<c>OutBack</c> 带过冲），停留期间轻微呼吸，最后淡出；</item>
+///   <item>退场：显示时长结束前 <c>CardExitDuration</c> 秒整体淡出并轻微上移。</item>
 /// </list>
+///
+/// 所有位置/尺寸/颜色写入都经过 <see cref="UiTextRow"/> / <see cref="UiImageRow"/> 的脏检查，
+/// 停止变化后就不再产生 uGUI 重建。
 /// </summary>
 internal sealed class KillFeedLayer
 {
+    /// <summary>各行在入场动画里的顺序（越小越先出现）。</summary>
+    private const int RowAchievement = 0;
+    private const int RowScore = 1;
+    private const int RowFaction = 2;
+    private const int RowName = 3;
+    private const int RowDetails = 4;
+
     private sealed class SkullEntry
     {
-        internal GameObject? Go;
-        internal Image? Icon;
-        internal Image? Glow;
-        internal RectTransform? Rt;
-        internal RectTransform? GlowRt;
-        internal Vector2 GlowBaseSize;
+        internal UiImageRow Icon = null!;
+        internal UiImageRow Glow = null!;
+        internal Sprite? Sprite;
         internal float Start;
-        internal float Streak;
-        internal bool Headshot;
         internal float TargetOffset;
         internal float CurrentOffset;
-        internal float LastAlpha = -1f;
     }
 
     private readonly List<SkullEntry> _skulls = new List<SkullEntry>(8);
     private readonly List<SkullEntry> _pool = new List<SkullEntry>(8);
-    private readonly StringBuilder _sb = new StringBuilder(128);
-
+    private readonly StringBuilder _sb = new StringBuilder(160);
     private readonly RingEffect _ring = new RingEffect();
 
     private RectTransform? _parent;
 
-    // 文本对象（全套只有一份，旧项目也只画最新一条）
-    private GameObject? _factionGo;
-    private TextMeshProUGUI? _factionText;
-    private RectTransform? _factionRt;
-    private GameObject? _factionIconGo;
-    private Image? _factionIcon;
-    private RectTransform? _factionIconRt;
-
-    private GameObject? _nameGo;
-    private TextMeshProUGUI? _nameText;
-    private RectTransform? _nameRt;
-    private GameObject? _detailsGo;
-    private TextMeshProUGUI? _detailsText;
-    private RectTransform? _detailsRt;
-    private GameObject? _expGo;
-    private TextMeshProUGUI? _expText;
-    private RectTransform? _expRt;
+    private UiTextRow? _factionText;
+    private UiImageRow? _factionIcon;
+    private UiTextRow? _nameText;
+    private UiTextRow? _detailsText;
+    private UiTextRow? _scoreText;
+    private UiImageRow? _scoreIcon;
+    private UiImageRow? _achievementBg;
+    private UiTextRow? _achievementText;
+    private UiImageRow? _streakBarBack;
+    private UiImageRow? _streakBarFill;
 
     private KillRecord _latest;
+    private KillAnalysis _analysis;
     private float _latestStart;
-    private bool _hasLatest;
+
+    /// <summary>
+    /// 卡片文字的存活时长。不一定等于 <c>KillFeedDuration</c>：
+    /// 成就缎带自己的「出现 + 停留 + 淡出」可能更长，这时取两者较大值，
+    /// 否则会出现「缎带还在展开、整个卡片已经淡完了」的视觉断裂。
+    /// </summary>
+    private float _textDuration = 6f;
+
+    /// <summary>
+    /// 文本层是否处于显示状态。
+    ///
+    /// **这里是修复的 bug**：旧实现用 <c>_factionGo.activeSelf || _nameGo.activeSelf</c> 反推，
+    /// 而「让它们 active」这件事本身发生在 <c>DrawText</c> 里 —— 于是第一次击杀时判断恒为 false、
+    /// <c>DrawText</c> 永远不被调用，整个击杀播报的文字（含军衔图标）从来没画出来过。
+    /// 现在用一个显式状态位，不再从 GameObject 状态反推。
+    /// </summary>
+    private bool _textVisible;
+
+    /// <summary>得分文字缓存：伤害/得分都是小整数，重复度极高，避免每帧 ToString 分配。</summary>
+    private static readonly Dictionary<int, string> ScoreCache = new Dictionary<int, string>(128);
 
     // ------------------------------------------------------------------ 构建
 
@@ -84,81 +102,74 @@ internal sealed class KillFeedLayer
         _parent = parent;
         _ring.Attach(parent);
 
-        _factionText = UiTheme.CreateTextObject("AyaHitmarker.KillFaction", parent, TextAlignmentOptions.Right);
-        _factionGo = _factionText.gameObject;
-        _factionRt = UiTheme.Rect(_factionGo);
+        _factionText = UiTextRow.Create("AyaHitmarker.KillFaction", parent, TextAlignmentOptions.Right);
+        _factionIcon = UiImageRow.Create("AyaHitmarker.KillFactionIcon", parent);
+        _nameText = UiTextRow.Create("AyaHitmarker.KillName", parent, TextAlignmentOptions.Right);
+        _detailsText = UiTextRow.Create("AyaHitmarker.KillDetails", parent, TextAlignmentOptions.Right);
 
-        _factionIconGo = UiTheme.CreateContainer("AyaHitmarker.KillFactionIcon", parent);
-        _factionIcon = _factionIconGo.GetComponent<Image>();
-        _factionIconRt = UiTheme.Rect(_factionIconGo);
-        _factionIconGo.SetActive(false);
+        _scoreIcon = UiImageRow.Create("AyaHitmarker.KillScoreIcon", parent);
+        _scoreText = UiTextRow.Create("AyaHitmarker.KillScore", parent, TextAlignmentOptions.Left);
 
-        _nameText = UiTheme.CreateTextObject("AyaHitmarker.KillName", parent, TextAlignmentOptions.Right);
-        _nameGo = _nameText.gameObject;
-        _nameRt = UiTheme.Rect(_nameGo);
+        _achievementBg = UiImageRow.Create("AyaHitmarker.KillAchievementBg", parent);
+        _achievementText = UiTextRow.Create("AyaHitmarker.KillAchievementText", parent, TextAlignmentOptions.Center);
 
-        _detailsText = UiTheme.CreateTextObject("AyaHitmarker.KillDetails", parent, TextAlignmentOptions.Right);
-        _detailsGo = _detailsText.gameObject;
-        _detailsRt = UiTheme.Rect(_detailsGo);
+        _streakBarBack = UiImageRow.Create("AyaHitmarker.KillStreakBarBack", parent);
+        _streakBarFill = UiImageRow.Create("AyaHitmarker.KillStreakBarFill", parent);
+        // 填充条从左往右长：pivot 钉在左边
+        _streakBarFill.Apply(Vector2.zero, new Vector2(1f, 1f), UiTheme.WhiteSprite, Color.clear, 1f, new Vector2(0f, 0.5f));
 
-        _expText = UiTheme.CreateTextObject("AyaHitmarker.KillExp", parent, TextAlignmentOptions.Left);
-        _expGo = _expText.gameObject;
-        _expRt = UiTheme.Rect(_expGo);
-
-        SetTextVisible(false);
+        HideCard();
     }
 
     // ------------------------------------------------------------------ 新增击杀
 
-    internal void Show(in KillRecord rec)
+    /// <param name="rec">击杀快照。</param>
+    /// <param name="analysis">由 <see cref="KillStreakTracker"/> 算好的成就/连杀结果。</param>
+    internal void Show(in KillRecord rec, in KillAnalysis analysis)
     {
         if (_parent == null) return;
 
         var cfg = Plugin.Cfg;
         float now = Time.unscaledTime;
-        float skullDisplayDuration = Mathf.Max(0.1f, cfg.SkullDisplayDuration.Value);
 
-        float streak = CalculateStreak(now, cfg.StreakWindow.Value);
-        if (streak > 1f) PushPreviousSkulls(now, skullDisplayDuration, cfg);
-
-        var entry = Rent();
-        if (entry?.Go == null || entry.Rt == null) return;
-
-        entry.Start = now;
-        entry.Streak = streak;
-        entry.Headshot = rec.Headshot;
-        entry.TargetOffset = 0f;
-        entry.CurrentOffset = 0f;
-        entry.LastAlpha = -1f;
-
-        ApplySkullSprite(entry, rec.Headshot);
-        entry.Go.SetActive(true);
-        _skulls.Add(entry);
-
-        // 只保留最新那条的文字
         _latest = rec;
+        _analysis = analysis;
         _latestStart = now;
-        _hasLatest = true;
-        SetTextVisible(true);
+        _textVisible = true;
+        _textDuration = ComputeTextDuration(cfg);
+        _layoutLoggedFrame = -1;
 
-        // 环形特效（旧项目只在爆头时触发；爆炸/暴击的通道保留）
-        bool ringEnabled = cfg.EnableRingEffect.Value && cfg.RingHeadshotEnabled.Value;
-        _ring.Trigger(now, ringEnabled && rec.Headshot, rec.Headshot ? KillType.Headshot : KillType.Normal);
-
-        TrimToLimit(cfg.KillFeedMaxSkulls.Value);
-    }
-
-    private float CalculateStreak(float now, float window)
-    {
-        float streak = 1f;
-        for (int i = 0; i < _skulls.Count; i++)
+        if (cfg.ShowSkull.Value)
         {
-            if (now - _skulls[i].Start <= window)
+            float skullDisplay = Mathf.Max(0.1f, cfg.SkullDisplayDuration.Value);
+            if (analysis.Streak > 1) PushPreviousSkulls(now, skullDisplay, cfg);
+
+            var entry = Rent();
+            if (entry != null)
             {
-                streak = Mathf.Max(streak, _skulls[i].Streak + 1f);
+                entry.Start = now;
+                entry.TargetOffset = 0f;
+                entry.CurrentOffset = 0f;
+                ApplySkullSprite(entry, rec.Headshot);
+                _skulls.Add(entry);
             }
         }
-        return streak;
+
+        SetStreakProgress(analysis.StreakProgress);
+
+        // 环形特效：爆头必定触发；史诗级成就（多杀/复仇/首领）用爆炸环，冲击感更强
+        bool epic = analysis.Ribbon.Tier == KillAchievementTier.Epic || analysis.MultiCount >= 4;
+        bool trigger = rec.Headshot || epic;
+        KillType type = epic ? KillType.Explosion : KillType.Headshot;
+        _ring.Trigger(
+            now,
+            cfg.EnableRingEffect.Value && cfg.RingHeadshotEnabled.Value && trigger,
+            type);
+
+        PrepareCaseTexts(cfg);
+        LogLayout(cfg);
+
+        TrimToLimit(cfg.KillFeedMaxSkulls.Value);
     }
 
     private void PushPreviousSkulls(float now, float skullDisplayDuration, AyaConfig cfg)
@@ -177,38 +188,130 @@ internal sealed class KillFeedLayer
         float skullSize = Mathf.Max(8f, cfg.SkullSize.Value);
 
         var icon = Assets.IconBank.SkullFor(headshot);
-        if (entry.Icon != null && entry.Icon.sprite != icon) entry.Icon.sprite = icon;
-        if (entry.Rt != null) entry.Rt.sizeDelta = new Vector2(skullSize, skullSize);
-        if (entry.Icon != null)
-        {
-            entry.Icon.color = Color.white;
-            entry.Icon.preserveAspect = true;
-        }
+        entry.Sprite = icon;
+        if (entry.Icon.Img != null) entry.Icon.Img.preserveAspect = true;
 
         // ---- 辉光（烘成一张纹理，1 次绘制代替旧版的 17 次叠加） ----
-        if (entry.Glow == null || entry.GlowRt == null || entry.Icon == null) return;
-
-        if (!cfg.EnableIconGlow.Value || icon == null)
+        Sprite? glowSprite = null;
+        float glowPad = 1f;
+        if (cfg.EnableIconGlow.Value && icon != null)
         {
-            entry.Glow.color = Color.clear;
+            int spread = Mathf.Max(1, Mathf.RoundToInt(cfg.IconGlowSize.Value));
+            glowSprite = Assets.IconBank.GetGlow(icon, spread);
+            if (glowSprite != null) glowPad = Assets.IconBank.GlowPadRatio(icon, spread);
+        }
+
+        entry.Icon.Apply(Vector2.zero, new Vector2(skullSize, skullSize), icon, Color.clear);
+        entry.Glow.Apply(Vector2.zero, new Vector2(skullSize * glowPad, skullSize * glowPad), glowSprite, Color.clear);
+    }
+
+    private void LogLayout(AyaConfig cfg)
+    {
+        if (!cfg.DebugEnabled.Value) return;
+
+        var anchor = Anchor();
+        Plugin.Logger.LogInfo(
+            $"[kill] 卡片布局: anchor=({anchor.x:0.#},{anchor.y:0.#}) " +
+            $"ribbon={_achievementWidth:0.#} " +
+            $"canvas={(Plugin.CanvasRectSize.x):0.#}x{(Plugin.CanvasRectSize.y):0.#} " +
+            $"宽度={_achievementComposed}");
+    }
+
+    /// <summary>
+    /// 把一行的**实际屏幕坐标**写进日志。
+    ///
+    /// <c>anchoredPosition</c> 只是局部坐标；落在屏幕哪个像素还叠着「画布原点 + canvas scaleFactor」
+    /// 两层换算，光看局部坐标算不出来。ScreenSpaceOverlay 下 <c>RectTransform.position</c>
+    /// 就是屏幕像素坐标，但**原点在左下角** —— 和截图的左上角原点差一个 Y 翻转，别搞反。
+    /// 击杀后 0.5 秒才量：入场动画没走完时行还没被写入位置，量到的会是上一次的值。
+    /// </summary>
+    private void LogRowScreenPosition(AyaConfig cfg, float elapsed)
+    {
+        if (!cfg.DebugEnabled.Value || _layoutLoggedFrame == Time.frameCount) return;
+        if (elapsed < 0.5f) return;
+        if (_factionText == null || _nameText == null || _detailsText == null) return;
+
+        _layoutLoggedFrame = Time.frameCount;
+        Plugin.Logger.LogInfo(
+            $"[kill] 屏幕坐标(左下原点): 阵营={_factionText.Rt.position} 名字={_nameText.Rt.position} " +
+            $"详情={_detailsText.Rt.position} screen={Screen.width}x{Screen.height} canvasRect={Plugin.CanvasRectSize}");
+    }
+
+    private int _layoutLoggedFrame = -1;
+
+    /// <summary>
+    /// 把这一次击杀要显示的所有文本**一次性**拼好：阵营行、名字、详情行、成就缎带。
+    /// 缎带还要实测一次宽度（背景要贴合文字），走 <c>ForceMeshUpdate</c> + <c>preferredWidth</c>，
+    /// 和伤害数字同一个做法。
+    /// </summary>
+    private void PrepareCaseTexts(AyaConfig cfg)
+    {
+        _nameComposed = string.IsNullOrWhiteSpace(_latest.VictimName) ? "Unknown" : Escape(_latest.VictimName);
+
+        string botType = _latest.BotType;
+        string factionLabel = cfg.ShowBossName.Value && _latest.VictimIsBoss
+            ? BotTypeMapping.DisplayName(_latest.Role, botType)
+            : botType;
+        _factionComposed = ComposeFaction(cfg, factionLabel);
+
+        _rankSprite = cfg.ShowFactionIcon.Value && _latest.IsPmc
+            ? Assets.IconBank.GetRankIcon(_latest.VictimLevel)
+            : null;
+
+        _detailsComposed = ComposeDetails(cfg);
+
+        if (_achievementText == null || _achievementBg == null) return;
+
+        if (!cfg.ShowAchievement.Value || !_analysis.Ribbon.HasTitle)
+        {
+            _achievementWidth = 0f;
+            _achievementComposed = string.Empty;
             return;
         }
 
-        int spread = Mathf.Max(1, Mathf.RoundToInt(cfg.IconGlowSize.Value));
-        var glowSprite = Assets.IconBank.GetGlow(icon, spread);
-        if (glowSprite == null)
-        {
-            entry.Glow.color = Color.clear;
-            return;
-        }
+        var ribbon = _analysis.Ribbon;
+        string text = string.IsNullOrWhiteSpace(ribbon.Detail)
+            ? ribbon.Title
+            : ribbon.Title + " · " + ribbon.Detail;
 
-        float padRatio = Assets.IconBank.GlowPadRatio(icon, spread);
-        entry.Glow.sprite = glowSprite;
-        entry.GlowRt.sizeDelta = new Vector2(skullSize * padRatio, skullSize * padRatio);
-        entry.GlowBaseSize = entry.GlowRt.sizeDelta;
-        entry.Glow.color = UiTheme.WithAlpha(
-            UiTheme.Parse(cfg.IconGlowColor.Value, Color.white),
-            Mathf.Clamp01(cfg.IconGlowIntensity.Value));
+        int fontSize = cfg.FontSizeAchievement.Value;
+        string rich = Escape(text);          // TMP 富文本转义，拼串一次就好
+        _achievementText.Text.fontSize = fontSize;
+        _achievementText.Text.fontStyle = FontStyles.Bold;
+        _achievementText.Text.text = rich;
+        _achievementText.Text.ForceMeshUpdate();
+
+        float measured = _achievementText.Text.preferredWidth;
+        if (!(measured > 1f)) measured = text.Length * fontSize * 0.6f;
+
+        _achievementWidth = measured + Mathf.Max(0f, cfg.AchievementPadding.Value) * 2f;
+
+        // 缎带文字每杀只拼一次。DrawAchievement 每帧都会调用 Apply，
+        // 在那儿拼串就是每帧一次 GC 分配（AGENTS.md §3.5 明确禁止）。
+        _achievementComposed = rich;
+    }
+
+    private float _achievementWidth;
+    private string _achievementComposed = string.Empty;
+
+    // 每杀只拼一次的展示文本。DrawXxx 每帧都会调 Apply，如果在里面拼串，
+    // 整张卡片存活的 6 秒里就是每秒几十次 GC 分配（AGENTS.md §3.5）。
+    // 代价：改配色 / 首领名称开关要等**下一次击杀**才生效。
+    private string _factionComposed = string.Empty;
+    private string _nameComposed = string.Empty;
+    private string _detailsComposed = string.Empty;
+    private Sprite? _rankSprite;
+
+    /// <summary>文字层的实际存活时长（见 <see cref="_textDuration"/>）。</summary>
+    private float ComputeTextDuration(AyaConfig cfg)
+    {
+        float duration = Mathf.Max(0.5f, cfg.KillFeedDuration.Value);
+        if (!cfg.ShowAchievement.Value || !_analysis.Ribbon.HasTitle) return duration;
+
+        float achievementTotal = Mathf.Max(0.01f, cfg.AchievementEnterDuration.Value)
+                                 + Mathf.Max(0f, cfg.AchievementHoldDuration.Value)
+                                 + Mathf.Max(0.01f, cfg.AchievementFadeDuration.Value);
+        return Mathf.Max(duration, achievementTotal);
     }
 
     // ------------------------------------------------------------------ 每帧
@@ -219,49 +322,84 @@ internal sealed class KillFeedLayer
 
         if (!cfg.KillFeedEnabled.Value)
         {
-            if (_skulls.Count > 0 || _hasLatest) Reset();
+            if (_textVisible || _skulls.Count > 0 || _ring.IsActive) Reset();
             return;
         }
 
         float now = Time.unscaledTime;
-        float killFeedDuration = Mathf.Max(0.5f, cfg.KillFeedDuration.Value);
-        float skullDisplayDuration = Mathf.Max(0.1f, cfg.SkullDisplayDuration.Value);
-        float skullFadeDuration = Mathf.Max(0.01f, cfg.SkullFadeDuration.Value);
-        float removeAfter = Mathf.Max(killFeedDuration, skullDisplayDuration);
+        float dt = Time.unscaledDeltaTime;
+        float skullDisplay = Mathf.Max(0.1f, cfg.SkullDisplayDuration.Value);
 
-        // 过期回收
+        // ---- 骷髅过期回收 ----
         for (int i = _skulls.Count - 1; i >= 0; i--)
         {
             var s = _skulls[i];
-            if (now - s.Start > removeAfter)
+            if (now - s.Start > skullDisplay)
             {
-                s.Go?.SetActive(false);
-                HideGlow(s);
+                Recycle(s);
                 _skulls.RemoveAt(i);
-                if (_pool.Count < 24) _pool.Add(s);
             }
         }
 
-        if (now - _latestStart > killFeedDuration) SetTextVisible(false);
-        if (_skulls.Count == 0 && !IsTextVisible) _hasLatest = false;
+        // 「已经没有任何东西要画」的早退。
+        //
+        // **必须在把 _textVisible 置 false 之前判断。** 旧写法把这一行放在置 false 之后，
+        // 于是「文字刚好过期」的那一帧：_textVisible 刚被置 false、骷髅也早已回收（骷髅只活 2 秒、
+        // 文字活 6 秒）、环形特效也结束了 → 直接 return，下面的 HideCard() **永远不会执行**。
+        // 结果：卡片停在淡出末帧的那个很低的不透明度上，再也不消失（实测 bug）。
+        // 放在这里，过期那一帧 _textVisible 仍为 true → 走到 else 分支 → HideCard() 正常收尾。
+        if (!_textVisible && _skulls.Count == 0 && !_ring.IsActive) return;
 
-        // ---- 骷髅位置动画 ----
-        float speed = Mathf.Max(0.01f, cfg.SkullPushAnimationSpeed.Value);
-        float dt = Time.unscaledDeltaTime;
+        bool wasVisible = _textVisible;
+        if (wasVisible && now - _latestStart > _textDuration) _textVisible = false;
+
+        UpdateSkulls(now, dt, cfg);
+
+        if (_textVisible)
+        {
+            DrawCard(cfg, dt);
+        }
+        else
+        {
+            HideCard();
+            if (wasVisible && cfg.DebugEnabled.Value)
+            {
+                // 把「行是不是真的被关掉了」也打出来 —— 这个 bug 的验收点就是它，
+                // 只打「已隐藏」无法区分「HideCard 跑了但没生效」和「根本没跑」。
+                // GameObject 非 active 就绝对不会渲染，不留任何低透明度的残影。
+                Plugin.Logger.LogInfo(
+                    $"[kill] 卡片已隐藏（存活 {now - _latestStart:0.##}s, " +
+                    $"阵营行 active={_factionText?.Go.activeSelf}, 名字行 active={_nameText?.Go.activeSelf}）");
+            }
+        }
+
+        // 环形特效每帧只驱动一次：优先挂在最新那个骷髅的中心，没有骷髅（关了显示）时退到锚点
+        _ring.Tick(_ringCenterValid ? _ringCenter : Anchor(), now);
+    }
+
+    /// <summary>最新骷髅的中心（<see cref="_ringCenterValid"/> 为 false 时无意义）。</summary>
+    private Vector2 _ringCenter;
+    private bool _ringCenterValid;
+
+    private void UpdateSkulls(float now, float dt, AyaConfig cfg)
+    {
         float skullSize = Mathf.Max(8f, cfg.SkullSize.Value);
+        float skullDisplay = Mathf.Max(0.1f, cfg.SkullDisplayDuration.Value);
+        float skullFade = Mathf.Max(0.01f, cfg.SkullFadeDuration.Value);
+        float pushSpeed = Mathf.Max(0.01f, cfg.SkullPushAnimationSpeed.Value);
+        float popScale = Mathf.Max(1f, cfg.SkullPopScale.Value);
+        float popDuration = Mathf.Max(0.01f, cfg.SkullPopDuration.Value);
         Vector2 anchor = Anchor();
 
-        SkullEntry? latest = null;
-        for (int i = 0; i < _skulls.Count; i++) latest = _skulls[i];
+        _ringCenterValid = false;
 
         for (int i = 0; i < _skulls.Count; i++)
         {
             var s = _skulls[i];
-            if (s.Rt == null || s.Icon == null || s.Go == null) continue;
 
             if (Mathf.Abs(s.CurrentOffset - s.TargetOffset) > 0.1f)
             {
-                s.CurrentOffset = Mathf.Lerp(s.CurrentOffset, s.TargetOffset, dt * speed);
+                s.CurrentOffset = Mathf.Lerp(s.CurrentOffset, s.TargetOffset, dt * pushSpeed);
             }
             else
             {
@@ -270,191 +408,385 @@ internal sealed class KillFeedLayer
 
             float elapsed = now - s.Start;
             float alpha = 1f;
-            if (elapsed >= skullDisplayDuration - skullFadeDuration)
+            if (elapsed >= skullDisplay - skullFade)
             {
-                float fadeProgress = (elapsed - (skullDisplayDuration - skullFadeDuration)) / skullFadeDuration;
+                float fadeProgress = (elapsed - (skullDisplay - skullFade)) / skullFade;
                 alpha = Mathf.Clamp01(1f - fadeProgress);
             }
-            if (elapsed >= skullDisplayDuration) alpha = 0f;
+            if (elapsed >= skullDisplay) alpha = 0f;
 
             // 旧项目：skullX = anchorX - skullSize - offset，中心 = 左边 + size/2
             var center = new Vector2(anchor.x - skullSize * 0.5f - s.CurrentOffset, anchor.y);
-            s.Rt.anchoredPosition = center;
 
-            if (s.LastAlpha < 0f || Mathf.Abs(alpha - s.LastAlpha) > 0.005f)
-            {
-                s.LastAlpha = alpha;
-                s.Icon.color = new Color(1f, 1f, 1f, alpha);
-                if (s.Glow != null)
-                {
-                    var glowColor = UiTheme.Parse(cfg.IconGlowColor.Value, Color.white);
-                    s.Glow.color = UiTheme.WithAlpha(glowColor, Mathf.Clamp01(cfg.IconGlowIntensity.Value) * alpha);
-                }
-            }
+            float pop = UiAnim.OutBack(UiAnim.Clamp01(elapsed / popDuration));
+            float scale = popScale + (1f - popScale) * pop;
 
-            // 辉光纹理带外边距，和骷髅同心；尺寸在 ApplySkullSprite 里算好
-            if (s.Glow != null && s.GlowRt != null)
-            {
-                s.GlowRt.anchoredPosition = center;
-            }
+            s.Icon.Apply(center, new Vector2(skullSize, skullSize), s.Sprite, new Color(1f, 1f, 1f, alpha), scale);
 
-            // 环形特效只挂在最新那个骷髅上
-            if (latest != null && ReferenceEquals(s, latest) && alpha > 0.01f)
+            var glowColor = UiTheme.WithAlpha(
+                UiTheme.Parse(cfg.IconGlowColor.Value, Color.white),
+                Mathf.Clamp01(cfg.IconGlowIntensity.Value) * alpha);
+            s.Glow.SetPosition(center);
+            s.Glow.ApplyAlpha(glowColor);
+
+            // 列表最后一个就是最新加入的（Show 里 Add 到尾部）
+            if (i == _skulls.Count - 1 && alpha > 0.01f)
             {
-                _ring.Tick(center, now);
+                _ringCenter = center;
+                _ringCenterValid = true;
             }
         }
-
-        if (latest == null || !IsTextVisible) return;
-        DrawText(cfg, now, anchor, killFeedDuration);
     }
 
-    // ------------------------------------------------------------------ 文本
-
-    private void DrawText(AyaConfig cfg, float now, Vector2 anchor, float killFeedDuration)
+    private void DrawCard(AyaConfig cfg, float dt)
     {
+        float now = Time.unscaledTime;
         float elapsed = now - _latestStart;
-        float textAlpha = Mathf.Clamp01(1f - elapsed / killFeedDuration);
+        float duration = _textDuration;
 
-        float skullSize = Mathf.Max(8f, cfg.SkullSize.Value);
-        float lineSpacing = cfg.KillFeedLineSpacing.Value;
-        int fontFaction = cfg.FontSizeFaction.Value;
-        int fontName = cfg.FontSizePlayerName.Value;
-        int fontDetails = cfg.FontSizeKillDetails.Value;
-        float fontExp = cfg.FontSizeExperience.Value;
+        float enterDuration = Mathf.Max(0f, cfg.CardEnterDuration.Value);
+        float stagger = Mathf.Max(0f, cfg.CardRowStagger.Value);
+        float exitDuration = Mathf.Max(0f, cfg.CardExitDuration.Value);
 
-        float textHeightsMax = Mathf.Max(fontFaction, Mathf.Max(fontName, fontDetails)) * 1.2f;
-        float lineHeight = Mathf.Clamp(Mathf.Max(textHeightsMax, skullSize * 0.5f), 14f, 200f);
+        // ---- 退场：整体淡出 + 轻微上移（不改 scale，避免和骷髅/缎带的缩放动画打架）----
+        float exitAlpha = 1f;
+        if (exitDuration > 0f && elapsed > duration - exitDuration)
+        {
+            float k = UiAnim.Clamp01((elapsed - (duration - exitDuration)) / exitDuration);
+            exitAlpha = 1f - k * k;
+        }
+        if (exitAlpha <= 0.001f) { HideCard(); return; }
+
+        float exitDrift = (1f - exitAlpha) * 12f;
 
         float blockWidth = Mathf.Max(100f, cfg.KillFeedBlockWidth.Value);
+        Vector2 anchor = Anchor();
 
-        // 全部用 canvas 局部坐标（原点 = 屏幕中心，Y 向上为正）。
-        // 注意：旧项目是 IMGUI 的屏幕坐标（Y 向下为正），Anchor() 里已经做了 Y 取反，
-        // 这里的 delta 一律"正数 = 在锚点上方"，比旧代码里那串易错的正负号清楚。
-        float factionY = anchor.y + skullSize * 0.5f + lineSpacing + lineHeight * 0.5f;
-        float nameY = anchor.y - (skullSize * 0.5f + lineSpacing + lineHeight * 0.5f);
-        float detailsY = anchor.y - (skullSize * 0.5f + lineSpacing + lineHeight + lineSpacing + lineHeight * 0.5f);
+        // 行位置全部交给纯数学层算，这样行序 / 间距可以离线验证（tests/AyaHitmarker.LogicTests）
+        var layout = KillCardLayoutMath.Compute(new KillCardLayoutInput(
+            cfg.SkullSize.Value,
+            cfg.KillFeedLineSpacing.Value,
+            cfg.AchievementHeight.Value,
+            cfg.AchievementVerticalOffset.Value,
+            cfg.ShowStreakBar.Value ? cfg.StreakBarHeight.Value : 0f,
+            cfg.StreakBarGap.Value,
+            cfg.FontSizeFaction.Value,
+            cfg.FontSizePlayerName.Value,
+            cfg.FontSizeKillDetails.Value,
+            cfg.FontSizeScore.Value,
+            cfg.FontSizeAchievement.Value));
 
-        // ---- 阵营行（锚点上方，右对齐） ----
-        if (cfg.ShowFaction.Value && _factionText != null && _factionRt != null && _factionGo != null)
+        float lineHeight = layout.LineHeight;
+        float skullCenterY = anchor.y + layout.SkullCenterY + exitDrift;
+        float factionY = anchor.y + layout.FactionY + exitDrift;
+        float nameY = anchor.y + layout.NameY + exitDrift;
+        float detailsY = anchor.y + layout.DetailsY + exitDrift;
+        float achievementHeight = Mathf.Max(8f, cfg.AchievementHeight.Value);
+        float achievementY = anchor.y + layout.AchievementY + exitDrift;
+
+        float enterDistance = Mathf.Max(0f, cfg.CardEnterDistance.Value);
+        float Off(int row)
         {
-            if (cfg.ShowFactionIcon.Value && _factionIcon != null)
-            {
-                string botType = BotTypeMapping.GetBotType(_latest.Role);
-                var rankSprite = BotTypeMapping.IsPmc(botType) ? Assets.IconBank.GetRankIcon(_latest.VictimLevel) : null;
-                if (_factionIcon.sprite != rankSprite) _factionIcon.sprite = rankSprite;
-            }
+            float t = UiAnim.OutCubic(UiAnim.Stagger(elapsed, row, stagger, enterDuration));
+            return enterDistance * (1f - t);
+        }
+        float Alpha(int row)
+        {
+            float t = UiAnim.OutCubic(UiAnim.Stagger(elapsed, row, stagger, enterDuration));
+            return Mathf.Clamp01(t) * exitAlpha;
+        }
 
-            bool showIcon = cfg.ShowFactionIcon.Value && _factionIconGo != null
-                            && _factionIcon != null && _factionIcon.sprite != null;
-            float iconSize = Mathf.Max(0f, cfg.FactionIconSize.Value);
-            float rightEdge = anchor.x - (showIcon ? iconSize + 6f : 0f);
+        DrawAchievement(cfg, anchor, achievementY, achievementHeight, elapsed, Off(RowAchievement), Alpha(RowAchievement));
+        DrawScore(cfg, anchor, skullCenterY, lineHeight, elapsed, Off(RowScore), Alpha(RowScore));
+        DrawFaction(cfg, anchor, factionY, lineHeight, blockWidth, Off(RowFaction), Alpha(RowFaction));
+        DrawName(cfg, anchor, nameY, lineHeight, blockWidth, Off(RowName), Alpha(RowName));
+        DrawDetails(cfg, anchor, detailsY, lineHeight, blockWidth, Off(RowDetails), Alpha(RowDetails));
+        DrawStreakBar(cfg, anchor, layout.StreakBarY + exitDrift, dt, exitAlpha);
+        LogRowScreenPosition(cfg, elapsed);
+    }
 
-            _factionGo.SetActive(true);
-            _factionText.fontSize = fontFaction;
-            _factionText.fontStyle = FontStyles.Bold;
-            _factionText.alignment = TextAlignmentOptions.Right;
-            _factionText.text = ComposeFaction(cfg, _latest);
-            _factionText.color = new Color(1f, 1f, 1f, textAlpha);
+    // ------------------------------------------------------------------ 行
 
-            _factionRt.sizeDelta = new Vector2(blockWidth, lineHeight);
-            _factionRt.anchoredPosition = new Vector2(rightEdge, factionY);
+    private void DrawFaction(AyaConfig cfg, Vector2 anchor, float y, float lineHeight, float blockWidth, float dx, float alpha)
+    {
+        if (_factionText == null || _factionIcon == null) return;
 
-            if (showIcon)
-            {
-                _factionIconGo!.SetActive(true);
-                _factionIcon!.color = new Color(1f, 1f, 1f, textAlpha);
-                _factionIconRt!.sizeDelta = new Vector2(iconSize, iconSize);
-                _factionIconRt.anchoredPosition = new Vector2(
-                    anchor.x - iconSize * 0.5f,
-                    factionY + cfg.FactionIconVerticalOffset.Value);
-            }
-            else
-            {
-                _factionIconGo?.SetActive(false);
-            }
+        if (!cfg.ShowFaction.Value || alpha <= 0.002f)
+        {
+            _factionText.Hide();
+            _factionIcon.Hide();
+            return;
+        }
+
+        Sprite? rankSprite = _rankSprite;
+        bool showIcon = rankSprite != null;
+        float iconSize = Mathf.Max(0f, cfg.FactionIconSize.Value);
+        float rightEdge = anchor.x - (showIcon ? iconSize + 6f : 0f);
+
+        _factionText.Apply(
+            new Vector2(rightEdge + dx, y),
+            new Vector2(blockWidth, lineHeight),
+            _factionComposed,
+            cfg.FontSizeFaction.Value,
+            new Color(1f, 1f, 1f, alpha),
+            FontStyles.Bold,
+            TextAlignmentOptions.Right);
+
+        if (showIcon)
+        {
+            _factionIcon.Apply(
+                new Vector2(anchor.x - iconSize * 0.5f + dx, y + cfg.FactionIconVerticalOffset.Value),
+                new Vector2(iconSize, iconSize),
+                rankSprite,
+                new Color(1f, 1f, 1f, alpha));
+            if (_factionIcon.Img != null) _factionIcon.Img.preserveAspect = true;
         }
         else
         {
-            _factionGo?.SetActive(false);
-            _factionIconGo?.SetActive(false);
-        }
-
-        // ---- 经验值（锚点右侧） ----
-        if (cfg.ShowExperience.Value && _expText != null && _expRt != null && _expGo != null)
-        {
-            _expGo.SetActive(true);
-            _expText.fontSize = fontExp;
-            _expText.fontStyle = FontStyles.Bold;
-            _expText.alignment = TextAlignmentOptions.Left;
-            _expText.text = _latest.Experience.ToString();
-            _expText.color = UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorExperience.Value, new Color(1f, 1f, 0.8f)), textAlpha);
-            _expRt.sizeDelta = new Vector2(Mathf.Max(40f, cfg.ExperienceTextWidth.Value), lineHeight);
-            _expRt.anchoredPosition = new Vector2(
-                anchor.x + cfg.KillFeedExperienceHorizontalOffset.Value,
-                anchor.y);
-        }
-        else
-        {
-            _expGo?.SetActive(false);
-        }
-
-        // ---- 玩家名（锚点下方，右对齐） ----
-        if (cfg.ShowPlayerName.Value && _nameText != null && _nameRt != null && _nameGo != null)
-        {
-            _nameGo.SetActive(true);
-            _nameText.fontSize = fontName;
-            _nameText.fontStyle = FontStyles.Bold;
-            _nameText.alignment = TextAlignmentOptions.Right;
-            _nameText.text = string.IsNullOrWhiteSpace(_latest.VictimName) ? "Unknown" : _latest.VictimName;
-            _nameText.color = UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorPlayerName.Value, new Color(1f, 0.3f, 0.3f)), textAlpha);
-
-            // TMP 的 outlineWidth 是 0..1 归一化宽度，旧项目那边是 0.5..10 像素
-            float outline = Mathf.Clamp(cfg.NameOutlineThickness.Value / 8f, 0f, 1f);
-            if (!Mathf.Approximately(_nameText.outlineWidth, outline)) _nameText.outlineWidth = outline;
-
-            _nameRt.sizeDelta = new Vector2(blockWidth, lineHeight);
-            _nameRt.anchoredPosition = new Vector2(anchor.x, nameY);
-        }
-        else
-        {
-            _nameGo?.SetActive(false);
-        }
-
-        // ---- 详情行 ----
-        if (cfg.ShowKillDetails.Value && _detailsText != null && _detailsRt != null && _detailsGo != null)
-        {
-            _detailsGo.SetActive(true);
-            _detailsText.fontSize = fontDetails;
-            _detailsText.fontStyle = FontStyles.Normal;
-            _detailsText.alignment = TextAlignmentOptions.Right;
-            _detailsText.text = ComposeDetails(_latest);
-            _detailsText.color = UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorKillDetails.Value, new Color(0.8f, 0.8f, 0.8f)), textAlpha);
-            _detailsRt.sizeDelta = new Vector2(blockWidth, lineHeight);
-            _detailsRt.anchoredPosition = new Vector2(anchor.x, detailsY);
-        }
-        else
-        {
-            _detailsGo?.SetActive(false);
+            _factionIcon.Hide();
         }
     }
+
+    private void DrawName(AyaConfig cfg, Vector2 anchor, float y, float lineHeight, float blockWidth, float dx, float alpha)
+    {
+        if (_nameText == null) return;
+
+        if (!cfg.ShowPlayerName.Value || alpha <= 0.002f)
+        {
+            _nameText.Hide();
+            return;
+        }
+
+        // TMP 的 outlineWidth 是 0..1 归一化宽度，旧项目那边是 0.5..10 像素
+        float outline = Mathf.Clamp(cfg.NameOutlineThickness.Value / 8f, 0f, 1f);
+        if (!Mathf.Approximately(_nameText.Text.outlineWidth, outline)) _nameText.Text.outlineWidth = outline;
+
+        _nameText.Apply(
+            new Vector2(anchor.x + dx, y),
+            new Vector2(blockWidth, lineHeight),
+            _nameComposed,
+            cfg.FontSizePlayerName.Value,
+            UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorPlayerName.Value, new Color(1f, 0.3f, 0.3f)), alpha),
+            FontStyles.Bold,
+            TextAlignmentOptions.Right);
+    }
+
+    private void DrawDetails(AyaConfig cfg, Vector2 anchor, float y, float lineHeight, float blockWidth, float dx, float alpha)
+    {
+        if (_detailsText == null) return;
+
+        if (!cfg.ShowKillDetails.Value || alpha <= 0.002f || string.IsNullOrEmpty(_detailsComposed))
+        {
+            _detailsText.Hide();
+            return;
+        }
+
+        _detailsText.Apply(
+            new Vector2(anchor.x + dx, y),
+            new Vector2(blockWidth, lineHeight),
+            _detailsComposed,
+            cfg.FontSizeKillDetails.Value,
+            UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorKillDetails.Value, new Color(0.8f, 0.8f, 0.8f)), alpha),
+            FontStyles.Normal,
+            TextAlignmentOptions.Right);
+    }
+
+    /// <summary>战地式的得分弹窗：骷髅图标 + 从 0 滚上去的「+100」。</summary>
+    private void DrawScore(AyaConfig cfg, Vector2 anchor, float skullCenterY, float lineHeight, float elapsed, float dx, float alpha)
+    {
+        if (_scoreText == null || _scoreIcon == null) return;
+
+        if (!cfg.ShowScore.Value || !_analysis.HasScore || alpha <= 0.002f)
+        {
+            _scoreText.Hide();
+            _scoreIcon.Hide();
+            return;
+        }
+
+        // 计数动画 + 上浮
+        float countDuration = Mathf.Max(0f, cfg.ScoreCountDuration.Value);
+        float countT = countDuration <= 0f ? 1f : UiAnim.OutCubic(UiAnim.Clamp01(elapsed / countDuration));
+        int shown = Mathf.RoundToInt(_analysis.Score * countT);
+
+        float lifetime = Mathf.Max(0.01f, cfg.KillFeedDuration.Value);
+        float riseT = UiAnim.OutQuint(UiAnim.Clamp01(elapsed / lifetime));
+        float y = skullCenterY + cfg.ScoreRiseDistance.Value * riseT;
+
+        float pop = UiAnim.OutBack(UiAnim.Clamp01(elapsed / Mathf.Max(0.01f, cfg.ScorePopDuration.Value)));
+        float scale = cfg.ScorePopScale.Value + (1f - cfg.ScorePopScale.Value) * pop;
+
+        float iconSize = Mathf.Max(0f, cfg.ScoreIconSize.Value);
+        float textX = anchor.x + cfg.ScoreHorizontalOffset.Value
+                      + (iconSize > 0f ? iconSize * 0.5f : 0f);
+        float textWidth = Mathf.Max(40f, cfg.ScoreTextWidth.Value);
+
+        // 图标贴在文字左边，两者一起缩放（锚点取文字左缘）
+        if (iconSize > 0f && Assets.IconBank.Skull != null)
+        {
+            _scoreIcon.Apply(
+                new Vector2(textX - iconSize * 0.5f + dx, y),
+                new Vector2(iconSize, iconSize),
+                Assets.IconBank.Skull,
+                UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorScore.Value, new Color(1f, 0.88f, 0.54f)), alpha),
+                scale);
+        }
+        else
+        {
+            _scoreIcon.Hide();
+        }
+
+        _scoreText.Apply(
+            new Vector2(textX + dx, y),
+            new Vector2(textWidth, lineHeight),
+            ScoreString(shown),
+            cfg.FontSizeScore.Value,
+            UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorScore.Value, new Color(1f, 0.88f, 0.54f)), alpha),
+            FontStyles.Bold,
+            TextAlignmentOptions.Left,
+            scale);
+    }
+
+    private static string ScoreString(int score)
+    {
+        if (ScoreCache.TryGetValue(score, out var cached)) return cached;
+        string s = "+" + score;
+        if (ScoreCache.Count > 512) ScoreCache.Clear();
+        ScoreCache[score] = s;
+        return s;
+    }
+
+    /// <summary>成就缎带：擦除式展开 + 过冲 + 停留呼吸 + 淡出。pivot 在左边，所以 scaleX = 展开程度。</summary>
+    private void DrawAchievement(AyaConfig cfg, Vector2 anchor, float y, float height, float elapsed, float dx, float alpha)
+    {
+        if (_achievementBg == null || _achievementText == null) return;
+
+        float enter = Mathf.Max(0.01f, cfg.AchievementEnterDuration.Value);
+        float hold = Mathf.Max(0f, cfg.AchievementHoldDuration.Value);
+        float fade = Mathf.Max(0.01f, cfg.AchievementFadeDuration.Value);
+        float total = enter + hold + fade;
+
+        bool wanted = cfg.ShowAchievement.Value
+                      && _analysis.Ribbon.HasTitle
+                      && _achievementWidth > 0f
+                      && elapsed <= total;
+
+        if (!wanted)
+        {
+            _achievementBg.Hide();
+            _achievementText.Hide();
+            return;
+        }
+
+        float openT = UiAnim.OutBack(UiAnim.Clamp01(elapsed / enter));
+        float pulse = elapsed > enter
+            ? UiAnim.Wobble(elapsed, 0.7f, 9f, Mathf.Max(0f, cfg.AchievementPulseScale.Value))
+            : 0f;
+
+        float bgAlpha = UiAnim.LifeAlpha(elapsed, total, enter * 0.5f, fade) * alpha;
+        if (bgAlpha <= 0.002f)
+        {
+            _achievementBg.Hide();
+            _achievementText.Hide();
+            return;
+        }
+
+        float left = anchor.x - _achievementWidth + dx;
+
+        _achievementBg.Apply(
+            new Vector2(left, y),
+            new Vector2(_achievementWidth, height),
+            UiTheme.WhiteSprite,
+            UiTheme.WithAlpha(RibbonColor(cfg), bgAlpha),
+            1f,
+            new Vector2(0f, 0.5f));
+        _achievementBg.SetScaleX(Mathf.Max(0f, openT + pulse));
+
+        _achievementText.Apply(
+            new Vector2(left + _achievementWidth * 0.5f, y),
+            new Vector2(_achievementWidth, height),
+            _achievementComposed,
+            cfg.FontSizeAchievement.Value,
+            UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorAchievementText.Value, Color.white), bgAlpha),
+            FontStyles.Bold,
+            TextAlignmentOptions.Center);
+    }
+
+    private Color RibbonColor(AyaConfig cfg) => _analysis.Ribbon.Tier switch
+    {
+        KillAchievementTier.Epic => UiTheme.Parse(cfg.ColorAchievementEpic.Value, new Color(0.64f, 0.14f, 0.2f)),
+        KillAchievementTier.Great => UiTheme.Parse(cfg.ColorAchievementGreat.Value, new Color(0.76f, 0.41f, 0.1f)),
+        KillAchievementTier.Good => UiTheme.Parse(cfg.ColorAchievementGood.Value, new Color(0.18f, 0.44f, 0.71f)),
+        _ => UiTheme.Parse(cfg.ColorAchievementNormal.Value, new Color(0.27f, 0.31f, 0.36f)),
+    };
+
+    private void DrawStreakBar(AyaConfig cfg, Vector2 anchor, float yOffset, float dt, float exitAlpha)
+    {
+        if (_streakBarBack == null || _streakBarFill == null) return;
+
+        // 进度条只在「至少有一个骷髅在屏幕上」时才画 —— 连杀数用骷髅个数表达，进度用条子表达
+        bool wanted = cfg.ShowStreakBar.Value && _skulls.Count > 0 && exitAlpha > 0.002f;
+        if (!wanted)
+        {
+            _streakBarBack.Hide();
+            _streakBarFill.Hide();
+            _barShown = float.NaN;
+            return;
+        }
+
+        float width = Mathf.Max(20f, cfg.StreakBarWidth.Value);
+        float height = Mathf.Max(1f, cfg.StreakBarHeight.Value);
+        // pivot 钉在左边，所以 left 就是进度条左缘（右缘对齐到锚点）
+        float left = anchor.x - width;
+        float y = anchor.y + yOffset;
+
+        // 目标进度平滑收敛，避免连杀时条子「跳」一下。
+        // 1.6 = 每秒能走完 1.6 份进度，也就是满格一次约 0.6 秒。
+        const float barSweepPerSecond = 1.6f;
+        float target = _streakTarget;
+        if (float.IsNaN(_barShown)) _barShown = target;
+        else _barShown = Mathf.MoveTowards(_barShown, target, dt * barSweepPerSecond);
+
+        _streakBarBack.Apply(
+            new Vector2(left, y),
+            new Vector2(width, height),
+            UiTheme.WhiteSprite,
+            UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorStreakBarBack.Value, new Color(0f, 0f, 0f, 0.6f)), exitAlpha),
+            1f,
+            new Vector2(0f, 0.5f));
+
+        float filled = Mathf.Clamp01(_barShown) * width;
+        _streakBarFill.Apply(
+            new Vector2(left, y),
+            new Vector2(Mathf.Max(0f, filled), height),
+            UiTheme.WhiteSprite,
+            UiTheme.WithAlpha(UiTheme.Parse(cfg.ColorStreakBar.Value, new Color(1f, 0.48f, 0.09f)), exitAlpha),
+            1f,
+            new Vector2(0f, 0.5f));
+    }
+
+    private float _streakTarget;
+    private float _barShown = float.NaN;
+
+    /// <summary>由 <c>AyaBehaviour</c> 在每次击杀后写入：距离下一档连杀称号的进度 0..1。</summary>
+    internal void SetStreakProgress(float progress) => _streakTarget = Mathf.Clamp01(progress);
+
+    // ------------------------------------------------------------------ 文本组装
 
     /// <summary>
     /// 锚点（canvas 局部坐标）。
     /// 旧项目 <c>anchorX = sw/2 - hOffset</c>、<c>anchorY = sh/2 + vOffset</c> 都是**屏幕**坐标（Y 向下为正），
     /// canvas 里原点在屏幕中心且 Y 向上，所以垂直分量要取反。
     /// </summary>
-    private static Vector2 Anchor() => new Vector2(
+    internal static Vector2 Anchor() => new Vector2(
         -Plugin.Cfg.KillFeedHorizontalOffset.Value,
         -Plugin.Cfg.KillFeedVerticalOffset.Value);
 
-    private string ComposeFaction(AyaConfig cfg, in KillRecord rec)
+    private string ComposeFaction(AyaConfig cfg, string label)
     {
         _sb.Clear();
 
-        string botType = BotTypeMapping.GetBotType(rec.Role);
-        var factionColor = UiTheme.Parse(cfg.ColorFaction.Value, Color.white);
-        Color botColor = botType switch
+        Color factionColor = UiTheme.Parse(cfg.ColorFaction.Value, Color.white);
+        Color botColor = _latest.BotType switch
         {
             "USEC" => UiTheme.Parse(cfg.ColorUSEC.Value, factionColor),
             "BEAR" => UiTheme.Parse(cfg.ColorBEAR.Value, factionColor),
@@ -467,42 +799,47 @@ internal sealed class KillFeedLayer
             _ => factionColor,
         };
 
-        if (BotTypeMapping.IsPmc(botType) && rec.VictimLevel > 0)
+        if (_latest.IsPmc && _latest.VictimLevel > 0)
         {
             _sb.Append("<color=#").Append(Hex(factionColor)).Append(">[")
-               .Append(rec.VictimLevel).Append("] </color>");
+               .Append(_latest.VictimLevel).Append("] </color>");
         }
 
         _sb.Append("<color=#").Append(Hex(botColor)).Append('>')
-           .Append(Escape(botType)).Append("</color>");
+           .Append(Escape(label)).Append("</color>");
 
         return _sb.ToString();
     }
 
-    private string ComposeDetails(in KillRecord rec)
+    /// <summary>「头部 · 142m · 枪械 · M4A1」——空的字段自动跳过，不会留出「· ·」。</summary>
+    private string ComposeDetails(AyaConfig cfg)
     {
-        var cfg = Plugin.Cfg;
         _sb.Clear();
 
-        if (cfg.ShowKillDetails.Value)
+        if (!cfg.ShowKillDetails.Value) return string.Empty;
+
+        if (_latest.Headshot) AppendDetail("爆头");
+        else if (!string.IsNullOrWhiteSpace(_latest.BodyPart)) AppendDetail("部位:" + Escape(_latest.BodyPart));
+
+        if (_latest.Distance > 0.5f) AppendDetail("距离:" + _latest.Distance.ToString("0") + "m");
+
+        if (cfg.ShowKillMethod.Value && _latest.MethodIsNotable && !string.IsNullOrWhiteSpace(_latest.Method))
         {
-            if (rec.Headshot) _sb.Append("爆头");
-            else if (!string.IsNullOrWhiteSpace(rec.BodyPart)) _sb.Append("部位:").Append(Escape(rec.BodyPart));
+            AppendDetail(Escape(_latest.Method));
+        }
 
-            if (rec.Distance > 0f)
-            {
-                if (_sb.Length > 0) _sb.Append(" · ");
-                _sb.Append("距离:").Append(rec.Distance.ToString("0")).Append('m');
-            }
-
-            if (!string.IsNullOrWhiteSpace(rec.Weapon))
-            {
-                if (_sb.Length > 0) _sb.Append(" · ");
-                _sb.Append("武器:").Append(Escape(rec.Weapon));
-            }
+        if (!string.IsNullOrWhiteSpace(_latest.Weapon) && _latest.Weapon != "?")
+        {
+            AppendDetail(Escape(_latest.Weapon));
         }
 
         return _sb.ToString();
+    }
+
+    private void AppendDetail(string part)
+    {
+        if (_sb.Length > 0) _sb.Append(" · ");
+        _sb.Append(part);
     }
 
     private static string Hex(Color c)
@@ -516,25 +853,26 @@ internal sealed class KillFeedLayer
     /// <summary>TMP 富文本以 &lt;&gt; 为标记，玩家昵称/武器名里出现就会吞标签，必须转义。</summary>
     private static string Escape(string s)
     {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
         if (s.IndexOf('<') < 0 && s.IndexOf('>') < 0) return s;
         return s.Replace("<", "&lt;").Replace(">", "&gt;");
     }
 
-    private bool IsTextVisible => _factionGo != null && (_factionGo.activeSelf || (_nameGo?.activeSelf ?? false));
-
-    private void SetTextVisible(bool visible)
-    {
-        if (!visible)
-        {
-            _factionGo?.SetActive(false);
-            _nameGo?.SetActive(false);
-            _detailsGo?.SetActive(false);
-            _expGo?.SetActive(false);
-            _factionIconGo?.SetActive(false);
-        }
-    }
-
     // ------------------------------------------------------------------ 其他
+
+    private void HideCard()
+    {
+        _factionText?.Hide();
+        _factionIcon?.Hide();
+        _nameText?.Hide();
+        _detailsText?.Hide();
+        _scoreText?.Hide();
+        _scoreIcon?.Hide();
+        _achievementBg?.Hide();
+        _achievementText?.Hide();
+        _streakBarBack?.Hide();
+        _streakBarFill?.Hide();
+    }
 
     private void TrimToLimit(int max)
     {
@@ -542,62 +880,56 @@ internal sealed class KillFeedLayer
         while (_skulls.Count > limit)
         {
             var s = _skulls[0];
-            s.Go?.SetActive(false);
-            HideGlow(s);
+            Recycle(s);
             _skulls.RemoveAt(0);
-            if (_pool.Count < 24) _pool.Add(s);
         }
     }
 
-    private static void HideGlow(SkullEntry s)
+    private void Recycle(SkullEntry s)
     {
-        if (s.Glow != null) s.Glow.color = Color.clear;
+        s.Icon.Hide();
+        s.Glow.Hide();
+        if (_pool.Count < 24) _pool.Add(s);
     }
 
     private SkullEntry? Rent()
     {
-        SkullEntry e;
         if (_pool.Count > 0)
         {
-            e = _pool[_pool.Count - 1];
+            var pooled = _pool[_pool.Count - 1];
             _pool.RemoveAt(_pool.Count - 1);
-            return e;
+            if (pooled.Icon.Img != null) pooled.Icon.Img.color = Color.clear;
+            return pooled;
         }
 
         if (_parent == null) return null;
 
-        e = new SkullEntry();
-
-        // 辉光在底层，骷髅在上层
-        var glowGo = UiTheme.CreateContainer("AyaHitmarker.SkullGlow", _parent);
-        e.Glow = glowGo.GetComponent<Image>();
-        e.GlowRt = UiTheme.Rect(glowGo);
-        e.Glow!.raycastTarget = false;
-
-        var go = UiTheme.CreateContainer("AyaHitmarker.Skull", _parent);
-        e.Icon = go.GetComponent<Image>();
-        e.Rt = UiTheme.Rect(go);
-        e.Icon!.raycastTarget = false;
-        e.Icon.preserveAspect = true;
-
-        e.Go = go;
-        go.SetActive(false);
-        e.Glow.color = Color.clear;
-        return e;
+        return new SkullEntry
+        {
+            // 辉光在底层，骷髅在上层
+            Glow = UiImageRow.Create("AyaHitmarker.SkullGlow", _parent),
+            Icon = UiImageRow.Create("AyaHitmarker.Skull", _parent),
+        };
     }
 
     internal void Reset()
     {
         for (int i = 0; i < _skulls.Count; i++)
         {
-            var s = _skulls[i];
-            s.Go?.SetActive(false);
-            HideGlow(s);
-            if (_pool.Count < 24) _pool.Add(s);
+            Recycle(_skulls[i]);
         }
         _skulls.Clear();
-        _hasLatest = false;
-        SetTextVisible(false);
+        _textVisible = false;
+        _achievementWidth = 0f;
+        _achievementComposed = string.Empty;
+        _factionComposed = string.Empty;
+        _nameComposed = string.Empty;
+        _detailsComposed = string.Empty;
+        _rankSprite = null;
+        _barShown = float.NaN;
+        _latest = default;
+        _analysis = KillAnalysis.Empty;
+        HideCard();
         _ring.Reset();
     }
 }

@@ -53,6 +53,10 @@ internal static class IconBank
         }
 
         Plugin.Logger.LogInfo($"[icons] loaded: hit={(Hit != null)} skull={(Skull != null)} skull_head={(SkullHead != null)}  (dir={dir})");
+
+        // 军衔图标在启动时就探一次。历史上它是在第一次击杀 PMC 时才懒加载，
+        // 结果日志里什么都不打，无法区分「没装图标」和「没碰到 PMC」。
+        EnsureRankIcons();
     }
 
     internal static void Invalidate()
@@ -60,7 +64,6 @@ internal static class IconBank
         _ringCache.Clear();
         _glowCache.Clear();
     }
-
     // ------------------------------------------------------------------ PMC 军衔图标（可选）
     //
     // 旧 Mono 项目的 SimpleHitMarker/RankIcons/Rank{tier}.png 在实际仓库里并不存在，
@@ -74,6 +77,9 @@ internal static class IconBank
 
     private static readonly Dictionary<int, Sprite?> _rankIcons = new Dictionary<int, Sprite?>();
     private static bool _rankAttempted;
+
+    /// <summary>军衔图标的加载情况（诊断日志用）。</summary>
+    internal static string RankIconStatus { get; private set; } = "未探测";
 
     private static void EnsureRankIcons()
     {
@@ -89,8 +95,8 @@ internal static class IconBank
             int tier = RankTierStarts[i];
             string file = $"Rank{tier}.png";
 
-            var sprite = LoadSprite(Path.Combine(rankDir, file), file)
-                         ?? LoadSprite(Path.Combine(baseDir, file), file);
+            var sprite = LoadSprite(Path.Combine(rankDir, file), file, quiet: true)
+                         ?? LoadSprite(Path.Combine(baseDir, file), file, quiet: true);
             if (sprite != null)
             {
                 _rankIcons[tier] = sprite;
@@ -98,36 +104,67 @@ internal static class IconBank
             }
         }
 
-        if (found > 0) Plugin.Logger.LogInfo($"[icons] PMC 军衔图标已加载 {found}/{RankTierStarts.Length}");
+        // 只有「一个都没找到」才需要告警 —— 找到一部分是正常的（用户可以只放几档）。
+        if (found > 0)
+        {
+            RankIconStatus = $"{found}/{RankTierStarts.Length} 档";
+            Plugin.Logger.LogInfo($"[icons] PMC 军衔图标已加载 {found}/{RankTierStarts.Length}（目录 {rankDir}）");
+        }
+        else
+        {
+            RankIconStatus = "缺失";
+            Plugin.Logger.LogWarning(
+                $"[icons] 没有找到任何 PMC 军衔图标（应为 {rankDir}\\Rank{{1,5,...,75}}.png）——" +
+                "击杀播报会只显示「[等级] 阵营」文字，不显示军衔徽章。");
+        }
     }
 
-    /// <summary>只有 PMC 才有军衔图标；没有相应文件就返回 <c>null</c>。</summary>
+    /// <summary>
+    /// 只有 PMC 才有军衔图标；没有相应文件就返回 <c>null</c>。
+    /// 具体档位缺文件时会**向下取最近的可用档位**（宁可显示低一档的徽章，也不要空着），
+    /// 一档都没有才返回 <c>null</c>。
+    /// </summary>
     internal static Sprite? GetRankIcon(int level)
     {
         EnsureRankIcons();
         if (_rankIcons.Count == 0 || level <= 0) return null;
 
-        int tier;
-        if (level <= 4) tier = 1;
-        else
+        int tier = TierForLevel(level);
+
+        for (int i = 0; i < RankTierStarts.Length; i++)
         {
-            int clamped = Mathf.Clamp(level, 5, MaxPmcRankIconLevel);
-            int steps = (clamped - 5) / 5;
-            tier = Mathf.Clamp(5 + steps * 5, 5, 75);
+            int candidate = tier - i * 5;
+            if (candidate < 1) break;
+            if (_rankIcons.TryGetValue(candidate, out var sprite) && sprite != null) return sprite;
         }
 
-        return _rankIcons.TryGetValue(tier, out var sprite) ? sprite : null;
+        // 低档位全缺但高档位有文件（很反常）——退而求其次取最高的一个
+        for (int i = RankTierStarts.Length - 1; i >= 0; i--)
+        {
+            if (_rankIcons.TryGetValue(RankTierStarts[i], out var sprite) && sprite != null) return sprite;
+        }
+
+        return null;
+    }
+
+    /// <summary>等级 → 档位起点（1 &lt;= level &lt;= 4 归到 1，其余每 5 级一档，上限 75）。</summary>
+    internal static int TierForLevel(int level)
+    {
+        if (level <= 4) return 1;
+        int clamped = Mathf.Clamp(level, 5, MaxPmcRankIconLevel);
+        int steps = (clamped - 5) / 5;
+        return Mathf.Clamp(5 + steps * 5, 5, 75);
     }
 
     internal static Sprite? SkullFor(bool headshot) => headshot ? (SkullHead ?? Skull) : Skull;
 
-    private static Sprite? LoadSprite(string path, string label)
+    private static Sprite? LoadSprite(string path, string label, bool quiet = false)
     {
         try
         {
             if (!File.Exists(path))
             {
-                Plugin.Logger.LogWarning($"[icons] 找不到 {label}: {path}");
+                if (!quiet) Plugin.Logger.LogWarning($"[icons] 找不到 {label}: {path}");
                 return null;
             }
 

@@ -11,6 +11,7 @@ internal static class FeedbackBus
 {
     private static readonly Queue<HitRecord> _hits = new Queue<HitRecord>(64);
     private static readonly Queue<KillRecord> _kills = new Queue<KillRecord>(16);
+    private static readonly Queue<LocalDeathRecord> _deaths = new Queue<LocalDeathRecord>(4);
     private static readonly object _lock = new object();
 
     private static int _droppedHits;
@@ -34,21 +35,23 @@ internal static class FeedbackBus
         }
     }
 
-    internal static void Drain(List<HitRecord> hitsInto, List<KillRecord> killsInto)
+    /// <summary>我方阵亡。只影响「复仇者」判定，不产生 UI，所以容量很小。</summary>
+    internal static void EnqueueLocalDeath(in LocalDeathRecord r)
+    {
+        lock (_lock)
+        {
+            if (_deaths.Count > 8) _deaths.Dequeue();
+            _deaths.Enqueue(r);
+        }
+    }
+
+    internal static void Drain(List<HitRecord> hitsInto, List<KillRecord> killsInto, List<LocalDeathRecord> deathsInto)
     {
         lock (_lock)
         {
             while (_hits.Count > 0) hitsInto.Add(_hits.Dequeue());
             while (_kills.Count > 0) killsInto.Add(_kills.Dequeue());
-        }
-    }
-
-    internal static void Clear()
-    {
-        lock (_lock)
-        {
-            _hits.Clear();
-            _kills.Clear();
+            while (_deaths.Count > 0) deathsInto.Add(_deaths.Dequeue());
         }
     }
 

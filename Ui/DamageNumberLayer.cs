@@ -31,6 +31,7 @@ internal sealed class DamageNumberLayer
         internal float Damage;
         internal bool Headshot;
         internal float LastAlpha = -1f;
+        internal float LastScale = float.NaN;
     }
 
     private readonly List<Entry> _live = new List<Entry>(16);
@@ -64,6 +65,7 @@ internal sealed class DamageNumberLayer
         e.Start = Time.unscaledTime;
         e.Life = Mathf.Max(0.05f, Plugin.Cfg.DamageTextLifetime.Value);
         e.LastAlpha = -1f;
+        e.LastScale = float.NaN;
 
         e.Text.text = text;
         e.Text.fontSize = Mathf.Max(6f, Plugin.Cfg.DamageTextSize.Value);
@@ -116,6 +118,10 @@ internal sealed class DamageNumberLayer
         float spacing = Mathf.Clamp(cfg.DamageMultiTextPadding.Value, 0f, 200f);
         float startX = _anchor.x + Mathf.Max(1f, cfg.HitBaseSize.Value) * 0.5f + padding;
 
+        // 弹出：用 localScale 而不是 sizeDelta，避免触发 TMP 重排（AGENTS.md §3.5）
+        float popScale = Mathf.Max(1f, cfg.DamageTextPopScale.Value);
+        float popDuration = Mathf.Max(0.01f, cfg.DamageTextPopDuration.Value);
+
         float x = startX;
         for (int i = 0; i < _live.Count; i++)
         {
@@ -126,6 +132,22 @@ internal sealed class DamageNumberLayer
 
             e.Rt.sizeDelta = new Vector2(e.Width, lineHeight);
             e.Rt.anchoredPosition = new Vector2(x + e.Width * 0.5f, _anchor.y);
+
+            if (popScale > 1.0001f)
+            {
+                float popT = UiAnim.OutBack(UiAnim.Clamp01((now - e.Start) / popDuration));
+                float scale = popScale + (1f - popScale) * popT;
+                if (float.IsNaN(e.LastScale) || Mathf.Abs(e.LastScale - scale) > 0.002f)
+                {
+                    e.LastScale = scale;
+                    e.Rt.localScale = new Vector3(scale, scale, 1f);
+                }
+            }
+            else if (float.IsNaN(e.LastScale))
+            {
+                e.LastScale = 1f;
+                e.Rt.localScale = Vector3.one;
+            }
 
             if (e.LastAlpha < 0f || Mathf.Abs(alpha - e.LastAlpha) > 0.01f)
             {

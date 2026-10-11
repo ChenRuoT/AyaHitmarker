@@ -32,6 +32,9 @@ internal sealed class RingEffect
     private KillType _type = KillType.Normal;
     private float _start = -1f;
 
+    /// <summary>特效是否还在生命周期内（用于决定是否还要每帧驱动）。</summary>
+    internal bool IsActive => _start > 0f;
+
     internal void Attach(RectTransform parent)
     {
         if (_attached) return;

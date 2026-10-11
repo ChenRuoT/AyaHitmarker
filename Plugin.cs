@@ -2,6 +2,7 @@ using System;
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+using UnityEngine;
 
 namespace AyaHitmarker;
 
@@ -30,7 +31,7 @@ public sealed class Plugin : BasePlugin
 {
     public const string PluginGuid = "com.aya.ayahitmarker";
     public const string PluginName = "AyaHitmarker";
-    public const string PluginVersion = "0.2.7";
+    public const string PluginVersion = "0.3.0";
 
     internal static Plugin Instance { get; private set; } = null!;
     internal static ManualLogSource Logger { get; private set; } = null!;
@@ -41,6 +42,16 @@ public sealed class Plugin : BasePlugin
 
     /// <summary>图标目录：BepInEx/plugins/AyaHitmarker/Icons/。</summary>
     internal static string IconsDirectory { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// 画布根 RectTransform 的 rect 尺寸（画布单位）。
+    /// 只用来诊断“局部坐标 → 屏幕坐标”的换算（见 KillFeedLayer.LogRowScreenPosition），
+    /// 业务代码不应该读它。
+    /// </summary>
+    internal static Vector2 CanvasRectSize { get; private set; }
+
+    /// <summary>由 <c>OverlayRoot</c> 在创建画布时写入。</summary>
+    internal static void SetCanvasRectSize(Vector2 size) => CanvasRectSize = size;
 
     /// <summary>音效目录：BepInEx/plugins/AyaHitmarker/Sounds/。</summary>
     internal static string SoundsDirectory { get; private set; } = string.Empty;

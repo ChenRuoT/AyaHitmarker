@@ -30,11 +30,6 @@ namespace AyaHitmarker.Game;
 /// </summary>
 internal static class GameEvents
 {
-    /// <summary>主线程可用的新命中（已过滤鞭尸与非本机击杀）。</summary>
-    internal static event Action<HitRecord>? HitArrived;
-
-    internal static event Action<KillRecord>? KillArrived;
-
     /// <summary>新的 raid 会话开始（GlobalEventDispatcher 换了实例）。</summary>
     internal static event Action? RaidStarted;
 
@@ -148,8 +143,6 @@ internal static class GameEvents
             _lastDispatcher = IntPtr.Zero;
         }
 
-        HitArrived = null;
-        KillArrived = null;
         RaidStarted = null;
         RaidEnded = null;
     }
@@ -187,7 +180,6 @@ internal static class GameEvents
             }
 
             FeedbackBus.EnqueueHit(record);
-            HitArrived?.Invoke(record);
         }
         catch (Exception ex)
         {
@@ -224,31 +216,53 @@ internal static class GameEvents
     {
         try
         {
+            bool victimIsLocal = dead != null && dead.IsYourPlayer;
+
+            // 我被打死：只记下「谁杀了我」，供之后判定「复仇者」。不产生任何 UI。
+            if (victimIsLocal)
+            {
+                string killerName = SafeNickname(killer);
+                var death = new LocalDeathRecord(killerName, NameKey.Normalize(killerName));
+                FeedbackBus.EnqueueLocalDeath(death);
+                return;
+            }
+
             if (killer == null || !killer.IsYourPlayer) return;
 
-            bool victimIsLocal = dead != null && dead.IsYourPlayer;
+            bool headshot = bodyPart == EBodyPart.Head;
+            WildSpawnType role = SafeRole(dead);
+            string botType = BotTypeMapping.GetBotType(role);
+            string victimName = SafeNickname(dead);
+
+            EDamageType damageType = SafeDamageType(info);
+
             var record = new KillRecord(
-                SafeNickname(dead),
+                victimName,
+                NameKey.Normalize(victimName),
                 SafeLevel(dead),
-                SafeRole(dead),
-                bodyPart == EBodyPart.Head,
-                victimIsLocal,
+                role,
+                botType,
+                BotTypeMapping.IsPmc(botType),
+                BotTypeMapping.IsBoss(botType),
+                headshot,
                 LocalizeBodyPart(bodyPart),
                 SafeWeaponName(info),
-                SafeDistance(killer, dead),
-                EstimateExperience(bodyPart == EBodyPart.Head),
-                0f);
+                DamageMethod.Describe(damageType),
+                DamageMethod.IsNotable(damageType),
+                DamageMethod.IsMelee(damageType),
+                DamageMethod.IsExplosive(damageType),
+                DamageMethod.IsSniper(damageType),
+                SafeDistance(killer, dead));
 
             if (Plugin.Cfg.DebugEnabled.Value)
             {
                 Plugin.Logger.LogInfo(
                     $"[kill] victim={record.VictimName} lv={record.VictimLevel} role={record.Role} " +
-                    $"bot={BotTypeMapping.GetBotType(record.Role)} body={record.BodyPart} head={record.Headshot} " +
-                    $"weapon={record.Weapon} dist={record.Distance:0.#} self={victimIsLocal}");
+                    $"bot={record.BotType} boss={record.VictimIsBoss} body={record.BodyPart} head={record.Headshot} " +
+                    $"method={record.Method} weapon={record.Weapon} dist={record.Distance:0.#}");
             }
 
             FeedbackBus.EnqueueKill(record);
-            KillArrived?.Invoke(record);
         }
         catch (Exception ex)
         {
@@ -295,12 +309,19 @@ internal static class GameEvents
         catch { return WildSpawnType.assault; }
     }
 
+    private static EDamageType SafeDamageType(DamageInfo? info)
+    {
+        if (info == null) return EDamageType.Undefined;
+        try { return info.DamageType; }
+        catch { return EDamageType.Undefined; }
+    }
+
     private static string SafeWeaponName(DamageInfo info)
     {
         try
         {
             var item = info.Weapon;
-            if (item == null) return info.DamageType.ToString();
+            if (item == null) return DamageMethod.Describe(info.DamageType);
 
             try
             {
@@ -316,7 +337,7 @@ internal static class GameEvents
             }
             catch { /* fallthrough */ }
 
-            return info.DamageType.ToString();
+            return DamageMethod.Describe(info.DamageType);
         }
         catch
         {
@@ -340,16 +361,6 @@ internal static class GameEvents
         }
         catch { /* fallthrough */ }
         return part.ToString();
-    }
-
-    /// <summary>
-    /// 经验值是估算：客户端拿不到「这次击杀给了多少经验」的权威数值
-    /// （真实值走 SkillManager / 战局结算，不是击杀事件能读到的）。要精确就得另找数据源。
-    /// </summary>
-    private static int EstimateExperience(bool headshot)
-    {
-        int baseExp = 100 + (headshot ? 50 : 0);
-        return baseExp;
     }
 
     /// <summary>

@@ -48,16 +48,11 @@ internal sealed class OverlayRoot
         _scaler.scaleFactor = scale;
 
         _rect = UiTheme.Rect(_root);
-        if (_rect != null)
-        {
-            // 铺满整屏，pivot 居中 → 局部坐标原点 = 屏幕中心
-            _rect.anchorMin = Vector2.zero;
-            _rect.anchorMax = Vector2.one;
-            _rect.offsetMin = Vector2.zero;
-            _rect.offsetMax = Vector2.zero;
-            _rect.pivot = new Vector2(0.5f, 0.5f);
-        }
 
+        // 根 Canvas 的 RectTransform 是 **Canvas 自己**在驱动的（anchors (0,0)-(0,0)、sizeDelta = 屏幕尺寸、
+        // anchoredPosition = 屏幕中心），不要去改它的 anchor / pivot —— 对根节点来说「铺满父物体」没有意义
+        // （它的“父矩形”就是屏幕）。子物体全部是 anchor (0.5,0.5) + pivot (0.5,0.5)，相对画布矩形中心定位，
+        // 所以不动根节点时「局部 (0,0) = 屏幕中心」天然成立。
         if (_rect != null)
         {
             Hitmarker.Attach(_rect);
@@ -65,7 +60,28 @@ internal sealed class OverlayRoot
             KillFeed.Attach(_rect);
         }
 
+        LogCanvasGeometry();
         Plugin.Logger.LogInfo($"[ui] canvas ready (scale={scale}, order={_canvas.sortingOrder}, font={(UiTheme.Font != null ? "ok" : "MISSING")})");
+    }
+
+    /// <summary>
+    /// 输出画布几何（屏幕尺寸 / canvas rect / pivot / 锚点 / scaleFactor）。
+    ///
+    /// 「屏幕像素 / scaleFactor - rectSize/2 = 局部坐标」这个换算的三个输入都在这一行里，
+    /// 是核实「卡片到底画在哪」的唯一直接手段。
+    /// 排查位置问题时曾经量了半天截图才反应过来：**截图工具被 DPI 虚拟化** ——
+    /// 进程不是 DPI-aware 时 CopyFromScreen 只拿到屏幕左上角 1:1 的一块，
+    /// 于是「卡片偏到右下」纯属测量陷阱，插件坐标一直是对的。有这行日志就能直接排掉这类坑。
+    /// </summary>
+    private void LogCanvasGeometry()
+    {
+        if (_rect == null || _canvas == null) return;
+        var r = _rect.rect;
+        Plugin.SetCanvasRectSize(new Vector2(r.width, r.height));
+        Plugin.Logger.LogInfo(
+            $"[ui] canvas geometry: screen={Screen.width}x{Screen.height} " +
+            $"rect={r.width:0.#}x{r.height:0.#} pivot={_rect.pivot} " +
+            $"anchoredPos={_rect.anchoredPosition} scaleFactor={_canvas.scaleFactor:0.###}");
     }
 
     internal void ApplyScaleIfChanged()
@@ -136,8 +152,6 @@ internal sealed class OverlayRoot
         }
     }
 
-    internal Vector2 Center => Vector2.zero;
-
     internal void ResetAll()
     {
         Hitmarker.Reset();
@@ -150,10 +164,5 @@ internal sealed class OverlayRoot
         Hitmarker.Tick();
         DamageNumbers.Tick();
         KillFeed.Tick();
-    }
-
-    internal void SetVisible(bool visible)
-    {
-        if (_root != null && _root.activeSelf != visible) _root.SetActive(visible);
     }
 }

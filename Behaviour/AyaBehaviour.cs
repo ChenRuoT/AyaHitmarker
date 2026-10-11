@@ -22,6 +22,10 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private readonly SoundPlayer _sound = new SoundPlayer();
     private readonly List<HitRecord> _hits = new List<HitRecord>(32);
     private readonly List<KillRecord> _kills = new List<KillRecord>(16);
+    private readonly List<LocalDeathRecord> _deaths = new List<LocalDeathRecord>(4);
+
+    /// <summary>连杀/成就判定。纯托管状态，只在主线程碰。</summary>
+    private KillStreakTracker _streaks = new KillStreakTracker();
 
     // 协程相关引用必须自己持有：Il2CppManagedEnumerator 内部用 GCHandle 指向托管迭代器，
     // 托管侧的包装对象一旦被 GC，原生侧就是 "Handle is not initialized"。
@@ -115,8 +119,10 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
         var hit = Plugin.Cfg.TestHitKey.Value;
         var kill = Plugin.Cfg.TestKillKey.Value;
+        var death = Plugin.Cfg.TestDeathKey.Value;
+
         Plugin.Logger.LogInfo(
-            $"[behaviour] initialized | 测试快捷键: {hit.MainKey}=命中 {kill.MainKey}=击杀 " +
+            $"[behaviour] initialized | 测试快捷键: {hit.MainKey}=命中 {kill.MainKey}=击杀 {death.MainKey}=阵亡 " +
             $"(启用={Plugin.Cfg.TestHotkeysEnabled.Value}, 需 DebugEnabled=False 也生效)");
 
         // 主动探一次键盘：旧版 Input 后端被游戏禁用时这里就能报出来，
@@ -146,12 +152,17 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private void OnRaidStarted()
     {
         _ui.ResetAll();
+        _streaks.Reset();
 
         AudioBank.Invalidate(resetRetries: true);
         StartAudioLoad();
     }
 
-    private void OnRaidEnded() => _ui.ResetAll();
+    private void OnRaidEnded()
+    {
+        _ui.ResetAll();
+        _streaks.Reset();
+    }
 
     private void StartAudioLoad()
     {
@@ -188,12 +199,27 @@ internal sealed class AyaBehaviour : MonoBehaviour
     {
         _hits.Clear();
         _kills.Clear();
-        FeedbackBus.Drain(_hits, _kills);
+        _deaths.Clear();
+        FeedbackBus.Drain(_hits, _kills, _deaths);
 
-        if (_hits.Count == 0 && _kills.Count == 0) return;
+        if (_hits.Count == 0 && _kills.Count == 0 && _deaths.Count == 0) return;
 
         var cfg = Plugin.Cfg;
         bool atHitPoint = cfg.HitMarkerAtHitPoint.Value;
+
+        // 事件线程只带得回「谁杀了我」，时间戳在主线程打
+        if (_deaths.Count > 0)
+        {
+            float now = Time.unscaledTime;
+            for (int i = 0; i < _deaths.Count; i++)
+            {
+                _streaks.NoteLocalDeath(now, _deaths[i].KillerKey);
+                if (cfg.DebugEnabled.Value)
+                {
+                    Plugin.Logger.LogInfo($"[kill] 我方阵亡，凶手={_deaths[i].KillerName}（供复仇判定）");
+                }
+            }
+        }
 
         for (int i = 0; i < _hits.Count; i++)
         {
@@ -209,16 +235,27 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 if (projected.HasValue) anchor = projected.Value;
             }
 
-            _ui.Hitmarker.Show(anchor);
+            _ui.Hitmarker.Show(anchor, hit.Headshot);
             _ui.DamageNumbers.Show(anchor, hit.DisplayDamage(cfg.DamageTextMode.Value), hit.Headshot);
             _sound.PlayHit(hit.Headshot);
         }
 
-        // 击杀：骷髅 + 环形特效 + 播报文字（旧项目命中图标只在命中时出现，击杀不再叠一次）
+        // 击杀：骷髅 + 环形特效 + 得分 + 成就缎带
         for (int i = 0; i < _kills.Count; i++)
         {
             var kill = _kills[i];
-            _ui.KillFeed.Show(kill);
+
+            // 阈值每次重读配置：ConfigurationManager 里改完立即生效（连杀状态不重建）
+            var analysis = _streaks.Register(Time.unscaledTime, kill.ToFact(), Plugin.Cfg.BuildStreakSettings());
+
+            if (cfg.DebugEnabled.Value)
+            {
+                Plugin.Logger.LogInfo(
+                    $"[kill] 判定: score={analysis.Score} streak={analysis.Streak} multi={analysis.MultiCount} " +
+                    $"raidKills={analysis.RaidKills} ribbon={analysis.Ribbon.Title}({analysis.Ribbon.Kind}/{analysis.Ribbon.Tier})");
+            }
+
+            _ui.KillFeed.Show(kill, analysis);
             _sound.PlayKill(kill.Headshot);
         }
     }
@@ -226,6 +263,11 @@ internal sealed class AyaBehaviour : MonoBehaviour
     /// <summary>
     /// 测试快捷键。**独立于「启用调试日志」** —— 之前两者绑在一起，
     /// 结果日志开关默认关闭时按 F8/F9 毫无反应，看起来像快捷键坏了。
+    ///
+    /// F9 不是「造一条固定击杀」，而是按一张脚本表**依次**造出各种分支的地形：
+    /// PMC 爆头远程 / SCAV 近战 / 首领爆炸 / 连续多杀（连押多次）…这样不需要真的打架
+    /// 就能把得分、成就缎带、连杀进度条、军衔图标全部看一遍。
+    /// F10 模拟「我被打死」，用来验证「复仇者」。
     /// </summary>
     private void HandleHotkeys()
     {
@@ -238,7 +280,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             if (hitKey.MainKey != KeyCode.None && hitKey.IsDown())
             {
                 Plugin.Logger.LogInfo("[debug] 测试命中");
-                _ui.Hitmarker.Show(Vector2.zero);
+                _ui.Hitmarker.Show(Vector2.zero, false);
                 _ui.DamageNumbers.Show(Vector2.zero, 76f, false);
                 _sound.PlayHit(false);
             }
@@ -246,16 +288,29 @@ internal sealed class AyaBehaviour : MonoBehaviour
             var killKey = Plugin.Cfg.TestKillKey.Value;
             if (killKey.MainKey != KeyCode.None && killKey.IsDown())
             {
-                Plugin.Logger.LogInfo("[debug] 测试击杀");
-                _ui.Hitmarker.Show(Vector2.zero);
-                _ui.KillFeed.Show(new KillRecord(
-                    "Nikita", 42, EFT.WildSpawnType.pmcUSEC, false, false,
-                    "胸部", "M4A1", 87.4f, 100, Time.unscaledTime));
-                _ui.KillFeed.Show(new KillRecord(
-                    "Target", 35, EFT.WildSpawnType.pmcBEAR, true, false,
-                    "头部", "SR-25", 142.7f, 150, Time.unscaledTime));
-                _sound.PlayKill(false);
-                _sound.PlayKill(true);
+                var rec = NextTestKill();
+                Plugin.Logger.LogInfo(
+                    $"[debug] 测试击杀 #{_testKillIndex}: {rec.VictimName} bot={rec.BotType} lv={rec.VictimLevel} " +
+                    $"head={rec.Headshot} body={rec.BodyPart} method={rec.Method} weapon={rec.Weapon} dist={rec.Distance:0.#}");
+
+                var analysis = _streaks.Register(Time.unscaledTime, rec.ToFact(), Plugin.Cfg.BuildStreakSettings());
+                Plugin.Logger.LogInfo(
+                    $"[debug] 判定: score={analysis.Score} streak={analysis.Streak} multi={analysis.MultiCount} " +
+                    $"ribbon={analysis.Ribbon.Title}");
+
+                _ui.KillFeed.Show(rec, analysis);
+                _sound.PlayKill(rec.Headshot);
+            }
+
+            var deathKey = Plugin.Cfg.TestDeathKey.Value;
+            if (deathKey.MainKey != KeyCode.None && deathKey.IsDown())
+            {
+                // 「凶手」取下一发 F9 会击杀的那个人 —— 这样 F10 然后按 F9 必定看到「复仇者」，
+                // 不用去数脚本表第几条才是同名。
+                string killer = TestKillScript[_testKillIndex % TestKillScript.Length].VictimName;
+                Plugin.Logger.LogInfo(
+                    $"[debug] 模拟我方阵亡，凶手={killer}（下一次 F9 目标同名 → 复仇者）");
+                _streaks.NoteLocalDeath(Time.unscaledTime, NameKey.Normalize(killer));
             }
         }
         catch (Exception ex)
@@ -265,6 +320,66 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 $"[debug] 读取键盘失败，测试快捷键已停用（游戏可能禁用了旧版 Input 后端）: {ex.Message}");
         }
     }
+
+    private int _testKillIndex;
+
+    /// <summary>脚本表：每按一次 F9 轮一条，覆盖到所有成就分支。</summary>
+    private KillRecord NextTestKill()
+    {
+        var script = TestKillScript;
+        int i = _testKillIndex % script.Length;
+        _testKillIndex++;
+        return script[i];
+    }
+
+    private static KillRecord MakeTestKill(
+        string name,
+        EFT.WildSpawnType role,
+        int level,
+        bool headshot,
+        string bodyPart,
+        string weapon,
+        string method,
+        bool methodNotable,
+        bool melee,
+        bool explosive,
+        float distance)
+    {
+        string botType = BotTypeMapping.GetBotType(role);
+        return new KillRecord(
+            name,
+            NameKey.Normalize(name),
+            level,
+            role,
+            botType,
+            BotTypeMapping.IsPmc(botType),
+            BotTypeMapping.IsBoss(botType),
+            headshot,
+            bodyPart,
+            weapon,
+            method,
+            methodNotable,
+            melee,
+            explosive,
+            sniperDamage: false,
+            distance);
+    }
+
+    private static readonly KillRecord[] TestKillScript =
+    {
+        // 普通 PMC 击杀：看阵营着色 + 军衔徽章 + 得分基础值
+        MakeTestKill("Nikita", EFT.WildSpawnType.pmcUSEC, 42, false, "胸部", "M4A1", "枪械", false, false, false, 87.4f),
+        // PMC 爆头：爆头描边 + Headshot 环
+        MakeTestKill("Target", EFT.WildSpawnType.pmcBEAR, 35, true, "头部", "SR-25", "狙击", true, false, false, 142.7f),
+        // 远程 + 爆头 → 神射手（史诗缎带 + 爆炸环）
+        MakeTestKill("Sniper", EFT.WildSpawnType.pmcUSEC, 55, true, "头部", "M700", "狙击", true, false, false, 268f),
+        // SCAV 近战 → 冷兵器
+        MakeTestKill("Scav", EFT.WildSpawnType.assault, 0, false, "胸部", "砍刀", "近战", true, true, false, 1.2f),
+        // 首领 + 爆炸 → 首领猎杀者
+        MakeTestKill("Killa", EFT.WildSpawnType.bossKilla, 0, false, "胸部", "F-1 手雷", "爆炸", true, false, true, 12.5f),
+        // 再连推几次 F9 就会看到双杀 / 三杀 / 狂战士 与连杀进度条
+        MakeTestKill("Guard", EFT.WildSpawnType.pmcBot, 0, false, "胸部", "AK-74M", "枪械", false, false, false, 33f),
+    };
 
     private bool _inputUnavailable;
 
@@ -336,7 +451,8 @@ internal sealed class AyaBehaviour : MonoBehaviour
         Plugin.Logger.LogInfo(
             $"[diag] dispatcher={(GameEvents.DispatcherPresent ? "present" : "absent")} " +
             $"droppedHits={FeedbackBus.DroppedHits} droppedKills={FeedbackBus.DroppedKills} " +
-            $"font={(UiTheme.Font != null ? "ok" : "MISSING")} " +
+            $"font={(UiTheme.Font != null ? "ok" : "MISSING")} rankIcons={IconBank.RankIconStatus} " +
+            $"streak={_streaks.CurrentStreak} raidKills={_streaks.RaidKills} " +
             $"audioLoading={AudioBank.IsLoading} audio[{AudioBank.DebugStatus()}] " +
             $"hit={AudioBank.SourceOf(SoundKind.Hit)}");
     }
