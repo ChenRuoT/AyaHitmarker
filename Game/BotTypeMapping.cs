@@ -91,6 +91,29 @@ internal static class BotTypeMapping
         ["infectedTagilla"] = "Infected",
     };
 
+    /// <summary>
+    /// 首领的显示名。旧项目把 <c>bossKilla</c> / <c>bossGluhar</c> 全部压成「BOSS」，
+    /// 但击杀播报里报出**具体是谁**才有味道（战地的 "AVENGER" 那种手感）。
+    /// 查不到就回退到分类名。
+    /// </summary>
+    private static readonly Dictionary<string, string> BossNames = new Dictionary<string, string>
+    {
+        ["bossBully"] = "Reshala",
+        ["bossKilla"] = "Killa",
+        ["bossKillaAgro"] = "Killa",
+        ["bossTagilla"] = "Tagilla",
+        ["bossTagillaAgro"] = "Tagilla",
+        ["bossKojaniy"] = "Shturman",
+        ["bossGluhar"] = "Glukhar",
+        ["bossSanitar"] = "Sanitar",
+        ["bossZryachiy"] = "Zryachiy",
+        ["bossKnight"] = "Knight",
+        ["bossBoar"] = "Kaban",
+        ["bossBoarSniper"] = "Kaban",
+        ["bossKolontay"] = "Kolontay",
+        ["bossPartisan"] = "Partisan",
+    };
+
     internal static string GetBotType(WildSpawnType role)
     {
         string name = role.ToString();
@@ -101,4 +124,13 @@ internal static class BotTypeMapping
     internal static bool IsPmc(string botType)
         => string.Equals(botType, "USEC", System.StringComparison.OrdinalIgnoreCase)
         || string.Equals(botType, "BEAR", System.StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsBoss(string botType)
+        => string.Equals(botType, "BOSS", System.StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>首领显示名；不是首领（或查不到）返回 <paramref name="botType"/> 原值。</summary>
+    internal static string DisplayName(WildSpawnType role, string botType)
+        => BossNames.TryGetValue(role.ToString(), out var boss) && !string.IsNullOrWhiteSpace(boss)
+            ? boss
+            : botType;
 }
