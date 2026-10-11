@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>AyaHitmarker.LogicTests</AssemblyName>
+    <RootNamespace>AyaHitmarker.LogicTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Description>Offline tests for AyaHitmarker's pure logic (streak/achievement engine + kill card layout).</Description>
+  </PropertyGroup>
+
+  <!--
+    这里**只编译纯逻辑源文件**：Game/KillStreak.cs 与 Ui/KillCardLayout.cs 都不引用
+    UnityEngine / EFT，所以可以脱离游戏程序集直接跑。
+    新增可测文件时把它加到这里，并保持它不引用 Unity/EFT（见 AGENTS.md §2）。
+  -->
+  <ItemGroup>
+    <Compile Include="../../Game/KillStreak.cs" Link="Game/KillStreak.cs" />
+    <Compile Include="../../Game/NameKey.cs" Link="Game/NameKey.cs" />
+    <Compile Include="../../Game/BodyPartNames.cs" Link="Game/BodyPartNames.cs" />
+    <Compile Include="../../Ui/KillCardLayout.cs" Link="Ui/KillCardLayout.cs" />
+  </ItemGroup>
+
+</Project>
