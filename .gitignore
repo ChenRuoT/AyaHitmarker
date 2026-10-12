@@ -14,3 +14,9 @@ ref/Il2CppDumperOutput/
 
 # 按用户要求：本文件只作本地工作入口，不入库
 AGENTS.md
+
+# 发布构建、私有依赖、预览输出
+artifacts/
+.buildrefs/
+tests/artifacts/
+ref/*.mp4

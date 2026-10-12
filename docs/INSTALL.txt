@@ -1,0 +1,23 @@
+AyaHitmarker — 安装说明
+
+适用：SPTushonka 5.x / Escape From Tarkov 1.2.0.0（build 47965），IL2CPP，BepInEx 6 CoreCLR 10。
+不适用于旧 SPT 4.x / Mono，也不用于官方在线版。
+
+1. 关闭游戏。
+2. 将 ZIP 中的 BepInEx 文件夹解压到游戏根目录（EscapeFromTarkov.exe 所在的文件夹）。
+3. 更新时允许覆盖同名文件。不要额外套一层 AyaHitmarker-v版本号 文件夹。
+4. 通过 SPT 启动器正常启动游戏。
+
+正确位置：BepInEx/plugins/AyaHitmarker/AyaHitmarker.dll
+资源已附带：Icons（基础图标 + 16 个军衔图标）和 Sounds（四种音效）。
+不需要安装 .NET SDK，不需要自己编译；BepInEx / 运行时由游戏整合包提供。
+
+设置：使用游戏内 ConfigurationManager；高级参数需要勾选 Advanced / 高级设置。
+也可以关游戏后修改 BepInEx/config/com.aya.ayahitmarker.cfg。
+升级时保留 cfg，程序会迁移仍为旧默认值的样式项。
+F8 / F9 / F10 是测试命中、击杀、阵亡的快捷键，可在设置中关闭。
+中文文字显示异常时，将字体名称改成 Microsoft YaHei；无声时尝试音效空间模式 FollowCamera3D。
+
+卸载：关闭游戏，删除 BepInEx/plugins/AyaHitmarker 文件夹。
+问题反馈：https://github.com/ChenRuoT/AyaHitmarker/issues
+下载更新：https://github.com/ChenRuoT/AyaHitmarker/releases

@@ -1,4 +1,5 @@
 <Project>
+  <Import Project="$(MSBuildThisFileDirectory)Version.props" />
 
   <!-- 本地覆盖（不入库）。要改 GameDir 就复制 Directory.Build.local.props.example。 -->
   <Import Project="Directory.Build.local.props" Condition="Exists('Directory.Build.local.props')" />
@@ -6,8 +7,8 @@
   <PropertyGroup>
     <GameDir Condition="'$(GameDir)' == ''">D:/EFTdev/Client.1.2.0.0.47965</GameDir>
     <BepInExDir>$(GameDir)/BepInEx</BepInExDir>
-    <BepInExCore>$(BepInExDir)/core</BepInExCore>
-    <InteropDir>$(BepInExDir)/interop</InteropDir>
+    <BepInExCore Condition="'$(BepInExCore)' == ''">$(BepInExDir)/core</BepInExCore>
+    <InteropDir Condition="'$(InteropDir)' == ''">$(BepInExDir)/interop</InteropDir>
     <SptPluginDir>$(BepInExDir)/plugins/sptushonka</SptPluginDir>
     <PluginDeployDir>$(BepInExDir)/plugins/AyaHitmarker</PluginDeployDir>
   </PropertyGroup>
@@ -34,7 +35,7 @@
       CandidateAssemblyFiles，而 {CandidateAssemblyFiles} 排在 AssemblySearchPaths 首位——
       于是 HintPath 指向的 interop 引用会被这些空方法体的桩顶掉，编译能过但语义全错。
     -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);ref/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);ref/**;.buildrefs/**;artifacts/**;ReleaseAssets/**</DefaultItemExcludes>
   </PropertyGroup>
 
 </Project>

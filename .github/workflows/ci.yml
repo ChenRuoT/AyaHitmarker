@@ -1,0 +1,100 @@
+name: CI and Release
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  logic:
+    name: Offline logic tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test pure logic
+        shell: pwsh
+        run: |
+          dotnet run --project tests/AyaHitmarker.LogicTests -c Release -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Logic tests failed' }
+      - name: Render procedural icon previews
+        shell: pwsh
+        run: |
+          dotnet run --project tests/AyaHitmarker.LogicTests -c Release --no-build -- --render-icons artifacts/icon-preview
+          if ($LASTEXITCODE -ne 0) { throw 'Icon rendering failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icon-preview
+          path: artifacts/icon-preview/*.png
+          if-no-files-found: error
+
+  build:
+    name: Build, package, tag and release
+    needs: logic
+    if: github.event_name != 'pull_request' && github.repository == 'ChenRuoT/AyaHitmarker'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Read pinned dependency lock
+        id: refs
+        shell: pwsh
+        run: |
+          $lock = Get-Content tools/release/buildrefs.lock.json -Raw | ConvertFrom-Json
+          "commit=$($lock.commit)" >> $env:GITHUB_OUTPUT
+      - name: Checkout private build references (read-only deploy key)
+        uses: actions/checkout@v4
+        with:
+          repository: ChenRuoT/AyaHitmarker-BuildRefs
+          ref: ${{ steps.refs.outputs.commit }}
+          ssh-key: ${{ secrets.BUILD_REFS_SSH_KEY }}
+          persist-credentials: false
+          path: .buildrefs
+      - name: Verify and extract dependencies
+        shell: pwsh
+        run: |
+          $lock = Get-Content tools/release/buildrefs.lock.json -Raw | ConvertFrom-Json
+          $zip = Join-Path '.buildrefs' $lock.archive
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $lock.sha256) { throw 'Build dependency checksum mismatch' }
+          Expand-Archive -LiteralPath $zip -DestinationPath .buildrefs/game
+      - name: Build plugin (no game deployment)
+        shell: pwsh
+        run: |
+          $game = Join-Path $env:GITHUB_WORKSPACE '.buildrefs/game'
+          dotnet build AyaHitmarker.csproj -c Release -p:GameDir="$game" -p:DeployToGame=false -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Plugin build failed' }
+      - name: Package and validate installation ZIP
+        shell: pwsh
+        run: ./tools/release/package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AyaHitmarker-installation
+          path: artifacts/release/*
+          if-no-files-found: error
+      - name: Publish version tag and release
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_REF: ${{ github.ref_name }}
+        run: ./tools/release/publish.ps1 -Commit $env:RELEASE_COMMIT -RefName $env:RELEASE_REF

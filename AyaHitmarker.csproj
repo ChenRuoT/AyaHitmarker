@@ -3,7 +3,6 @@
   <PropertyGroup>
     <AssemblyName>AyaHitmarker</AssemblyName>
     <RootNamespace>AyaHitmarker</RootNamespace>
-    <Version>0.1.0</Version>
     <Product>AyaHitmarker</Product>
     <Description>Hit / kill feedback overlay for SPTushonka (EFT 1.2.0.0 / IL2CPP).</Description>
   </PropertyGroup>
@@ -77,6 +76,14 @@
     <Reference Include="UnityEngine.UnityWebRequestAudioModule"><HintPath>$(InteropDir)/UnityEngine.UnityWebRequestAudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.TextMeshPro"><HintPath>$(InteropDir)/Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
+
+  <!-- 唯一版本来源是 Version.props；生成编译期常量供 BepInPlugin 使用。 -->
+  <Target Name="GenerateReleaseVersion" BeforeTargets="CoreCompile">
+    <WriteLinesToFile File="$(IntermediateOutputPath)ReleaseVersion.g.cs"
+      Lines="namespace AyaHitmarker { internal static class ReleaseVersion { internal const string Value = &quot;$(Version)&quot;%3B } }"
+      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup><Compile Include="$(IntermediateOutputPath)ReleaseVersion.g.cs" /></ItemGroup>
+  </Target>
 
   <!-- ===== 生成后自动部署到游戏 ===== -->
   <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' != 'false'">

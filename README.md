@@ -1,19 +1,73 @@
 # AyaHitmarker
 
+[![CI](https://github.com/ChenRuoT/AyaHitmarker/actions/workflows/ci.yml/badge.svg)](https://github.com/ChenRuoT/AyaHitmarker/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ChenRuoT/AyaHitmarker)](https://github.com/ChenRuoT/AyaHitmarker/releases/latest)
+
+为 **SPTushonka / Escape From Tarkov 1.2.0.0（build 47965，IL2CPP）** 提供命中标记、伤害数字、击杀卡片和音效。
+击杀反馈参考 Battlefield 6：窗口内连杀累加到同一张卡片，支持得分滚动、多杀横幅、成就、军衔徽章和故障动效。
+
+## 下载与安装（玩家）
+
+1. 打开 [最新 Release](https://github.com/ChenRuoT/AyaHitmarker/releases/latest)，下载 **AyaHitmarker-v版本号-EFT-1.2.0.0.zip**。GitHub 的 Source code 是源码，不是安装包。
+2. 关闭游戏，把 ZIP 中的 **BepInEx** 文件夹解压到 **EscapeFromTarkov.exe 所在目录**。更新时允许覆盖同名文件。
+3. 通过 SPT 启动器启动游戏。图标、16 个军衔徽章和四种音效已包含，无需额外下载资源。
+
+解压后应当是：
+
+```text
+游戏根目录/
+├─ EscapeFromTarkov.exe
+└─ BepInEx/plugins/AyaHitmarker/
+   ├─ AyaHitmarker.dll
+   ├─ Icons/                 # 基础图标 + RankIcons/ 的 16 个军衔徽章
+   ├─ Sounds/                # 命中、爆头命中、击杀、爆头击杀
+   └─ 安装说明.txt
+```
+
+**兼容环境：SPTushonka 5.x、EFT build 47965、BepInEx 6 IL2CPP / CoreCLR 10。**
+BepInEx 与运行时由游戏整合包提供；玩家无需安装 .NET SDK。
+旧 **SPT 4.x / Mono** 请使用 [SimpleHitMarker](https://github.com/ChenRuoT/SimpleHitMarker)。
+
+使用游戏内 **ConfigurationManager** 调整开关、位置、颜色、动画和音量；细项在 **Advanced / 高级设置** 中。
+首次运行后也可关闭游戏，编辑 `BepInEx/config/com.aya.ayahitmarker.cfg`。
+更新保留 cfg，程序会自动迁移仍为旧默认值的样式项；卸载只需删除 `BepInEx/plugins/AyaHitmarker/`。
+
+## 常见问题
+
+- 没有文字或中文显示异常：将字体名称设为 `Microsoft YaHei`。
+- 没声音：检查音效开关和音量；尝试音效空间模式 `FollowCamera3D`。首次加载音效可能稍有延迟。
+- 安装后没有反馈：确认 DLL 的位置与上图一致，目录不能多套一层版本名。
+- `F8 / F9 / F10` 是测试命中、击杀和阵亡的快捷键，主菜单也可使用；可以在设置中关闭。
+- 报告问题时请附游戏版本、插件版本和 `BepInEx/LogOutput.log` 中与 AyaHitmarker 相关的日志。提交前移除日志中的个人或认证信息。
+
+[问题反馈](https://github.com/ChenRuoT/AyaHitmarker/issues) · [发布维护流程](docs/RELEASING.md) · [版本说明](docs/releases/0.5.0.md)
+
+## 致谢与许可
+
+本项目是 [ChenRuoT/SimpleHitMarker](https://github.com/ChenRuoT/SimpleHitMarker) 的 IL2CPP 后继项目。
+沿用旧项目致谢，感谢 [kmyuhkyuk](https://github.com/kmyuhkyuk)、[Amands2Mello](https://github.com/Amands2Mello)
+和 [qianyelinghua](https://github.com/qianyelinghua) 的 EFT 模组带来的启发。
+视觉设计参考 Battlefield 6；感谢 SPT / SPTushonka、BepInEx、Il2CppInterop 和 TextMeshPro 的开发者。
+项目代码采用 [MIT](LICENSE.txt)，随包资源来源见 [资源与第三方说明](THIRD-PARTY-NOTICES.md)。
+
+---
+
+## 开发记录与实测结论
+
 SPTushonka / Escape From Tarkov **1.2.0.0 (build 47965)** 的命中反馈插件：**命中提示 + 伤害数字 + 击杀卡片 + 音效**。
-命中 / 伤害数字的排布与时序按旧 Mono 项目 [`SimpleHitMarker`](file:///E:/EFTDev/Client.0.16.9.5.40743/Dev/SimpleHitMarker) 的逻辑移植；
+命中 / 伤害数字的排布与时序按旧 Mono 项目 [`SimpleHitMarker`](https://github.com/ChenRuoT/SimpleHitMarker) 的逻辑移植；
 **0.4.0 起击杀卡片与命中标记按 战地 6 实录重做**：
 一张**累加式**击杀卡（窗口内连杀并到同一张卡上）+ 色块显影 / 数字滚动 / 错峰闪烁熄灭的「故障」动效 +
 多杀横幅与骷髅徽记 + 左侧放大的军衔徽章；命中标记加了深色描边（白底上不再消失）和红色的击杀扩散版。
 
-> 目标是替代旧 Mono 版 [`SimpleHitMarker`](file:///E:/EFTDev/Client.0.16.9.5.40743/Dev/SimpleHitMarker)（SPT 4.1，Mono）。
+> 目标是替代旧 Mono 版 [`SimpleHitMarker`](https://github.com/ChenRuoT/SimpleHitMarker)（SPT 4.1，Mono）。
 > 迁移到 IL2CPP 后旧流程整体失效，本文档记录的是**实测过**的结论。
 >
-> AI / 新同事请先读 [`AGENTS.md`](AGENTS.md)。
+> 维护者请先读本地工作入口 AGENTS.md；发布维护见 [docs/RELEASING.md](docs/RELEASING.md)。
 
 ---
 
-## 0. 30 秒上手
+## 0. 开发者构建入口
 
 ```powershell
 cd D:\EFTdev\dev\AyaHitmarker
@@ -432,7 +486,7 @@ BF6 的成就官方叫 **Accolades（荣誉）**：`先锋 Vanguard` / `枪手 G
   想要真值就得另找数据源。
 - **没有 Preset 系统**：旧项目的 8 套 Preset（`StyleCatalog` / `KillIconPreset`）没有移植，
   环形/辉光/缎带参数改由配置直接提供。想恢复预设时只要把这些字段做成一组配置档即可，事件层不用动。
-- **军衔图标需要自己放文件**：`Icons/RankIcons/Rank{1,5,...,75}.png`（66×66 最佳）。
+- **发布 ZIP 已包含军衔图标，源码运行时需放文件**：`Icons/RankIcons/Rank{1,5,...,75}.png`（66×66 最佳）。
   启动时就会探测一次并打日志（`[icons] PMC 军衔图标已加载 N/16` 或 `没有找到任何 PMC 军衔图标`），
   所以不会再出现“分不清是没装图标还是没碰到 PMC”的情况。缺具体档位时会**向下借用最近的可用档位**；
   换文件需要重启（只探一次）。
@@ -450,7 +504,7 @@ BF6 的成就官方叫 **Accolades（荣誉）**：`先锋 Vanguard` / `枪手 G
 
 ## 11. 排查
 
-见 [`AGENTS.md` §5 排查入口](AGENTS.md#5-排查入口) —— 那里列了所有日志关键字及其含义。
+排查日志位于游戏 BepInEx/LogOutput.log，本节列出常见问题；本地 AGENTS.md §5 提供完整维护入口。
 
 最常见的几种：
 
@@ -497,9 +551,8 @@ Add-Type 'using System.Runtime.InteropServices; public static class D { [DllImpo
 
 ```powershell
 # 需要：SPT 服务端已在监听 6969、游戏当前没在运行
-toolserify
-un_game.ps1 -Script toolserify\kill-card.txt -ShotsDir D:\shots1
-python -P toolserify\imgsheet.py D:\shots1 a_enter D:\shots_enter.png 480 690 1300 950 3 520   # 一段动画拼成联系表
+tools\verify\run_game.ps1 -Script tools\verify\kill-card.txt -ShotsDir D:\shots\v1
+python -P tools\verify\imgsheet.py D:\shots\v1 a_enter D:\shots\a_enter.png 480 690 1300 950 3 520   # 一段动画拼成联系表
 ```
 
 脚本一行一条指令（`#` 注释）：`clock manual`（UI 时钟手动步进）、`step 0.0333`、`kill N`（造脚本表第 N 条击杀，
@@ -525,6 +578,7 @@ python -P toolserify\imgsheet.py D:\shots1 a_enter D:\shots_enter.png 480 690
 
 | 版本 | 内容 |
 |---|---|
+| 0.5.0 | 设置面板分类与控件改进、程序化徽记调整；加入完整资源的安装 ZIP、统一版本号与自动 CI / tag / Release 流程。离线验证不能替代设置面板实机验收。 |
 | 0.4.0 | **击杀卡片与命中标记按 战地 6 实录重做**（两段原片逐帧拆解，见 §9）：**累加式卡片**（窗口内连杀并到同一张卡：骷髅并排 / 分数累计并从屏幕上的数字滚起 / 标签取并集 / 横幅与名字换最新）；**故障动效**（入场：标签最先出现、元素先以实心色块闪出再显影、分数数字乱跳着滚到终值；退场：骷髅+名字先闪灭、标签随后、分数最后硬切；可在配置里关掉）；**多杀横幅**（浅钢色底 + 深色字 + 档次强调色，双杀~五杀右边带骷髅徽记）；**标签**（击杀 / 爆头 / 近战 / 爆炸 / 狙击 / 距离的描边小方框）；**军衔徽章挪到卡片最左边并放大**（40 → 72px + 阵营色描边底板 + 等级小标）；**程序化图标**（骷髅含爆头 V 形裂口 / 多杀徽记 / 命中标记 / 标签框，SDF 绘制，任意尺寸边缘干净）；**命中标记深色描边**（旧图在白色背景上整个消失）+ **击杀红色扩散标记** + 淡出时向外扩散；伤害数字深色描边、爆头 / 击杀配色；卡片默认水平偏移 107 → 190（分数不再压命中标记）；**一次性配置升级**（只重置值仍等于旧默认的样式项，调过的保留，旧版独有的键清出 cfg）；**DebugHarness**（环境变量驱动的脚本化进图验证，手动步进 UI 时钟 + 引擎自截图）；**修了旧版两个缺陷**：`UiTextRow/UiImageRow` 的缩放在 `Hide()` 之后永远写不进去（NaN 哨兵比较，骷髅 / 得分 / 徽章的弹出动画其实从来没生效过）；命中图标 `中心偏移` 的 Y 符号与配置说明相反（默认 `0,5` 往上抬了 5px 而不是往下），伤害数字也改为跟随同一偏移；离线测试 113 → 306 项 |
 | 0.3.0 | 击杀卡片按战地 6 重做：**修掉「击杀播报文字永远不显示」的 bug**（可见性判断循环依赖，军衔徽章/名字/阵营/详情全跟着一起出来）；新增**得分弹窗**（计数 + 上浮 + 弹出）、**成就缎带**（复仇者 / 双杀 / 狂战士 / 掠夺者 / 枪手 / 神射手… 12 种，带擦除展开与呼吸）、**连杀进度条**；卡片逐行错开滑入、骷髅回弹弹出；命中提示爆头配色/尺寸倍率/弹出；伤害数字弹出；军衔徽章改为启动时探测 + 档位向下借用 + 日志可见，**徽章默认尺寸 86→40、垂直偏移 -30→0**（86 是没显示过时的值，真渲染会盖到骷髅行）；行位置锁定到纯数学层（可离线测）+ 新增 `tests/` 离线测试（90 项）；捕获每帧字符串分配；新增 `[ui] canvas geometry` / `[kill] 屏幕坐标` 诊断行；`ExperienceTextWidth` / `ColorExperience` 等配置项改名为 `得分*` |
 | 0.2.7 | 音效在**进图时重载** —— 主菜单场景创建的 clip 会随场景切换被销毁，这是"加载正常但播放无效"的最终原因；音量项改用 `AcceptableValueRange` 真正钳制；兜底路径不再当告警 |
@@ -536,3 +590,30 @@ python -P toolserify\imgsheet.py D:\shots1 a_enter D:\shots_enter.png 480 690
 | 0.2.1 | 删掉 `GameWorld.OnDestroy` 补丁 —— IL2CPP 方法体共享导致 detour 命中 3360 个方法，游戏无法启动 |
 | 0.2.0 | IL2CPP 迁移完成：事件源换成 `GlobalEventDispatcher.OnBeingHit` + `Player.OnPlayerDeadStatic`；uGUI + TMP；Icons/Sounds 资源加载；环形/辉光特效 |
 | 0.1.0 | 探针版：验证 interop 引用链路 + 事件源判决 |
+
+
+## 14. 设置面板
+
+ConfigurationManager 的分类按使用顺序排列：00 常用与整体界面、10 命中提示、20 伤害数字、
+30–33 击杀卡片（内容 / 布局 / 配色 / 动画）、40 击杀图标特效、50 成就与计分规则、
+60 音效、90 调试与排障。常用开关、位置、大小、停留时间和主要颜色默认显示；
+细部布局、动画曲线参数、成就阈值、计分公式、自定义音效路径和排障开关需要启用
+ConfigurationManager 的 **Advanced / 高级设置**。配置版本是内部状态，不在面板显示。
+
+- 布尔值使用勾选框；伤害取值、图标来源、音效空间模式使用枚举下拉框。
+- 有范围的数值使用管理器内置滑块及数字输入；音量显示百分比，其余数值保留实际单位。
+  范围现在使用 BepInEx 的 AcceptableValueRange，手填超界值会被钳制。
+- 颜色保留原来的字符串存储，面板提供 HEX 输入、色块预览、R/G/B/A 滑块（0–255）。
+  HEX 支持 #RRGGBB 与 #RRGGBBAA。未完成或非法输入不覆盖已保存的有效颜色。
+- 命中中心偏移使用独立 X / Y 数字输入，X 向右、Y 向下；cfg 仍存储 X,Y。
+- 字体名、自定义音效路径保留文本输入；快捷键使用管理器原生按键编辑器。
+- 悬停说明注明用途、单位、依赖开关与生效时机。卡片样式在下一次击杀时完整更新，
+  音效路径在下一局开始时重载。
+
+分类调整通过 Category / Order / IsAdvanced 等显示元数据实现（ConfigPanel.cs），
+cfg 的 section、key、类型与默认值保持原有定义，配置版本仍为 2，无需删 cfg。
+因此旧文档中的“5. 界面”等是 cfg 分类，面板应到上面的新分类寻找。
+元数据采用 [ConfigurationManager 官方约定](https://github.com/BepInEx/BepInEx.ConfigurationManager/blob/master/ConfigurationManagerAttributes.cs)，不增加管理器 DLL 的硬依赖。
+
+验证边界：离线逻辑测试不加载 Unity，不能验证管理器实际排版。
+游戏内需检查 Advanced 显隐、分类顺序、枚举选择、颜色调节和重开面板后的值持久化。
