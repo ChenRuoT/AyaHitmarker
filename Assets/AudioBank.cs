@@ -122,6 +122,16 @@ internal static class AudioBank
         return clip;
     }
 
+    /// <summary>主线程低频检查已加载音效，避免场景切换后的第一发静音。</summary>
+    internal static void CheckForDestroyedClips()
+    {
+        if (_loading) return;
+        for (int i = 0; i < SlotCount; i++)
+        {
+            if (_state[i] == 1) _ = Get((SoundKind)i);
+        }
+    }
+
     internal static string SourceOf(SoundKind kind)
     {
         var s = _sources[(int)kind];
@@ -165,7 +175,13 @@ internal static class AudioBank
                     continue;
                 }
 
-                yield return LoadOne(kind, path);
+                // Unity StopCoroutine 不保证 Dispose 托管迭代器。外层显式释放时，
+                // 也必须释放当前嵌套加载，回收尚未交给缓存的请求。
+                var load = LoadOne(kind, path);
+                using (load as IDisposable)
+                {
+                    yield return load;
+                }
             }
 
             Plugin.Logger.LogInfo($"[audio] 加载完成 {DebugStatus()}");
@@ -179,141 +195,146 @@ internal static class AudioBank
     private static IEnumerator LoadOne(SoundKind kind, string path)
     {
         int i = (int)kind;
-
-        var type = AudioTypeFor(path);
-        if (type == AudioType.UNKNOWN)
-        {
-            _state[i] = 2;
-            Plugin.Logger.LogWarning($"[audio] {kind}: 不支持的扩展名 {Path.GetExtension(path)}");
-            yield break;
-        }
-
         UnityWebRequest? request = null;
+        bool retained = false;
         try
         {
-            request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, type);
 
-            // ★ 关键：Unity 的 GetAudioClip 把 compressed 写死为 true（数据保持压缩态），
-            //   于是 GetData() 只会给出全 0，而且 clip 的生命周期绑在 handler 的压缩缓冲上。
-            //   显式改成「下载完成即解压」，我们才能读到真实 PCM 并自己拥有它。
+            var type = AudioTypeFor(path);
+            if (type == AudioType.UNKNOWN)
+            {
+                _state[i] = 2;
+                Plugin.Logger.LogWarning($"[audio] {kind}: 不支持的扩展名 {Path.GetExtension(path)}");
+                yield break;
+            }
+
             try
             {
-                var handler = request.downloadHandler;
-                var audioHandler = handler?.TryCast<DownloadHandlerAudioClip>();
-                if (audioHandler != null)
+                request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, type);
+
+                // ★ 关键：Unity 的 GetAudioClip 把 compressed 写死为 true（数据保持压缩态），
+                //   于是 GetData() 只会给出全 0，而且 clip 的生命周期绑在 handler 的压缩缓冲上。
+                //   显式改成「下载完成即解压」，我们才能读到真实 PCM 并自己拥有它。
+                try
                 {
-                    audioHandler.compressed = false;
-                    audioHandler.streamAudio = false;
+                    var handler = request.downloadHandler;
+                    var audioHandler = handler?.TryCast<DownloadHandlerAudioClip>();
+                    if (audioHandler != null)
+                    {
+                        audioHandler.compressed = false;
+                        audioHandler.streamAudio = false;
+                    }
+                    else
+                    {
+                        Plugin.Logger.LogWarning($"[audio] {kind}: downloadHandler 不是 DownloadHandlerAudioClip（{handler?.GetType().Name ?? "null"}），无法关闭压缩模式");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Plugin.Logger.LogWarning($"[audio] {kind}: downloadHandler 不是 DownloadHandlerAudioClip（{handler?.GetType().Name ?? "null"}），无法关闭压缩模式");
+                    Plugin.Logger.LogWarning($"[audio] {kind}: 设置 compressed=false 失败: {ex.Message}");
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning($"[audio] {kind}: 设置 compressed=false 失败: {ex.Message}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _state[i] = 2;
-            Plugin.Logger.LogError($"[audio] {kind} 创建请求失败: {ex.Message}");
-            yield break;
-        }
-
-        if (request == null)
-        {
-            _state[i] = 2;
-            Plugin.Logger.LogError($"[audio] {kind} 创建请求返回 null");
-            yield break;
-        }
-
-        // 注意：yield return 不能出现在带 catch 的 try 里（CS1626），所以等待循环必须裸在外面。
-        UnityWebRequestAsyncOperation? op = null;
-        try
-        {
-            op = request.SendWebRequest();
-        }
-        catch (Exception ex)
-        {
-            _state[i] = 2;
-            Plugin.Logger.LogError($"[audio] {kind} 发送请求失败: {ex.Message}");
-            SafeDispose(request);
-            yield break;
-        }
-
-        while (op != null && !op.isDone) yield return null;
-
-        try
-        {
-            string? error = request.error;
-            if (!string.IsNullOrEmpty(error))
-            {
                 _state[i] = 2;
-                Plugin.Logger.LogError($"[audio] {kind} 加载失败: {error} ({path})");
-                SafeDispose(request);
+                Plugin.Logger.LogError($"[audio] {kind} 创建请求失败: {ex.Message}");
                 yield break;
             }
 
-            var clip = DownloadHandlerAudioClip.GetContent(request);
-            if (clip == null)
+            if (request == null)
             {
                 _state[i] = 2;
-                Plugin.Logger.LogError($"[audio] {kind} 解码结果为空: {path}");
-                SafeDispose(request);
+                Plugin.Logger.LogError($"[audio] {kind} 创建请求返回 null");
                 yield break;
             }
 
-            // 确保数据在内存里（compressed=false 时通常已经是）
+            // 注意：yield return 不能出现在带 catch 的 try 里（CS1626），所以等待循环必须裸在外面。
+            UnityWebRequestAsyncOperation? op = null;
             try
             {
-                if (clip.loadState != AudioDataLoadState.Loaded) clip.LoadAudioData();
+                op = request.SendWebRequest();
             }
-            catch { /* 忽略 */ }
-
-            // handler 给的 clip 没有名字，补一个方便日志辨认
-            try { if (string.IsNullOrEmpty(clip.name)) clip.name = $"AyaHitmarker.{kind}"; } catch { /* ignore */ }
-
-            float peak = MeasurePeak(clip, out bool readOk);
-
-            // 优先克隆：副本完全由我们拥有，不依赖 handler 的生命周期
-            float clonePeak = 0f;
-            AudioClip? owned = null;
-            if (peak > 0.0001f) owned = TryClone(kind, clip, out clonePeak);
-
-            if (owned != null)
+            catch (Exception ex)
             {
-                _clips[i] = owned;
-                SafeDispose(request);
-                Plugin.Logger.LogInfo(
-                    $"[audio] {kind} <- {Path.GetFileName(path)} " +
-                    $"(len={owned.length:0.###}s samples={owned.samples} ch={owned.channels} " +
-                    $"freq={owned.frequency} srcPeak={peak:0.####} clonePeak={clonePeak:0.####}) [自持副本]");
-            }
-            else
-            {
-                // 这条是**正常路径**，不是异常：实测这个 Unity/IL2CPP 组合下
-                // AudioClip.GetData() 对 DownloadHandlerAudioClip 产出的 clip 恒为全 0
-                // （即使把 handler.compressed 设成 false 也一样），所以拿不到 PCM 就直接用
-                // handler 的 clip —— 旧 Mono 项目就是这么做的。代价是必须一直持有请求。
-                _clips[i] = clip;
-                _keepAliveRequests.Add(request);
-                Plugin.Logger.LogInfo(
-                    $"[audio] {kind} <- {Path.GetFileName(path)} " +
-                    $"(len={clip.length:0.###}s samples={clip.samples} ch={clip.channels} freq={clip.frequency} " +
-                    $"loadState={SafeState(clip)} dataPeak={peak:0.####} readOk={readOk}) [持有请求保活]");
+                _state[i] = 2;
+                Plugin.Logger.LogError($"[audio] {kind} 发送请求失败: {ex.Message}");
+                yield break;
             }
 
-            _sources[i] = path;
-            _state[i] = 1;
-            _retries[i] = 0;
+            while (op != null && !op.isDone) yield return null;
+
+            try
+            {
+                string? error = request.error;
+                if (!string.IsNullOrEmpty(error))
+                {
+                    _state[i] = 2;
+                    Plugin.Logger.LogError($"[audio] {kind} 加载失败: {error} ({path})");
+                    yield break;
+                }
+
+                var clip = DownloadHandlerAudioClip.GetContent(request);
+                if (clip == null)
+                {
+                    _state[i] = 2;
+                    Plugin.Logger.LogError($"[audio] {kind} 解码结果为空: {path}");
+                    yield break;
+                }
+
+                // 确保数据在内存里（compressed=false 时通常已经是）
+                try
+                {
+                    if (clip.loadState != AudioDataLoadState.Loaded) clip.LoadAudioData();
+                }
+                catch { /* 忽略 */ }
+
+                // handler 给的 clip 没有名字，补一个方便日志辨认
+                try { if (string.IsNullOrEmpty(clip.name)) clip.name = $"AyaHitmarker.{kind}"; } catch { /* ignore */ }
+
+                float peak = MeasurePeak(clip, out bool readOk);
+
+                // 优先克隆：副本完全由我们拥有，不依赖 handler 的生命周期
+                float clonePeak = 0f;
+                AudioClip? owned = null;
+                if (peak > 0.0001f) owned = TryClone(kind, clip, out clonePeak);
+
+                if (owned != null)
+                {
+                    _clips[i] = owned;
+                    Plugin.Logger.LogInfo(
+                        $"[audio] {kind} <- {Path.GetFileName(path)} " +
+                        $"(len={owned.length:0.###}s samples={owned.samples} ch={owned.channels} " +
+                        $"freq={owned.frequency} srcPeak={peak:0.####} clonePeak={clonePeak:0.####}) [自持副本]");
+                }
+                else
+                {
+                    // 这条是**正常路径**，不是异常：实测这个 Unity/IL2CPP 组合下
+                    // AudioClip.GetData() 对 DownloadHandlerAudioClip 产出的 clip 恒为全 0
+                    // （即使把 handler.compressed 设成 false 也一样），所以拿不到 PCM 就直接用
+                    // handler 的 clip —— 旧 Mono 项目就是这么做的。代价是必须一直持有请求。
+                    _clips[i] = clip;
+                    _keepAliveRequests.Add(request);
+                    retained = true;
+                    Plugin.Logger.LogInfo(
+                        $"[audio] {kind} <- {Path.GetFileName(path)} " +
+                        $"(len={clip.length:0.###}s samples={clip.samples} ch={clip.channels} freq={clip.frequency} " +
+                        $"loadState={SafeState(clip)} dataPeak={peak:0.####} readOk={readOk}) [持有请求保活]");
+                }
+
+                _sources[i] = path;
+                _state[i] = 1;
+                _retries[i] = 0;
+            }
+            catch (Exception ex)
+            {
+                _state[i] = 2;
+                Plugin.Logger.LogError($"[audio] {kind} 加载异常: {ex}");
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            _state[i] = 2;
-            Plugin.Logger.LogError($"[audio] {kind} 加载异常: {ex}");
-            SafeDispose(request);
+            // 已交给缓存的请求必须保活；中断/失败的请求则在这里释放。
+            if (!retained) SafeDispose(request);
         }
     }
 

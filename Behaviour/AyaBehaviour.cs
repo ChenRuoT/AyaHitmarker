@@ -115,7 +115,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         _lastSoundFingerprint = SoundFingerprint();
         _lastGlowFingerprint = GlowFingerprint();
 
-        Step("audio", StartAudioLoad);
+        Step("audio", () => StartAudioLoad());
 
         var hit = Plugin.Cfg.TestHitKey.Value;
         var kill = Plugin.Cfg.TestKillKey.Value;
@@ -154,8 +154,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         _ui.ResetAll();
         _streaks.Reset();
 
-        AudioBank.Invalidate(resetRetries: true);
-        StartAudioLoad();
+        StartAudioLoad(invalidate: true);
     }
 
     private void OnRaidEnded()
@@ -164,11 +163,13 @@ internal sealed class AyaBehaviour : MonoBehaviour
         _streaks.Reset();
     }
 
-    private void StartAudioLoad()
+    private void StartAudioLoad(bool invalidate = false)
     {
         try
         {
             StopAudioLoad();
+            if (invalidate) AudioBank.Invalidate(resetRetries: true);
+            AudioBank.ConsumeReloadRequest();
 
             // WrapToIl2Cpp 把托管迭代器桥到 Unity 协程；解码在 Unity 侧异步完成，主线程不阻塞。
             _audioEnumerator = AudioBank.LoadAll();
@@ -189,6 +190,11 @@ internal sealed class AyaBehaviour : MonoBehaviour
             else if (_audioWrapped != null) StopCoroutine(_audioWrapped);
         }
         catch { /* ignore */ }
+
+        // StopCoroutine 只停止 Unity 调度，未必执行托管 finally。
+        // 显式 Dispose 释放嵌套请求并清除 AudioBank._loading，之后才能重载。
+        try { (_audioEnumerator as IDisposable)?.Dispose(); }
+        catch (Exception ex) { Plugin.Logger.LogWarning($"[audio] 清理加载协程失败: {ex.Message}"); }
 
         _audioCoroutine = null;
         _audioWrapped = null;
@@ -389,8 +395,19 @@ internal sealed class AyaBehaviour : MonoBehaviour
     /// 播放时发现某个 clip 被销毁（Unity 假 null）→ 重新加载一次。
     /// 场景切换有可能把 handler 的 clip 带走，这条是自愈路径，重试次数有上限。
     /// </summary>
+    private float _nextAudioHealthCheck;
+
     private void HandleAudioReloadRequest()
     {
+        // 场景切换也可能发生在 dispatcher 创建之后。提前发现假 null，
+        // 不必等第一次命中失败才重载；仍由这里在主线程启动协程。
+        float now = Time.unscaledTime;
+        if (!AudioBank.IsLoading && now >= _nextAudioHealthCheck)
+        {
+            _nextAudioHealthCheck = now + 0.25f;
+            AudioBank.CheckForDestroyedClips();
+        }
+
         if (!AudioBank.ReloadRequested) return;
 
         AudioBank.ConsumeReloadRequest();
@@ -420,8 +437,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         if (!string.Equals(sound, _lastSoundFingerprint, StringComparison.Ordinal))
         {
             _lastSoundFingerprint = sound;
-            AudioBank.Invalidate(resetRetries: true);
-            StartAudioLoad();
+            StartAudioLoad(invalidate: true);
         }
 
         string glow = GlowFingerprint();
