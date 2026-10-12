@@ -18,6 +18,7 @@ jobs:
   logic:
     name: Offline logic tests
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,6 +47,7 @@ jobs:
     needs: logic
     if: github.event_name != 'pull_request' && github.repository == 'ChenRuoT/AyaHitmarker'
     runs-on: windows-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
