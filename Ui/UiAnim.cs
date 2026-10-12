@@ -1,9 +1,10 @@
-using UnityEngine;
+using System;
 
 namespace AyaHitmarker.Ui;
 
 /// <summary>
-/// 缓动函数。全部是纯数学，不碰 Unity 对象，方便单独校验。
+/// 缓动函数。全部是纯数学，**不引用 UnityEngine**（用 <see cref="MathF"/> 而不是 <c>Mathf</c>），
+/// 所以能被 <c>tests/AyaHitmarker.LogicTests</c> 离线校验。
 ///
 /// 约定：<c>t</c> 是 0..1 的归一化进度，返回 0..1（<see cref="OutBack"/> 会略微超过 1，
 /// 这正是「弹一下」的手感来源）。
@@ -11,6 +12,13 @@ namespace AyaHitmarker.Ui;
 internal static class UiAnim
 {
     internal static float Clamp01(float t) => t < 0f ? 0f : (t > 1f ? 1f : t);
+
+    /// <summary>二次方缓出：比三次方更「线性」，用于数字滚动。</summary>
+    internal static float OutQuad(float t)
+    {
+        t = Clamp01(t);
+        return 1f - (1f - t) * (1f - t);
+    }
 
     /// <summary>三次方缓出：起步快、尾巴长。用于位置/宽度收敛。</summary>
     internal static float OutCubic(float t)
@@ -64,5 +72,5 @@ internal static class UiAnim
 
     /// <summary>带一点点随机感的抖动（纯函数，不需要 Random，避免影响可复现性）。</summary>
     internal static float Wobble(float time, float seed, float frequency, float amplitude)
-        => Mathf.Sin((time * frequency) + seed) * amplitude;
+        => MathF.Sin((time * frequency) + seed) * amplitude;
 }

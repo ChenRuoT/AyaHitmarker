@@ -5,7 +5,7 @@
     <AssemblyName>AyaHitmarker.LogicTests</AssemblyName>
     <RootNamespace>AyaHitmarker.LogicTests</RootNamespace>
     <IsPackable>false</IsPackable>
-    <Description>Offline tests for AyaHitmarker's pure logic (streak/achievement engine + kill card layout).</Description>
+    <Description>Offline tests for AyaHitmarker's pure logic (streak/achievement engine, kill card model/layout, glitch curves, procedural icon shapes).</Description>
   </PropertyGroup>
 
   <!--
@@ -18,6 +18,10 @@
     <Compile Include="../../Game/NameKey.cs" Link="Game/NameKey.cs" />
     <Compile Include="../../Game/BodyPartNames.cs" Link="Game/BodyPartNames.cs" />
     <Compile Include="../../Ui/KillCardLayout.cs" Link="Ui/KillCardLayout.cs" />
+    <Compile Include="../../Ui/KillCardModel.cs" Link="Ui/KillCardModel.cs" />
+    <Compile Include="../../Ui/UiAnim.cs" Link="Ui/UiAnim.cs" />
+    <Compile Include="../../Ui/GlitchMath.cs" Link="Ui/GlitchMath.cs" />
+    <Compile Include="../../Assets/IconShapes.cs" Link="Assets/IconShapes.cs" />
   </ItemGroup>
 
 </Project>
