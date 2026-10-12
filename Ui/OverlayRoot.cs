@@ -30,6 +30,9 @@ internal sealed class OverlayRoot
 
     internal bool IsReady => _root != null;
 
+    /// <summary>调试用：画布最底层垫一块纯色（<c>DebugHarness</c> 的 <c>bg</c> 指令），验证各种背景下的可读性。</summary>
+    private UiImageRow? _backdrop;
+
     internal void Ensure()
     {
         if (_root != null) return;
@@ -88,6 +91,23 @@ internal sealed class OverlayRoot
             $"[ui] canvas geometry: screen={Screen.width}x{Screen.height} " +
             $"rect={r.width:0.#}x{r.height:0.#} pivot={_rect.pivot} " +
             $"anchoredPos={_rect.anchoredPosition} scaleFactor={_canvas.scaleFactor:0.###}");
+    }
+
+    /// <summary>传 <c>null</c> 撤掉底色。底色永远是第一个子物体，所有 UI 都画在它上面。</summary>
+    internal void SetBackdrop(Color? color)
+    {
+        if (_rect == null) return;
+
+        if (!color.HasValue)
+        {
+            _backdrop?.Hide();
+            return;
+        }
+
+        _backdrop ??= UiImageRow.Create("AyaHitmarker.Backdrop", _rect);
+        _backdrop.Rt.SetAsFirstSibling();
+        var size = CanvasSize;
+        _backdrop.Apply(Vector2.zero, new Vector2(size.x + 8f, size.y + 8f), UiTheme.WhiteSprite, color.Value);
     }
 
     internal void ApplyScaleIfChanged()

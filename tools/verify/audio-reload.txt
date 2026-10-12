@@ -1,0 +1,26 @@
+# First-frame restarts interrupt the startup loader, just like raid start.
+audio reload
+audio reload
+wait 45
+audio status
+audio hit
+wait 2
+audio head
+wait 2
+audio kill
+wait 2
+audio killhead
+wait 2
+# Restart after completion, then verify every slot again.
+audio reload
+wait 3
+audio status
+audio hit
+wait 2
+audio head
+wait 2
+audio kill
+wait 2
+audio killhead
+wait 2
+quit

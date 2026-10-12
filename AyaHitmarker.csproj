@@ -71,6 +71,8 @@
     <Reference Include="UnityEngine.TextCoreTextEngineModule"><HintPath>$(InteropDir)/UnityEngine.TextCoreTextEngineModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AudioModule"><HintPath>$(InteropDir)/UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(InteropDir)/UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+    <!-- 只给 DebugHarness 的 shot 指令用（ScreenCapture.CaptureScreenshot） -->
+    <Reference Include="UnityEngine.ScreenCaptureModule"><HintPath>$(InteropDir)/UnityEngine.ScreenCaptureModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UnityWebRequestModule"><HintPath>$(InteropDir)/UnityEngine.UnityWebRequestModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UnityWebRequestAudioModule"><HintPath>$(InteropDir)/UnityEngine.UnityWebRequestAudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.TextMeshPro"><HintPath>$(InteropDir)/Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>

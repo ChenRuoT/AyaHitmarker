@@ -19,6 +19,7 @@ namespace AyaHitmarker.Behaviour;
 internal sealed class AyaBehaviour : MonoBehaviour
 {
     private readonly OverlayRoot _ui = new OverlayRoot();
+    private DebugHarness? _harness;
     private readonly SoundPlayer _sound = new SoundPlayer();
     private readonly List<HitRecord> _hits = new List<HitRecord>(32);
     private readonly List<KillRecord> _kills = new List<KillRecord>(16);
@@ -65,6 +66,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             DrainFeedback();
             _ui.Tick();
             UiClock.EndFrame();
+            _harness?.Tick();   // 在 UI 画完之后：此刻截图拿到的就是当前时钟下的画面
             _sound.Tick();      // 3D 空间模式下让声源跟随相机
             DumpDiagnostics();
         }
@@ -133,7 +135,44 @@ internal sealed class AyaBehaviour : MonoBehaviour
         // 而不是等玩家按了半天没反应才发现。
         Step("input-probe", () => { _ = UnityEngine.Input.anyKey; });
 
+        // 调试脚本（只有设置了环境变量 AYA_DEBUG_SCRIPT 才会创建，见 DebugHarness）
+        Step("harness", () => _harness = DebugHarness.TryCreate(MakeHarnessHooks()));
     }
+
+    private DebugHarness.Hooks MakeHarnessHooks() => new DebugHarness.Hooks
+    {
+        Hit = headshot =>
+        {
+            _ui.Hitmarker.Show(Vector2.zero, headshot);
+            _ui.DamageNumbers.Show(Vector2.zero, headshot ? 142f : 76f, headshot);
+        },
+        Kill = index => FireTestKill(TestKills.At(index), playSound: false),
+        Death = index =>
+        {
+            string killer = TestKills.At(index).VictimName;
+            _streaks.NoteLocalDeath(UiClock.Now, NameKey.Normalize(killer));
+        },
+        Reset = () =>
+        {
+            _ui.ResetAll();
+            _streaks.Reset();
+        },
+        Backdrop = color => _ui.SetBackdrop(color),
+        Audio = command =>
+        {
+            switch (command.ToLowerInvariant())
+            {
+                case "reload": StartAudioLoad(invalidate: true); break;
+                case "hit": _sound.PlayHit(false); break;
+                case "head": _sound.PlayHit(true); break;
+                case "kill": _sound.PlayKill(false); break;
+                case "killhead": _sound.PlayKill(true); break;
+                case "status": break;
+                default: throw new ArgumentException($"未知音频指令: {command}");
+            }
+            Plugin.Logger.LogInfo($"[harness] audio {command}: loading={AudioBank.IsLoading} {AudioBank.DebugStatus()}");
+        },
+    };
 
     private static void Step(string label, Action action)
     {

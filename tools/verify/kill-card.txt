@@ -1,0 +1,74 @@
+# DebugHarness 示例脚本：击杀卡片的入场 / 退场 / 连杀累加 / 各种背景 / 命中标记。
+# 指令清单见 Behaviour/DebugHarness.cs；用法见同目录 run_game.ps1。
+#
+# 约定：手动时钟下，每条指令占一帧；`kill` 之后的第一帧画的是 age=0 的状态，所以紧跟 `shot` / `seq` 就能拍到入场第 0 帧。
+# 缺省参数下卡片总时长 4.2s（停留 3.7s + 退场 0.5s）。
+
+wait 45                      # 等游戏进到主菜单（背景用 bg 垫成纯色时这个等待可以缩短）
+log === start ===
+clock manual
+
+# ---------------------------------------------------------------- A. 单杀：入场逐帧 → 稳定 → 退场逐帧
+reset
+bg dark
+step 1
+kill 1
+seq a_enter 10 0.0333        # 0 ~ 0.3s，每帧一张
+step 1.4
+shot a_hold
+step 1.8                     # 推到退场开始（3.7s）前
+seq a_exit 14 0.0333
+
+# ---------------------------------------------------------------- B. 连杀累加的稳定态（2 ~ 6 号击杀依次打出来）
+reset
+bg dark
+step 1
+kill 2
+step 0.5
+shot b_single
+kill 3
+step 0.9
+shot b_dbl
+kill 4
+step 0.9
+shot b_triple
+kill 5
+step 0.9
+shot b_quad
+kill 6
+step 0.9
+shot b_penta
+
+# ---------------------------------------------------------------- C. 各种背景下的可读性
+reset
+bg white
+step 1
+kill 8                       # 满级 PMC + 长名字
+step 1.6
+shot c_white
+reset
+bg snow
+step 1
+kill 2
+step 1.6
+shot c_snow
+
+# ---------------------------------------------------------------- D. 命中标记 / 伤害数字 / 击杀升级
+reset
+bg white
+step 1
+hit
+step 0.1
+shot d_white
+bg dark
+step 1
+hit
+step 0.25
+hit head
+step 0.25
+kill 2                       # 击杀：标记升级成红色粗线版，最新的伤害数字变红
+seq d_kill 12 0.04
+step 1
+bg off
+log === done ===
+quit
