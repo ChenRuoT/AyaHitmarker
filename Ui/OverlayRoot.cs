@@ -60,6 +60,12 @@ internal sealed class OverlayRoot
             KillFeed.Attach(_rect);
         }
 
+        // 预热程序化图标（主线程同步烘焙，别留到第一次命中 / 多杀时才烘）
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Hitmarker.Warmup();
+        KillFeed.Warmup();
+        Plugin.Logger.LogInfo($"[icons] 程序化图标预热完成（{sw.ElapsedMilliseconds} ms）");
+
         LogCanvasGeometry();
         Plugin.Logger.LogInfo($"[ui] canvas ready (scale={scale}, order={_canvas.sortingOrder}, font={(UiTheme.Font != null ? "ok" : "MISSING")})");
     }
