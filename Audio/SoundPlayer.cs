@@ -94,16 +94,6 @@ internal sealed class SoundPlayer
                 return;
             }
 
-            try
-            {
-                if (clip.loadState != AudioDataLoadState.Loaded)
-                {
-                    bool ok = clip.LoadAudioData();
-                    Plugin.Logger.LogWarning($"[audio] {kind} clip.loadState={clip.loadState}，LoadAudioData() -> {ok}");
-                }
-            }
-            catch { /* 拿不到状态就照常播放 */ }
-
             ApplySpatialMode(source);
 
             source.PlayOneShot(clip, Mathf.Clamp(vol, 0f, 1f));

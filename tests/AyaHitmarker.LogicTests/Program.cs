@@ -23,6 +23,7 @@ internal static class Program
         KillCardModelFacts.Run();
         GlitchFacts.Run();
         IconShapeFacts.Run();
+        AudioClipHealthFacts.Run();
 
         return Assert.Summary();
     }

@@ -1,0 +1,29 @@
+# Interrupt loading, then validate retention across resource cleanup.
+audio reload
+audio reload
+wait 45
+audio status
+audio cleanup
+wait 5
+audio status
+audio hit
+wait 2
+audio head
+wait 2
+audio kill
+wait 3
+audio killhead
+wait 3
+# Unload the clip data without destroying the object; health check must reload.
+audio unload
+wait 3
+audio status
+audio hit
+wait 2
+audio head
+wait 2
+audio kill
+wait 3
+audio killhead
+wait 3
+quit

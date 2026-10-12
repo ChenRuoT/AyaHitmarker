@@ -91,6 +91,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             GameEvents.RaidEnded -= OnRaidEnded;
             StopAudioLoad();
             _sound.Shutdown();
+            AudioBank.Invalidate(resetRetries: true);
         }
         catch (Exception ex)
         {
@@ -168,6 +169,8 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 case "kill": _sound.PlayKill(false); break;
                 case "killhead": _sound.PlayKill(true); break;
                 case "status": break;
+                case "unload": AudioBank.DebugUnloadData(); break;
+                case "cleanup": _ = Resources.UnloadUnusedAssets(); GC.Collect(); break;
                 default: throw new ArgumentException($"未知音频指令: {command}");
             }
             Plugin.Logger.LogInfo($"[harness] audio {command}: loading={AudioBank.IsLoading} {AudioBank.DebugStatus()}");
@@ -387,23 +390,23 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private bool _inputUnavailable;
 
     /// <summary>
-    /// 播放时发现某个 clip 被销毁（Unity 假 null）→ 重新加载一次。
+    /// 播放或健康检查发现 clip 被销毁/数据失效 → 重新加载一次。
     /// 场景切换有可能把 handler 的 clip 带走，这条是自愈路径，重试次数有上限。
     /// </summary>
     private float _nextAudioHealthCheck;
 
     private void HandleAudioReloadRequest()
     {
-        // 场景切换也可能发生在 dispatcher 创建之后。提前发现假 null，
+        // 场景切换也可能发生在 dispatcher 创建之后。提前发现假 null / 零采样空壳，
         // 不必等第一次命中失败才重载；仍由这里在主线程启动协程。
         float now = Time.unscaledTime;
         if (!AudioBank.IsLoading && now >= _nextAudioHealthCheck)
         {
             _nextAudioHealthCheck = now + 0.25f;
-            AudioBank.CheckForDestroyedClips();
+            AudioBank.CheckClipHealth();
         }
 
-        if (!AudioBank.ReloadRequested) return;
+        if (AudioBank.IsLoading || !AudioBank.ReloadRequested) return;
 
         AudioBank.ConsumeReloadRequest();
 

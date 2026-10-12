@@ -23,6 +23,8 @@ namespace AyaHitmarker.Behaviour;
 /// scale 0.1              # 自动时钟慢放
 /// wait 2.5               # 真实时间等 2.5 秒
 /// audio reload           # 中断并重载音效（复现进图/改路径时的协程中断）
+/// audio unload           # 卸载音频数据，验证非 null 音效的恢复
+/// audio cleanup          # 触发 Unity 未使用资源清理与托管 GC
 /// audio status           # 输出加载状态
 /// audio hit              # 播放音效（hit|head|kill|killhead），UI 截图指令仍保持静音
 /// reset                  # 重置 UI 与连杀状态
