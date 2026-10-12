@@ -229,318 +229,318 @@ internal sealed class AyaConfig
     internal AyaConfig(ConfigFile cfg)
     {
         // ---------------------------------------------------------------- 0. 诊断
-        DebugEnabled = cfg.Bind("0. 调试", "启用调试日志", false,
+        DebugEnabled = ConfigPanel.Bind(cfg, nameof(DebugEnabled), "0. 调试", "启用调试日志", false,
             new ConfigDescription("把每次命中/击杀/播放音效的原始字段写进 BepInEx/LogOutput.log。排查问题时再打开。"));
-        TestHotkeysEnabled = cfg.Bind("0. 调试", "启用测试快捷键", true,
+        TestHotkeysEnabled = ConfigPanel.Bind(cfg, nameof(TestHotkeysEnabled), "0. 调试", "启用测试快捷键", true,
             new ConfigDescription("按下面的键立刻造一次命中/击杀反馈，不需要真的打架。与调试日志开关无关。"));
-        TestHitKey = cfg.Bind("0. 调试", "测试命中快捷键", new KeyboardShortcut(KeyCode.F8));
-        TestKillKey = cfg.Bind("0. 调试", "测试击杀快捷键", new KeyboardShortcut(KeyCode.F9));
-        TestDeathKey = cfg.Bind("0. 调试", "测试阵亡快捷键", new KeyboardShortcut(KeyCode.F10));
-        ConfigVersion = cfg.Bind("0. 调试", "配置版本(请勿修改)", 0,
+        TestHitKey = ConfigPanel.Bind(cfg, nameof(TestHitKey), "0. 调试", "测试命中快捷键", new KeyboardShortcut(KeyCode.F8));
+        TestKillKey = ConfigPanel.Bind(cfg, nameof(TestKillKey), "0. 调试", "测试击杀快捷键", new KeyboardShortcut(KeyCode.F9));
+        TestDeathKey = ConfigPanel.Bind(cfg, nameof(TestDeathKey), "0. 调试", "测试阵亡快捷键", new KeyboardShortcut(KeyCode.F10));
+        ConfigVersion = ConfigPanel.Bind(cfg, nameof(ConfigVersion), "0. 调试", "配置版本(请勿修改)", 0,
             new ConfigDescription("内部使用：升级配置时据此一次性重置「默认值变了」的样式项。改了没有意义，下次启动会被覆盖。"));
 
         // ---------------------------------------------------------------- 1. 命中提示
         // 旧 cfg: 基础大小 71 / 显示时长 0.868 / 中心偏移 (0,5) / 动画缩放 1
-        HitMarkerEnabled = cfg.Bind("1. 命中提示", "启用", true);
-        HitBaseSize = cfg.Bind("1. 命中提示", "基础大小", 71f,
-            new ConfigDescription("Icons/hit.png 的绘制尺寸（像素）。", null, new object[] { 8f, 512f }));
-        HitDuration = cfg.Bind("1. 命中提示", "显示时长(秒)", 0.868f,
+        HitMarkerEnabled = ConfigPanel.Bind(cfg, nameof(HitMarkerEnabled), "1. 命中提示", "启用", true);
+        HitBaseSize = ConfigPanel.Bind(cfg, nameof(HitBaseSize), "1. 命中提示", "基础大小", 71f,
+            new ConfigDescription("命中图标的基础绘制尺寸（画布像素），还会叠加 UI 缩放及爆头倍率。", null, new object[] { 8f, 512f }));
+        HitDuration = ConfigPanel.Bind(cfg, nameof(HitDuration), "1. 命中提示", "显示时长(秒)", 0.868f,
             new ConfigDescription("图标从出现到完全消失的时间。", null, new object[] { 0.05f, 5f }));
-        HitMarkerAnimationScale = cfg.Bind("1. 命中提示", "动画缩放", 1f,
+        HitMarkerAnimationScale = ConfigPanel.Bind(cfg, nameof(HitMarkerAnimationScale), "1. 命中提示", "动画缩放", 1f,
             new ConfigDescription("出现瞬间的比例，在显示时长内放大到 1.0。旧配置就是 1（即不做缩放动画）。", null, new object[] { 1f, 2f }));
-        HitMarkerCenterOffset = cfg.Bind("1. 命中提示", "中心偏移(X,Y)", "0,5",
-            new ConfigDescription("相对屏幕中心的像素偏移，负 Y 向上。只在「显示在命中点」关闭时生效。"));
-        HitMarkerColor = cfg.Bind("1. 命中提示", "着色", "#FFFFFFFF",
-            new ConfigDescription("对 hit.png 做整体着色，白色 = 保持原图。"));
-        HitMarkerAtHitPoint = cfg.Bind("1. 命中提示", "显示在命中点", false,
+        HitMarkerCenterOffset = ConfigPanel.Bind(cfg, nameof(HitMarkerCenterOffset), "1. 命中提示", "中心偏移(X,Y)", "0,5",
+            new ConfigDescription("相对屏幕中心的画布像素偏移：X 正值向右，Y 正值向下。伤害数字也使用此偏移。关闭「显示在命中点」时生效；两个输入框分别填写 X、Y，小数用点。"));
+        HitMarkerColor = ConfigPanel.Bind(cfg, nameof(HitMarkerColor), "1. 命中提示", "着色", "#FFFFFFFF",
+            new ConfigDescription("命中图标的整体着色；白色保留图标原色，深色描边不随着色改变。"));
+        HitMarkerAtHitPoint = ConfigPanel.Bind(cfg, nameof(HitMarkerAtHitPoint), "1. 命中提示", "显示在命中点", false,
             new ConfigDescription(
                 "false（默认，与旧项目一致）= 固定在屏幕中心 + 上面的偏移；" +
                 "true = 把 DamageInfo.HitPoint 投影到屏幕（准星实际落点）。" +
                 "true 时若投影结果落在屏幕外会退回屏幕中心。"));
-        HitMarkerHeadshotColor = cfg.Bind("1. 命中提示", "爆头着色", "#FF4D4DFF",
+        HitMarkerHeadshotColor = ConfigPanel.Bind(cfg, nameof(HitMarkerHeadshotColor), "1. 命中提示", "爆头着色", "#FF4D4DFF",
             new ConfigDescription("爆头命中时用这个颜色代替上面的「着色」。旧项目不改色，这里默认给个红色以加强爆头反馈。"));
-        HitMarkerHeadshotScale = cfg.Bind("1. 命中提示", "爆头尺寸倍率", 1.15f,
+        HitMarkerHeadshotScale = ConfigPanel.Bind(cfg, nameof(HitMarkerHeadshotScale), "1. 命中提示", "爆头尺寸倍率", 1.15f,
             new ConfigDescription("爆头命中的图标尺寸乘数。", null, new object[] { 1f, 3f }));
-        HitMarkerPopScale = cfg.Bind("1. 命中提示", "弹出比例", 1.25f,
+        HitMarkerPopScale = ConfigPanel.Bind(cfg, nameof(HitMarkerPopScale), "1. 命中提示", "弹出比例", 1.25f,
             new ConfigDescription(
                 "命中瞬间先放大到这个比例再回弹到 1（与旧项目的「动画缩放」叠加）。" +
                 "1 = 不做弹出。", null, new object[] { 1f, 3f }));
-        HitMarkerPopDuration = cfg.Bind("1. 命中提示", "弹出时长(秒)", 0.09f,
+        HitMarkerPopDuration = ConfigPanel.Bind(cfg, nameof(HitMarkerPopDuration), "1. 命中提示", "弹出时长(秒)", 0.09f,
             new ConfigDescription("", null, new object[] { 0.01f, 1f }));
-        HitMarkerOutlineWidth = cfg.Bind("1. 命中提示", "描边宽度(像素)", 1.5f,
+        HitMarkerOutlineWidth = ConfigPanel.Bind(cfg, nameof(HitMarkerOutlineWidth), "1. 命中提示", "描边宽度(像素)", 1.5f,
             new ConfigDescription(
                 "命中图标外面的深色描边。旧图只有 ~3px 粗的白线，白色背景（雪地 / 天空）上会整个消失；" +
                 "加上描边后任何背景都看得见。0 = 不描边。仅「图标样式 = Procedural」时生效。", null, new object[] { 0f, 6f }));
-        HitMarkerExpand = cfg.Bind("1. 命中提示", "淡出时向外扩散比例", 1.12f,
+        HitMarkerExpand = ConfigPanel.Bind(cfg, nameof(HitMarkerExpand), "1. 命中提示", "淡出时向外扩散比例", 1.12f,
             new ConfigDescription("图标在淡出过程中缓缓向外撑开到这个比例（战地的命中标记就是这样往外散）。1 = 不扩散。", null, new object[] { 1f, 2f }));
-        KillMarkerEnabled = cfg.Bind("1. 命中提示", "击杀时显示红色扩散标记", true,
+        KillMarkerEnabled = ConfigPanel.Bind(cfg, nameof(KillMarkerEnabled), "1. 命中提示", "击杀时显示红色扩散标记", true,
             new ConfigDescription("击杀时命中标记变成更大的红色版本，并向外扩散（战地 6 的击杀确认）。"));
-        KillMarkerColor = cfg.Bind("1. 命中提示", "击杀标记颜色", "#FF4A3DFF");
-        KillMarkerScale = cfg.Bind("1. 命中提示", "击杀标记扩散比例", 1.6f,
+        KillMarkerColor = ConfigPanel.Bind(cfg, nameof(KillMarkerColor), "1. 命中提示", "击杀标记颜色", "#FF4A3DFF");
+        KillMarkerScale = ConfigPanel.Bind(cfg, nameof(KillMarkerScale), "1. 命中提示", "击杀标记扩散比例", 1.6f,
             new ConfigDescription("击杀标记从基础大小向外扩散到的比例。", null, new object[] { 1f, 4f }));
-        KillMarkerDuration = cfg.Bind("1. 命中提示", "击杀标记时长(秒)", 0.5f,
+        KillMarkerDuration = ConfigPanel.Bind(cfg, nameof(KillMarkerDuration), "1. 命中提示", "击杀标记时长(秒)", 0.5f,
             new ConfigDescription("", null, new object[] { 0.1f, 3f }));
 
         // ---------------------------------------------------------------- 2. 伤害数字
         // 旧 cfg: 字号 21 / 间距 8 / 多段间距 12 / 颜色 FFFFFF / 描边白 25% 不透明 / 爆头描边 FF0000
-        DamageTextEnabled = cfg.Bind("2. 伤害数字", "启用", true);
-        DamageTextMode = cfg.Bind("2. 伤害数字", "取值", DamageNumberMode.BodyOnly,
+        DamageTextEnabled = ConfigPanel.Bind(cfg, nameof(DamageTextEnabled), "2. 伤害数字", "启用", true);
+        DamageTextMode = ConfigPanel.Bind(cfg, nameof(DamageTextMode), "2. 伤害数字", "取值", DamageNumberMode.BodyOnly,
             new ConfigDescription(
                 "BodyOnly（默认，与旧项目一致）= 只算肉体伤害，打中护甲未穿透时数字为 0 → 不绘制；" +
-                "Total = 肉体 + 护甲，任何命中都有数字。"));
-        DamageTextSize = cfg.Bind("2. 伤害数字", "字号", 21,
+                "Total = 肉体 + 护甲；总伤害为 0 时仍不显示数字。"));
+        DamageTextSize = ConfigPanel.Bind(cfg, nameof(DamageTextSize), "2. 伤害数字", "字号", 21,
             new ConfigDescription("", null, new object[] { 8, 120 }));
-        DamageTextColor = cfg.Bind("2. 伤害数字", "颜色", "#FFFFFFFF");
-        DamageTextOutlineColor = cfg.Bind("2. 伤害数字", "描边颜色", "#000000D0",
+        DamageTextColor = ConfigPanel.Bind(cfg, nameof(DamageTextColor), "2. 伤害数字", "颜色", "#FFFFFFFF");
+        DamageTextOutlineColor = ConfigPanel.Bind(cfg, nameof(DamageTextOutlineColor), "2. 伤害数字", "描边颜色", "#000000D0",
             new ConfigDescription(
                 "深色描边。旧默认是「白色 25% 不透明」，白字配白描边等于没有，亮背景上看不清。" +
                 "末两位是透明度，设成 00 等于不描边。"));
-        DamageTextHeadshotOutlineColor = cfg.Bind("2. 伤害数字", "爆头描边颜色", "#000000D0");
-        DamageTextOutlineWidth = cfg.Bind("2. 伤害数字", "描边宽度", 0.24f,
+        DamageTextHeadshotOutlineColor = ConfigPanel.Bind(cfg, nameof(DamageTextHeadshotOutlineColor), "2. 伤害数字", "爆头描边颜色", "#000000D0");
+        DamageTextOutlineWidth = ConfigPanel.Bind(cfg, nameof(DamageTextOutlineWidth), "2. 伤害数字", "描边宽度", 0.24f,
             new ConfigDescription("TMP 的归一化描边宽度（0 = 关闭，0.24 约 2 像素）。", null, new object[] { 0f, 1f }));
-        DamageTextPadding = cfg.Bind("2. 伤害数字", "距图标间距", 8f,
+        DamageTextPadding = ConfigPanel.Bind(cfg, nameof(DamageTextPadding), "2. 伤害数字", "距图标间距", 8f,
             new ConfigDescription("第一个数字相对命中图标右缘的间距。", null, new object[] { 0f, 200f }));
-        DamageMultiTextPadding = cfg.Bind("2. 伤害数字", "多段伤害间距", 12f,
+        DamageMultiTextPadding = ConfigPanel.Bind(cfg, nameof(DamageMultiTextPadding), "2. 伤害数字", "多段伤害间距", 12f,
             new ConfigDescription("同一窗口内多个数字排成一行，这是彼此的间隔。", null, new object[] { 0f, 200f }));
-        DamageTextLifetime = cfg.Bind("2. 伤害数字", "存活时长(秒)", 0.868f,
+        DamageTextLifetime = ConfigPanel.Bind(cfg, nameof(DamageTextLifetime), "2. 伤害数字", "存活时长(秒)", 0.868f,
             new ConfigDescription("旧项目与命中图标共用时长；这里独立，想一致就设成和「显示时长」相同。", null, new object[] { 0.1f, 5f }));
-        DamageTextPopScale = cfg.Bind("2. 伤害数字", "弹出比例", 1.3f,
+        DamageTextPopScale = ConfigPanel.Bind(cfg, nameof(DamageTextPopScale), "2. 伤害数字", "弹出比例", 1.3f,
             new ConfigDescription("数字出现瞬间的缩放比例，在「弹出时长」内回弹到 1。1 = 不做弹出。", null, new object[] { 1f, 3f }));
-        DamageTextPopDuration = cfg.Bind("2. 伤害数字", "弹出时长(秒)", 0.12f,
+        DamageTextPopDuration = ConfigPanel.Bind(cfg, nameof(DamageTextPopDuration), "2. 伤害数字", "弹出时长(秒)", 0.12f,
             new ConfigDescription("", null, new object[] { 0.01f, 1f }));
-        DamageTextHeadshotColor = cfg.Bind("2. 伤害数字", "爆头颜色", "#FF8A7AFF",
+        DamageTextHeadshotColor = ConfigPanel.Bind(cfg, nameof(DamageTextHeadshotColor), "2. 伤害数字", "爆头颜色", "#FF8A7AFF",
             new ConfigDescription("爆头命中的数字填充色（旧项目爆头只改描边，填充仍是白色）。填成和「颜色」一样就等于不区分。"));
-        DamageTextKillColor = cfg.Bind("2. 伤害数字", "击杀颜色", "#FF4A3DFF",
+        DamageTextKillColor = ConfigPanel.Bind(cfg, nameof(DamageTextKillColor), "2. 伤害数字", "击杀颜色", "#FF4A3DFF",
             new ConfigDescription("击杀那一下的数字会变成这个颜色（战地里最后一击的数字是红的）。"));
 
         // ---------------------------------------------------------------- 3. 击杀播报
         // 卡片按战地 6 重做：一张卡累加窗口内的连续击杀（骷髅并排 / 分数累计 / 标签取并集），
         // 入场是「色块显影 + 数字滚动」，退场是「错峰闪烁熄灭」。
-        KillFeedEnabled = cfg.Bind("3. 击杀信息", "启用", true);
-        KillFeedHorizontalOffset = cfg.Bind("3. 击杀信息", "水平中心偏移", 190f,
+        KillFeedEnabled = ConfigPanel.Bind(cfg, nameof(KillFeedEnabled), "3. 击杀信息", "启用", true);
+        KillFeedHorizontalOffset = ConfigPanel.Bind(cfg, nameof(KillFeedHorizontalOffset), "3. 击杀信息", "水平中心偏移", 190f,
             new ConfigDescription(
                 "卡片脊线（骷髅 / 名字 / 标签的右对齐边）在屏幕中心**左侧**的像素数。正值向左，负值向右。" +
                 "分数从脊线往右长约 110 像素，所以默认 190 让它刚好落在准星左边、不压命中标记（旧项目的 107 会压到）。", null, new object[] { -2000f, 2000f }));
-        KillFeedVerticalOffset = cfg.Bind("3. 击杀信息", "垂直中心偏移", 0f,
+        KillFeedVerticalOffset = ConfigPanel.Bind(cfg, nameof(KillFeedVerticalOffset), "3. 击杀信息", "垂直中心偏移", 0f,
             new ConfigDescription("主行（骷髅 + 分数）的中心位置。正值向下，负值向上。", null, new object[] { -2000f, 2000f }));
-        KillFeedLineSpacing = cfg.Bind("3. 击杀信息", "行间距", 4f,
+        KillFeedLineSpacing = ConfigPanel.Bind(cfg, nameof(KillFeedLineSpacing), "3. 击杀信息", "行间距", 4f,
             new ConfigDescription("卡片相邻两行之间的空隙。", null, new object[] { 0f, 50f }));
-        KillFeedDuration = cfg.Bind("3. 击杀信息", "卡片停留时长(秒)", 4.2f,
+        KillFeedDuration = ConfigPanel.Bind(cfg, nameof(KillFeedDuration), "3. 击杀信息", "卡片停留时长(秒)", 4.2f,
             new ConfigDescription(
                 "从**最后一杀**到卡片完全消失的总时长（含最后的闪烁熄灭）。窗口内再杀一个会把卡片续上并累加。" +
                 "战地 6 实录里整张卡约 3.4 秒；这里信息更多，默认长一点。", null, new object[] { 1f, 30f }));
 
         // ---- 卡片动效 ----
-        CardGlitchEnabled = cfg.Bind("3. 击杀信息", "故障特效", true,
+        CardGlitchEnabled = ConfigPanel.Bind(cfg, nameof(CardGlitchEnabled), "3. 击杀信息", "故障特效", true,
             new ConfigDescription(
                 "战地式的故障动效：入场时元素先以实心色块闪出再显影、分数数字乱跳着滚到终值；" +
                 "退场时错峰闪烁熄灭。**关闭 = 普通淡入淡出**（对闪烁敏感的话请关掉）。"));
-        CardExitDuration = cfg.Bind("3. 击杀信息", "卡片淡出时长(秒)", 0.5f,
+        CardExitDuration = ConfigPanel.Bind(cfg, nameof(CardExitDuration), "3. 击杀信息", "卡片淡出时长(秒)", 0.5f,
             new ConfigDescription("卡片最后的退场动画有多长（骷髅 + 名字先闪灭，标签随后，分数最后硬切）。", null, new object[] { 0f, 5f }));
-        CardTextOutline = cfg.Bind("3. 击杀信息", "卡片文字描边", 0.14f,
+        CardTextOutline = ConfigPanel.Bind(cfg, nameof(CardTextOutline), "3. 击杀信息", "卡片文字描边", 0.14f,
             new ConfigDescription(
                 "卡片文字的深色描边强度（TMP 归一化宽度，0 = 不描边）。这是 24px 字号下的基准值，其他字号按比例缩放 —— " +
                 "同一个数值落在小字上会把笔画吃掉一大半。亮背景上靠它保证可读。", null, new object[] { 0f, 1f }));
 
         // 旧 cfg: 骷髅 40 / 间距 20 / 推挤速度 7
-        ShowSkull = cfg.Bind("3. 击杀信息", "显示骷髅头", true);
-        SkullSize = cfg.Bind("3. 击杀信息", "骷髅头大小", 44f,
+        ShowSkull = ConfigPanel.Bind(cfg, nameof(ShowSkull), "3. 击杀信息", "显示骷髅头", true);
+        SkullSize = ConfigPanel.Bind(cfg, nameof(SkullSize), "3. 击杀信息", "骷髅头大小", 44f,
             new ConfigDescription("骷髅本体的高度（像素）。", null, new object[] { 8f, 256f }));
-        SkullSpacing = cfg.Bind("3. 击杀信息", "骷髅头间距", 8f,
+        SkullSpacing = ConfigPanel.Bind(cfg, nameof(SkullSpacing), "3. 击杀信息", "骷髅头间距", 8f,
             new ConfigDescription("相邻骷髅之间的空隙（像素）。", null, new object[] { 0f, 200f }));
-        StreakWindow = cfg.Bind("3. 击杀信息", "连杀时间窗口(秒)", 10f,
+        StreakWindow = ConfigPanel.Bind(cfg, nameof(StreakWindow), "3. 击杀信息", "连杀时间窗口(秒)", 10f,
             new ConfigDescription("两次击杀间隔小于这个值就算连杀（连杀称号 / 进度条用）。", null, new object[] { 1f, 60f }));
-        SkullPushAnimationSpeed = cfg.Bind("3. 击杀信息", "骷髅头推挤动画速度", 7f,
+        SkullPushAnimationSpeed = ConfigPanel.Bind(cfg, nameof(SkullPushAnimationSpeed), "3. 击杀信息", "骷髅头推挤动画速度", 7f,
             new ConfigDescription("新骷髅出现时，旧骷髅向左让位的平滑速度。", null, new object[] { 1f, 30f }));
-        KillFeedMaxSkulls = cfg.Bind("3. 击杀信息", "最多骷髅数", 8,
+        KillFeedMaxSkulls = ConfigPanel.Bind(cfg, nameof(KillFeedMaxSkulls), "3. 击杀信息", "最多骷髅数", 8,
             new ConfigDescription("一张卡上最多并排几个骷髅，超出时挤掉最老的。", null, new object[] { 1, 24 }));
-        SkullPopScale = cfg.Bind("3. 击杀信息", "骷髅弹出比例", 1.35f,
+        SkullPopScale = ConfigPanel.Bind(cfg, nameof(SkullPopScale), "3. 击杀信息", "骷髅弹出比例", 1.35f,
             new ConfigDescription("新骷髅出现瞬间的缩放比例（>1 = 先放大再回弹）。", null, new object[] { 1f, 3f }));
-        SkullPopDuration = cfg.Bind("3. 击杀信息", "骷髅弹出时长(秒)", 0.16f,
+        SkullPopDuration = ConfigPanel.Bind(cfg, nameof(SkullPopDuration), "3. 击杀信息", "骷髅弹出时长(秒)", 0.16f,
             new ConfigDescription("", null, new object[] { 0.01f, 1f }));
 
         // 得分（战地式：白字，在骷髅右边）
-        ShowScore = cfg.Bind("3. 击杀信息", "显示得分", true,
-            new ConfigDescription("显示卡片累计得分。数值来自「3c. 击杀成就」的公式。"));
-        FontSizeScore = cfg.Bind("3. 击杀信息", "得分字号", 34, new ConfigDescription("", null, new object[] { 8, 72 }));
-        ColorScore = cfg.Bind("3. 击杀信息", "得分颜色", "#FFFFFFFF");
-        ScoreHorizontalOffset = cfg.Bind("3. 击杀信息", "得分水平偏移", 14f,
+        ShowScore = ConfigPanel.Bind(cfg, nameof(ShowScore), "3. 击杀信息", "显示得分", true,
+            new ConfigDescription("显示卡片累计反馈得分。公式在「50. 成就与计分规则」，不是游戏经验值。"));
+        FontSizeScore = ConfigPanel.Bind(cfg, nameof(FontSizeScore), "3. 击杀信息", "得分字号", 34, new ConfigDescription("", null, new object[] { 8, 72 }));
+        ColorScore = ConfigPanel.Bind(cfg, nameof(ColorScore), "3. 击杀信息", "得分颜色", "#FFFFFFFF");
+        ScoreHorizontalOffset = ConfigPanel.Bind(cfg, nameof(ScoreHorizontalOffset), "3. 击杀信息", "得分水平偏移", 14f,
             new ConfigDescription("得分文字的左缘相对脊线向右多少像素。", null, new object[] { -500f, 500f }));
-        ScoreCountDuration = cfg.Bind("3. 击杀信息", "得分计数字时长(秒)", 0.25f,
+        ScoreCountDuration = ConfigPanel.Bind(cfg, nameof(ScoreCountDuration), "3. 击杀信息", "得分计数字时长(秒)", 0.25f,
             new ConfigDescription("数字从原来的分数滚到新分数的时间（战地 6 实录约 0.25 秒）；0 = 直接显示终值。", null, new object[] { 0f, 2f }));
-        ScorePopScale = cfg.Bind("3. 击杀信息", "得分弹出比例", 1.15f,
+        ScorePopScale = ConfigPanel.Bind(cfg, nameof(ScorePopScale), "3. 击杀信息", "得分弹出比例", 1.15f,
             new ConfigDescription("得分每次变化时的缩放弹出比例，1 = 不弹。", null, new object[] { 1f, 3f }));
-        ScorePopDuration = cfg.Bind("3. 击杀信息", "得分弹出时长(秒)", 0.18f,
+        ScorePopDuration = ConfigPanel.Bind(cfg, nameof(ScorePopDuration), "3. 击杀信息", "得分弹出时长(秒)", 0.18f,
             new ConfigDescription("", null, new object[] { 0.01f, 1f }));
 
         // 成就横幅（战地 6 的「DOUBLE KILL」那条：浅色底 + 深色字 + 右边的骷髅徽记）
-        ShowAchievement = cfg.Bind("3. 击杀信息", "显示成就缎带", true,
+        ShowAchievement = ConfigPanel.Bind(cfg, nameof(ShowAchievement), "3. 击杀信息", "显示成就缎带", true,
             new ConfigDescription("仅在触发成就（双杀 / 复仇者 / 狂战士 …）时出现在主行上方；多杀时右边带骷髅徽记。"));
-        FontSizeAchievement = cfg.Bind("3. 击杀信息", "成就字号", 18, new ConfigDescription("", null, new object[] { 8, 72 }));
-        AchievementHeight = cfg.Bind("3. 击杀信息", "成就缎带高度", 34f, new ConfigDescription("", null, new object[] { 8f, 120f }));
-        AchievementPadding = cfg.Bind("3. 击杀信息", "成就缎带左右留白", 12f,
+        FontSizeAchievement = ConfigPanel.Bind(cfg, nameof(FontSizeAchievement), "3. 击杀信息", "成就字号", 18, new ConfigDescription("", null, new object[] { 8, 72 }));
+        AchievementHeight = ConfigPanel.Bind(cfg, nameof(AchievementHeight), "3. 击杀信息", "成就缎带高度", 34f, new ConfigDescription("", null, new object[] { 8f, 120f }));
+        AchievementPadding = ConfigPanel.Bind(cfg, nameof(AchievementPadding), "3. 击杀信息", "成就缎带左右留白", 12f,
             new ConfigDescription("横幅比文字宽出来的部分。", null, new object[] { 0f, 120f }));
-        AchievementVerticalOffset = cfg.Bind("3. 击杀信息", "成就缎带垂直偏移", 0f,
+        AchievementVerticalOffset = ConfigPanel.Bind(cfg, nameof(AchievementVerticalOffset), "3. 击杀信息", "成就缎带垂直偏移", 0f,
             new ConfigDescription("相对默认位置再往上多少像素。", null, new object[] { -400f, 400f }));
-        ColorAchievementText = cfg.Bind("3. 击杀信息", "成就文字颜色", "#2E3E4EFF",
+        ColorAchievementText = ConfigPanel.Bind(cfg, nameof(ColorAchievementText), "3. 击杀信息", "成就文字颜色", "#2E3E4EFF",
             new ConfigDescription("横幅底是浅钢色（战地风格），所以字是深色。"));
-        ColorAchievementNormal = cfg.Bind("3. 击杀信息", "成就底色_普通", "#6B7C8CFF",
+        ColorAchievementNormal = ConfigPanel.Bind(cfg, nameof(ColorAchievementNormal), "3. 击杀信息", "成就底色_普通", "#6B7C8CFF",
             new ConfigDescription("横幅左缘那条**强调色**（不是整个底）：按成就档次区分。"));
-        ColorAchievementGood = cfg.Bind("3. 击杀信息", "成就底色_优秀", "#2F7BD6FF");
-        ColorAchievementGreat = cfg.Bind("3. 击杀信息", "成就底色_精英", "#E0801EFF");
-        ColorAchievementEpic = cfg.Bind("3. 击杀信息", "成就底色_史诗", "#E03A4EFF");
+        ColorAchievementGood = ConfigPanel.Bind(cfg, nameof(ColorAchievementGood), "3. 击杀信息", "成就底色_优秀", "#2F7BD6FF");
+        ColorAchievementGreat = ConfigPanel.Bind(cfg, nameof(ColorAchievementGreat), "3. 击杀信息", "成就底色_精英", "#E0801EFF");
+        ColorAchievementEpic = ConfigPanel.Bind(cfg, nameof(ColorAchievementEpic), "3. 击杀信息", "成就底色_史诗", "#E03A4EFF");
 
         // 连杀进度条
-        ShowStreakBar = cfg.Bind("3. 击杀信息", "显示连杀进度条", true,
+        ShowStreakBar = ConfigPanel.Bind(cfg, nameof(ShowStreakBar), "3. 击杀信息", "显示连杀进度条", true,
             new ConfigDescription("主行下面那条细条，显示距离下一档连杀称号的进度。"));
-        StreakBarWidth = cfg.Bind("3. 击杀信息", "进度条宽度", 120f, new ConfigDescription("", null, new object[] { 20f, 600f }));
-        StreakBarHeight = cfg.Bind("3. 击杀信息", "进度条高度", 3f, new ConfigDescription("", null, new object[] { 1f, 20f }));
-        StreakBarGap = cfg.Bind("3. 击杀信息", "进度条距骷髅间距", 4f,
+        StreakBarWidth = ConfigPanel.Bind(cfg, nameof(StreakBarWidth), "3. 击杀信息", "进度条宽度", 120f, new ConfigDescription("", null, new object[] { 20f, 600f }));
+        StreakBarHeight = ConfigPanel.Bind(cfg, nameof(StreakBarHeight), "3. 击杀信息", "进度条高度", 3f, new ConfigDescription("", null, new object[] { 1f, 20f }));
+        StreakBarGap = ConfigPanel.Bind(cfg, nameof(StreakBarGap), "3. 击杀信息", "进度条距骷髅间距", 4f,
             new ConfigDescription("主行下缘到进度条的间距；名字 / 标签 / 详情会自动往下让出这块空间。", null, new object[] { 0f, 60f }));
-        ColorStreakBar = cfg.Bind("3. 击杀信息", "进度条颜色", "#FF7A18FF");
-        ColorStreakBarBack = cfg.Bind("3. 击杀信息", "进度条背景色", "#00000080");
+        ColorStreakBar = ConfigPanel.Bind(cfg, nameof(ColorStreakBar), "3. 击杀信息", "进度条颜色", "#FF7A18FF");
+        ColorStreakBarBack = ConfigPanel.Bind(cfg, nameof(ColorStreakBarBack), "3. 击杀信息", "进度条背景色", "#00000080");
 
         // 标签（战地的 KILL / HEADSHOT 方框）
-        ShowTags = cfg.Bind("3. 击杀信息", "显示击杀标签", true,
+        ShowTags = ConfigPanel.Bind(cfg, nameof(ShowTags), "3. 击杀信息", "显示击杀标签", true,
             new ConfigDescription("名字下面的描边小方框：击杀 / 爆头（窗口内的击杀会取并集）、近战 / 爆炸 / 狙击、距离。"));
-        FontSizeTag = cfg.Bind("3. 击杀信息", "标签字号", 16, new ConfigDescription("", null, new object[] { 8, 48 }));
-        TagMinDistance = cfg.Bind("3. 击杀信息", "距离标签最小距离(米)", 20f,
+        FontSizeTag = ConfigPanel.Bind(cfg, nameof(FontSizeTag), "3. 击杀信息", "标签字号", 16, new ConfigDescription("", null, new object[] { 8, 48 }));
+        TagMinDistance = ConfigPanel.Bind(cfg, nameof(TagMinDistance), "3. 击杀信息", "距离标签最小距离(米)", 20f,
             new ConfigDescription("击杀距离达到这个值才显示距离标签；0 = 只要有距离就显示，很大的数 = 永远不显示。", null, new object[] { 0f, 1000f }));
 
-        ShowFaction = cfg.Bind("3. 击杀信息", "显示阵营文字", true,
+        ShowFaction = ConfigPanel.Bind(cfg, nameof(ShowFaction), "3. 击杀信息", "显示阵营文字", true,
             new ConfigDescription("名字前面的阵营标记（USEC / BEAR / SCAV …，按阵营着色）。"));
-        ShowFactionIcon = cfg.Bind("3. 击杀信息", "显示阵营图标", true,
+        ShowFactionIcon = ConfigPanel.Bind(cfg, nameof(ShowFactionIcon), "3. 击杀信息", "显示阵营图标", true,
             new ConfigDescription(
                 "PMC 的军衔徽章（Icons/RankIcons/RankN.png），显示在卡片**最左边**。其他阵营没有徽章图，这块不显示。"));
-        ShowLevelChip = cfg.Bind("3. 击杀信息", "徽章上显示等级", true,
+        ShowLevelChip = ConfigPanel.Bind(cfg, nameof(ShowLevelChip), "3. 击杀信息", "徽章上显示等级", true,
             new ConfigDescription("军衔徽章右下角的等级小标。"));
-        ShowPlayerName = cfg.Bind("3. 击杀信息", "显示玩家名字", true);
-        ShowKillDetails = cfg.Bind("3. 击杀信息", "显示击杀详情", true,
+        ShowPlayerName = ConfigPanel.Bind(cfg, nameof(ShowPlayerName), "3. 击杀信息", "显示玩家名字", true);
+        ShowKillDetails = ConfigPanel.Bind(cfg, nameof(ShowKillDetails), "3. 击杀信息", "显示击杀详情", true,
             new ConfigDescription("标签下面那行暗色小字：命中部位 · 武器。"));
-        ShowKillMethod = cfg.Bind("3. 击杀信息", "显示击杀方式", true,
+        ShowKillMethod = ConfigPanel.Bind(cfg, nameof(ShowKillMethod), "3. 击杀信息", "显示击杀方式", true,
             new ConfigDescription("显示「近战 / 爆炸 / 狙击…」这类方式标签；枪械击杀不显示（默认方式，写了只是噪音）。"));
-        ShowBossName = cfg.Bind("3. 击杀信息", "显示首领名称", true,
+        ShowBossName = ConfigPanel.Bind(cfg, nameof(ShowBossName), "3. 击杀信息", "显示首领名称", true,
             new ConfigDescription("首领用「Killa / Glukhar / Shturman…」代替笼统的 BOSS。"));
 
         // 旧 cfg: 名字 18 / 详情 20
-        FontSizePlayerName = cfg.Bind("3. 击杀信息", "玩家名字号", 20, new ConfigDescription("", null, new object[] { 8, 48 }));
-        FontSizeKillDetails = cfg.Bind("3. 击杀信息", "击杀详情字号", 15, new ConfigDescription("", null, new object[] { 8, 48 }));
-        FactionIconSize = cfg.Bind("3. 击杀信息", "阵营图标大小", 72f,
+        FontSizePlayerName = ConfigPanel.Bind(cfg, nameof(FontSizePlayerName), "3. 击杀信息", "玩家名字号", 20, new ConfigDescription("", null, new object[] { 8, 48 }));
+        FontSizeKillDetails = ConfigPanel.Bind(cfg, nameof(FontSizeKillDetails), "3. 击杀信息", "击杀详情字号", 15, new ConfigDescription("", null, new object[] { 8, 48 }));
+        FactionIconSize = ConfigPanel.Bind(cfg, nameof(FactionIconSize), "3. 击杀信息", "阵营图标大小", 72f,
             new ConfigDescription(
                 "PMC 军衔徽章的边长（像素），外面还会垫一块 7px 边距的深色底板。贴图原始尺寸是 66×66；旧默认 40 太小，" +
                 "浅色浮雕在 40px 下只剩一团灰。", null, new object[] { 8f, 128f }));
-        FactionIconVerticalOffset = cfg.Bind("3. 击杀信息", "阵营图标垂直偏移", 0f,
+        FactionIconVerticalOffset = ConfigPanel.Bind(cfg, nameof(FactionIconVerticalOffset), "3. 击杀信息", "阵营图标垂直偏移", 0f,
             new ConfigDescription(
                 "相对默认位置上下微调（负值向上）。默认垂直居中在「主行 + 名字 + 标签」上。",
                 null, new object[] { -200f, 200f }));
 
         // 颜色：旧默认里有几个深色（USEC #003399 / Rouges #333333 / Sectant #006600），
         // 在新卡片的深色背景上几乎看不见，已改成同色相的亮色。
-        ColorFaction = cfg.Bind("3. 击杀信息", "阵营文字颜色", "#FFFFFFFF");
-        ColorPlayerName = cfg.Bind("3. 击杀信息", "玩家名字颜色", "#FF5A4DFF",
+        ColorFaction = ConfigPanel.Bind(cfg, nameof(ColorFaction), "3. 击杀信息", "阵营文字颜色", "#FFFFFFFF");
+        ColorPlayerName = ConfigPanel.Bind(cfg, nameof(ColorPlayerName), "3. 击杀信息", "玩家名字颜色", "#FF5A4DFF",
             new ConfigDescription("战地 6 里敌人的名字是这种珊瑚红；纯红在暗背景上不够亮。"));
-        ColorKillDetails = cfg.Bind("3. 击杀信息", "击杀详情颜色", "#D3D9E0FF");
-        ColorUSEC = cfg.Bind("3. 击杀信息", "颜色_USEC", "#5B9BFFFF");
-        ColorBEAR = cfg.Bind("3. 击杀信息", "颜色_BEAR", "#FF9A1FFF");
-        ColorSCAV = cfg.Bind("3. 击杀信息", "颜色_SCAV", "#FFE600FF");
-        ColorBOSS = cfg.Bind("3. 击杀信息", "颜色_BOSS", "#FF3B30FF");
-        ColorFollower = cfg.Bind("3. 击杀信息", "颜色_Follower", "#E63333FF");
-        ColorRAIDER = cfg.Bind("3. 击杀信息", "颜色_RAIDER", "#FF66B2FF");
-        ColorRouges = cfg.Bind("3. 击杀信息", "颜色_Rouges", "#9AA0A8FF");
-        ColorSectant = cfg.Bind("3. 击杀信息", "颜色_Sectant", "#3FBF5FFF");
+        ColorKillDetails = ConfigPanel.Bind(cfg, nameof(ColorKillDetails), "3. 击杀信息", "击杀详情颜色", "#D3D9E0FF");
+        ColorUSEC = ConfigPanel.Bind(cfg, nameof(ColorUSEC), "3. 击杀信息", "颜色_USEC", "#5B9BFFFF");
+        ColorBEAR = ConfigPanel.Bind(cfg, nameof(ColorBEAR), "3. 击杀信息", "颜色_BEAR", "#FF9A1FFF");
+        ColorSCAV = ConfigPanel.Bind(cfg, nameof(ColorSCAV), "3. 击杀信息", "颜色_SCAV", "#FFE600FF");
+        ColorBOSS = ConfigPanel.Bind(cfg, nameof(ColorBOSS), "3. 击杀信息", "颜色_BOSS", "#FF3B30FF");
+        ColorFollower = ConfigPanel.Bind(cfg, nameof(ColorFollower), "3. 击杀信息", "颜色_Follower", "#E63333FF");
+        ColorRAIDER = ConfigPanel.Bind(cfg, nameof(ColorRAIDER), "3. 击杀信息", "颜色_RAIDER", "#FF66B2FF");
+        ColorRouges = ConfigPanel.Bind(cfg, nameof(ColorRouges), "3. 击杀信息", "颜色_Rouges", "#9AA0A8FF");
+        ColorSectant = ConfigPanel.Bind(cfg, nameof(ColorSectant), "3. 击杀信息", "颜色_Sectant", "#3FBF5FFF");
 
         // ---------------------------------------------------------------- 3b. 击杀图标特效
-        EnableRingEffect = cfg.Bind("3b. 击杀特效", "启用环形特效", true);
-        RingHeadshotEnabled = cfg.Bind("3b. 击杀特效", "爆头时触发", true);
-        RingEffectDelay = cfg.Bind("3b. 击杀特效", "延迟(秒)", 0.1f);
-        RingEffectDuration = cfg.Bind("3b. 击杀特效", "时长(秒)", 0.3f);
-        RingExplosionSecondRingDelay = cfg.Bind("3b. 击杀特效", "爆炸第二环延迟", 0.1f);
-        RingHeadshotRadius = cfg.Bind("3b. 击杀特效", "爆头半径", 42f);
-        RingHeadshotThickness = cfg.Bind("3b. 击杀特效", "爆头粗细", 3f);
-        RingHeadshotColor = cfg.Bind("3b. 击杀特效", "爆头颜色", "#D4B800FF");
-        RingCritRadius = cfg.Bind("3b. 击杀特效", "暴击半径", 42f);
-        RingCritThickness = cfg.Bind("3b. 击杀特效", "暴击粗细", 1.8f);
-        RingCritColor = cfg.Bind("3b. 击杀特效", "暴击颜色", "#9CCB65FF");
-        RingExplosionRadius = cfg.Bind("3b. 击杀特效", "爆炸半径", 42f);
-        RingExplosionThickness = cfg.Bind("3b. 击杀特效", "爆炸粗细", 5.4f);
-        RingExplosionColor = cfg.Bind("3b. 击杀特效", "爆炸颜色", "#F77F00FF");
+        EnableRingEffect = ConfigPanel.Bind(cfg, nameof(EnableRingEffect), "3b. 击杀特效", "启用环形特效", true);
+        RingHeadshotEnabled = ConfigPanel.Bind(cfg, nameof(RingHeadshotEnabled), "3b. 击杀特效", "爆头时触发", true);
+        RingEffectDelay = ConfigPanel.Bind(cfg, nameof(RingEffectDelay), "3b. 击杀特效", "延迟(秒)", 0.1f);
+        RingEffectDuration = ConfigPanel.Bind(cfg, nameof(RingEffectDuration), "3b. 击杀特效", "时长(秒)", 0.3f);
+        RingExplosionSecondRingDelay = ConfigPanel.Bind(cfg, nameof(RingExplosionSecondRingDelay), "3b. 击杀特效", "爆炸第二环延迟", 0.1f);
+        RingHeadshotRadius = ConfigPanel.Bind(cfg, nameof(RingHeadshotRadius), "3b. 击杀特效", "爆头半径", 42f);
+        RingHeadshotThickness = ConfigPanel.Bind(cfg, nameof(RingHeadshotThickness), "3b. 击杀特效", "爆头粗细", 3f);
+        RingHeadshotColor = ConfigPanel.Bind(cfg, nameof(RingHeadshotColor), "3b. 击杀特效", "爆头颜色", "#D4B800FF");
+        RingCritRadius = ConfigPanel.Bind(cfg, nameof(RingCritRadius), "3b. 击杀特效", "暴击半径", 42f);
+        RingCritThickness = ConfigPanel.Bind(cfg, nameof(RingCritThickness), "3b. 击杀特效", "暴击粗细", 1.8f);
+        RingCritColor = ConfigPanel.Bind(cfg, nameof(RingCritColor), "3b. 击杀特效", "暴击颜色", "#9CCB65FF");
+        RingExplosionRadius = ConfigPanel.Bind(cfg, nameof(RingExplosionRadius), "3b. 击杀特效", "爆炸半径", 42f);
+        RingExplosionThickness = ConfigPanel.Bind(cfg, nameof(RingExplosionThickness), "3b. 击杀特效", "爆炸粗细", 5.4f);
+        RingExplosionColor = ConfigPanel.Bind(cfg, nameof(RingExplosionColor), "3b. 击杀特效", "爆炸颜色", "#F77F00FF");
 
-        EnableIconGlow = cfg.Bind("3b. 击杀特效", "启用图标辉光", true);
-        IconGlowColor = cfg.Bind("3b. 击杀特效", "辉光颜色", "#FFFFFFFF");
-        IconGlowIntensity = cfg.Bind("3b. 击杀特效", "辉光强度", 0.45f,
+        EnableIconGlow = ConfigPanel.Bind(cfg, nameof(EnableIconGlow), "3b. 击杀特效", "启用图标辉光", true);
+        IconGlowColor = ConfigPanel.Bind(cfg, nameof(IconGlowColor), "3b. 击杀特效", "辉光颜色", "#FFFFFFFF");
+        IconGlowIntensity = ConfigPanel.Bind(cfg, nameof(IconGlowIntensity), "3b. 击杀特效", "辉光强度", 0.45f,
             new ConfigDescription("", null, new object[] { 0f, 2f }));
-        IconGlowSize = cfg.Bind("3b. 击杀特效", "辉光扩散(像素)", 4f,
+        IconGlowSize = ConfigPanel.Bind(cfg, nameof(IconGlowSize), "3b. 击杀特效", "辉光扩散(像素)", 4f,
             new ConfigDescription("改动会触发辉光纹理重烘（有缓存）。", null, new object[] { 0f, 32f }));
 
         // ---------------------------------------------------------------- 3c. 击杀成就 / 连杀
         // 「连杀重置窗口」复用 3. 击杀信息 里的「连杀时间窗口」，这里不重复给。
-        RevengeWindow = cfg.Bind("3c. 击杀成就", "复仇判定窗口(秒)", 120f,
+        RevengeWindow = ConfigPanel.Bind(cfg, nameof(RevengeWindow), "3c. 击杀成就", "复仇判定窗口(秒)", 120f,
             new ConfigDescription("记下「谁杀了我」，在这个时间窗内击杀同一人 = 复仇者。", null, new object[] { 5f, 3600f }));
-        MultiKillWindow = cfg.Bind("3c. 击杀成就", "多杀判定窗口(秒)", 2.5f,
+        MultiKillWindow = ConfigPanel.Bind(cfg, nameof(MultiKillWindow), "3c. 击杀成就", "多杀判定窗口(秒)", 2.5f,
             new ConfigDescription("两次击杀间隔小于这个值 → 双杀 / 三杀 / 多杀。", null, new object[] { 0.5f, 30f }));
-        GunnerWindow = cfg.Bind("3c. 击杀成就", "枪手判定窗口(秒)", 4f,
+        GunnerWindow = ConfigPanel.Bind(cfg, nameof(GunnerWindow), "3c. 击杀成就", "枪手判定窗口(秒)", 4f,
             new ConfigDescription("BF6「枪手」：窗口内用**不同武器**再杀一人。", null, new object[] { 0.5f, 60f }));
-        MarauderWindow = cfg.Bind("3c. 击杀成就", "掠夺者判定窗口(秒)", 8f,
+        MarauderWindow = ConfigPanel.Bind(cfg, nameof(MarauderWindow), "3c. 击杀成就", "掠夺者判定窗口(秒)", 8f,
             new ConfigDescription("BF6「掠夺者」：第 4 杀之后窗口内再杀一人。", null, new object[] { 0.5f, 60f }));
-        LongShotDistance = cfg.Bind("3c. 击杀成就", "远程判定距离(米)", 100f,
+        LongShotDistance = ConfigPanel.Bind(cfg, nameof(LongShotDistance), "3c. 击杀成就", "远程判定距离(米)", 100f,
             new ConfigDescription("", null, new object[] { 10f, 500f }));
-        MarksmanDistance = cfg.Bind("3c. 击杀成就", "神射手判定距离(米)", 200f,
+        MarksmanDistance = ConfigPanel.Bind(cfg, nameof(MarksmanDistance), "3c. 击杀成就", "神射手判定距离(米)", 200f,
             new ConfigDescription("「爆头 + 达到这个距离」= 神射手。", null, new object[] { 10f, 500f }));
-        EliteLevel = cfg.Bind("3c. 击杀成就", "精锐等级阈值", 40,
+        EliteLevel = ConfigPanel.Bind(cfg, nameof(EliteLevel), "3c. 击杀成就", "精锐等级阈值", 40,
             new ConfigDescription("击杀等级 ≥ 该值的 PMC 记为「精锐猎杀」。", null, new object[] { 1, 79 }));
 
-        ScoreBase = cfg.Bind("3c. 击杀成就", "得分基础值", 100, new ConfigDescription("", null, new object[] { 0, 10000 }));
-        ScoreHeadshotBonus = cfg.Bind("3c. 击杀成就", "得分_爆头加成", 50, new ConfigDescription("", null, new object[] { 0, 10000 }));
-        ScoreLongShotBonus = cfg.Bind("3c. 击杀成就", "得分_远程加成", 50,
+        ScoreBase = ConfigPanel.Bind(cfg, nameof(ScoreBase), "3c. 击杀成就", "得分基础值", 100, new ConfigDescription("", null, new object[] { 0, 10000 }));
+        ScoreHeadshotBonus = ConfigPanel.Bind(cfg, nameof(ScoreHeadshotBonus), "3c. 击杀成就", "得分_爆头加成", 50, new ConfigDescription("", null, new object[] { 0, 10000 }));
+        ScoreLongShotBonus = ConfigPanel.Bind(cfg, nameof(ScoreLongShotBonus), "3c. 击杀成就", "得分_远程加成", 50,
             new ConfigDescription("距离 ≥ 上面「远程判定距离」时加。", null, new object[] { 0, 10000 }));
-        ScoreRevengeBonus = cfg.Bind("3c. 击杀成就", "得分_复仇加成", 25, new ConfigDescription("", null, new object[] { 0, 10000 }));
-        ScoreMultiKillBonus = cfg.Bind("3c. 击杀成就", "得分_多杀加成", 25,
+        ScoreRevengeBonus = ConfigPanel.Bind(cfg, nameof(ScoreRevengeBonus), "3c. 击杀成就", "得分_复仇加成", 25, new ConfigDescription("", null, new object[] { 0, 10000 }));
+        ScoreMultiKillBonus = ConfigPanel.Bind(cfg, nameof(ScoreMultiKillBonus), "3c. 击杀成就", "得分_多杀加成", 25,
             new ConfigDescription("每多一个连杀加一份。", null, new object[] { 0, 10000 }));
-        ScoreBossBonus = cfg.Bind("3c. 击杀成就", "得分_首领加成", 200, new ConfigDescription("", null, new object[] { 0, 10000 }));
+        ScoreBossBonus = ConfigPanel.Bind(cfg, nameof(ScoreBossBonus), "3c. 击杀成就", "得分_首领加成", 200, new ConfigDescription("", null, new object[] { 0, 10000 }));
 
         // ---------------------------------------------------------------- 4. 音效
         // 旧 cfg: 命中 0.5 / 击杀 0.7，爆头不做区分
-        SoundEnabled = cfg.Bind("4. 音频", "启用音效", true);
-        SoundHitEnabled = cfg.Bind("4. 音频", "启用命中音效", true);
-        SoundKillEnabled = cfg.Bind("4. 音频", "启用击杀音效", true);
+        SoundEnabled = ConfigPanel.Bind(cfg, nameof(SoundEnabled), "4. 音频", "启用音效", true);
+        SoundHitEnabled = ConfigPanel.Bind(cfg, nameof(SoundHitEnabled), "4. 音频", "启用命中音效", true);
+        SoundKillEnabled = ConfigPanel.Bind(cfg, nameof(SoundKillEnabled), "4. 音频", "启用击杀音效", true);
         // 注意：音量必须用 AcceptableValueRange 而不是 ConfigDescription 的 tags。
         // tags 只给 ConfigurationManager 画滑条用，**不做钳制** —— 曾经有人把音量填成 80，
         // 于是 vol 算出来 6400，全靠代码里 Mathf.Clamp 才没变成噪音。
         var unitRange = new AcceptableValueRange<float>(0f, 1f);
-        SoundMasterVolume = cfg.Bind("4. 音频", "总音量", 1f, new ConfigDescription("0..1", unitRange));
-        SoundHitVolume = cfg.Bind("4. 音频", "命中音效音量", 0.5f, new ConfigDescription("0..1", unitRange));
-        SoundHitHeadshotVolume = cfg.Bind("4. 音频", "爆头命中音效音量", 0.5f, new ConfigDescription("0..1", unitRange));
-        SoundKillVolume = cfg.Bind("4. 音频", "击杀音效音量", 0.7f, new ConfigDescription("0..1", unitRange));
-        SoundKillHeadshotVolume = cfg.Bind("4. 音频", "爆头击杀音效音量", 0.7f, new ConfigDescription("0..1", unitRange));
+        SoundMasterVolume = ConfigPanel.Bind(cfg, nameof(SoundMasterVolume), "4. 音频", "总音量", 1f, new ConfigDescription("0..1", unitRange));
+        SoundHitVolume = ConfigPanel.Bind(cfg, nameof(SoundHitVolume), "4. 音频", "命中音效音量", 0.5f, new ConfigDescription("0..1", unitRange));
+        SoundHitHeadshotVolume = ConfigPanel.Bind(cfg, nameof(SoundHitHeadshotVolume), "4. 音频", "爆头命中音效音量", 0.5f, new ConfigDescription("0..1", unitRange));
+        SoundKillVolume = ConfigPanel.Bind(cfg, nameof(SoundKillVolume), "4. 音频", "击杀音效音量", 0.7f, new ConfigDescription("0..1", unitRange));
+        SoundKillHeadshotVolume = ConfigPanel.Bind(cfg, nameof(SoundKillHeadshotVolume), "4. 音频", "爆头击杀音效音量", 0.7f, new ConfigDescription("0..1", unitRange));
 
-        SoundFileHit = cfg.Bind("4. 音频", "自定义:命中", "", new ConfigDescription(SoundHint("hit")));
-        SoundFileHitHeadshot = cfg.Bind("4. 音频", "自定义:爆头命中", "", new ConfigDescription(SoundHint("headshot_hit")));
-        SoundFileKill = cfg.Bind("4. 音频", "自定义:击杀", "", new ConfigDescription(SoundHint("kill")));
-        SoundFileKillHeadshot = cfg.Bind("4. 音频", "自定义:爆头击杀", "", new ConfigDescription(SoundHint("headshot_kill")));
+        SoundFileHit = ConfigPanel.Bind(cfg, nameof(SoundFileHit), "4. 音频", "自定义:命中", "", new ConfigDescription(SoundHint("hit")));
+        SoundFileHitHeadshot = ConfigPanel.Bind(cfg, nameof(SoundFileHitHeadshot), "4. 音频", "自定义:爆头命中", "", new ConfigDescription(SoundHint("headshot_hit")));
+        SoundFileKill = ConfigPanel.Bind(cfg, nameof(SoundFileKill), "4. 音频", "自定义:击杀", "", new ConfigDescription(SoundHint("kill")));
+        SoundFileKillHeadshot = ConfigPanel.Bind(cfg, nameof(SoundFileKillHeadshot), "4. 音频", "自定义:爆头击杀", "", new ConfigDescription(SoundHint("headshot_kill")));
 
         // ---- 排障开关：默认全部保持旧 Mono 项目的配置（都不开） ----
-        SoundSpatialMode = cfg.Bind("4. 音频", "空间模式", SpatialMode.Flat2D,
+        SoundSpatialMode = ConfigPanel.Bind(cfg, nameof(SoundSpatialMode), "4. 音频", "空间模式", SpatialMode.Flat2D,
             new ConfigDescription(
                 "2D = 旧项目做法。这个版本的 EFT 用 Meta XR Audio 做空间音频，" +
                 "如果 2D 完全没声音，改成「3D 跟随相机」走游戏的声场管线。"));
-        SoundBypassEffects = cfg.Bind("4. 音频", "绕过效果链(排障)", false,
+        SoundBypassEffects = ConfigPanel.Bind(cfg, nameof(SoundBypassEffects), "4. 音频", "绕过效果链(排障)", false,
             new ConfigDescription(
                 "对应 AudioSource.bypassEffects + bypassListenerEffects + bypassReverbZones。" +
                 "**默认关闭** —— Unity 文档说明它会绕过 AudioListener 上的效果，而这正是 " +
                 "Meta XR Audio 渲染出声的环节，开了可能直接没声。"));
-        SoundIgnoreListenerPause = cfg.Bind("4. 音频", "无视 listener 暂停(排障)", false,
+        SoundIgnoreListenerPause = ConfigPanel.Bind(cfg, nameof(SoundIgnoreListenerPause), "4. 音频", "无视 listener 暂停(排障)", false,
             new ConfigDescription("对应 AudioSource.ignoreListenerPause。默认关闭。"));
 
         // ---------------------------------------------------------------- 5. 界面
-        UiScale = cfg.Bind("5. 界面", "UI 缩放", 1f,
+        UiScale = ConfigPanel.Bind(cfg, nameof(UiScale), "5. 界面", "UI 缩放", 1f,
             new ConfigDescription("整体缩放命中提示 / 伤害数字 / 击杀播报。", null, new object[] { 0.5f, 3f }));
-        UiSortingOrder = cfg.Bind("5. 界面", "画布层级", 9000,
+        UiSortingOrder = ConfigPanel.Bind(cfg, nameof(UiSortingOrder), "5. 界面", "画布层级", 9000,
             new ConfigDescription("越大越靠前。EFT 自己的 HUD 一般在这个值以下。"));
-        UiFontName = cfg.Bind("5. 界面", "字体名称", "",
+        UiFontName = ConfigPanel.Bind(cfg, nameof(UiFontName), "5. 界面", "字体名称", "",
             new ConfigDescription(
-                "留空 = 用游戏自带的 TMP 字体（实测可用，含西里尔字母）。" +
+                "留空 = 自动依次尝试 Arial、Segoe UI 与游戏 TMP 字体。" +
                 "想显示中文就填系统字体名，比如 Microsoft YaHei（会运行时创建 TMP 字体资源）。"));
-        IconStyleMode = cfg.Bind("5. 界面", "图标样式", IconStyle.Procedural,
+        IconStyleMode = ConfigPanel.Bind(cfg, nameof(IconStyleMode), "5. 界面", "图标样式", IconStyle.Procedural,
             new ConfigDescription(
                 "Procedural（默认）= 骷髅 / 命中标记用程序化绘制，任意大小边缘干净，自带深色描边；" +
                 "CustomFiles = 沿用 Icons/ 里的 PNG（hit.png / skull.png / skull_head.png），按原样显示、不加描边。"));

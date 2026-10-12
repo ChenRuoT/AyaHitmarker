@@ -44,13 +44,13 @@ internal static class IconShapeFacts
             var forehead = Px(n, fx, fy);
             Assert.True(forehead.a >= 250 && forehead.r >= 250 && forehead.g >= 250 && forehead.b >= 250, "额头是不透明的白色");
 
-            var (ex, ey) = SkullPx(n, H, outline, -0.168f, 0.525f);
+            var (ex, ey) = SkullPx(n, H, outline, -0.187f, 0.380f);   // 战地 6 实测眼窝中心
             var eye = Px(n, ex, ey);
             Assert.True(eye.a >= 240, "眼窝在本体里面，是不透明的");
             Assert.True(eye.r < 60 && eye.g < 60 && eye.b < 60, "眼窝是深色（战地里的眼睛是黑的，不是镂空）");
 
             // 外描边：本体边缘外 1.3px 处应是半透明的黑
-            var (ox, oy) = SkullPx(n, H, outline, -(0.455f + 1.3f / H), 0.60f);
+            var (ox, oy) = SkullPx(n, H, outline, -(0.416f + 1.3f / H), 0.705f);   // 战地 6 实测最宽处
             var ring = Px(n, ox, oy);
             Assert.True(ring.a > 100, "本体边缘外有描边（不透明度 > 100）");
             Assert.True(ring.r < 40 && ring.g < 40 && ring.b < 40, "描边是黑色，着色相乘后仍是黑");

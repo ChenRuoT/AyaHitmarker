@@ -194,10 +194,51 @@ internal static class IconShapes
         return Math.Min(a, b) - h * h * k * 0.25f;
     }
 
+    /// <summary>
+    /// 关于 y 轴对称的凸多边形（局部单位）的有向距离。<paramref name="pts"/> 是 x &gt;= 0
+    /// 那一半的轮廓（x0,y0,x1,y1,...），内部为负。用 <c>|x|</c> 取值，两半自动一致；
+    /// 外侧是精确距离，内侧在角点附近略偏小（用来画描边足够）。
+    /// </summary>
+    private static float SdConvexPolyXSym(float x, float y, float[] pts)
+    {
+        float ax = MathF.Abs(x);
+        int n = pts.Length / 2;
+        float gx = 0f, gy = 0f;
+        for (int i = 0; i < n; i++) { gx += pts[i * 2]; gy += pts[i * 2 + 1]; }
+        gx /= n;
+        gy /= n;
+
+        float d = float.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            int j = (i + 1) % n;
+            float ex = pts[j * 2] - pts[i * 2];
+            float ey = pts[j * 2 + 1] - pts[i * 2 + 1];
+            float len = MathF.Sqrt(ex * ex + ey * ey);
+            float nx = ey / len;
+            float ny = -ex / len;
+            // 法线取「背离轮廓质心」的那一侧 = 外侧
+            if (nx * (pts[i * 2] - gx) + ny * (pts[i * 2 + 1] - gy) < 0f) { nx = -nx; ny = -ny; }
+            d = MathF.Max(d, (ax - pts[i * 2]) * nx + (y - pts[i * 2 + 1]) * ny);
+        }
+        return d;
+    }
+
     // ------------------------------------------------------------------ 骷髅
 
-    /// <summary>骷髅宽高比（宽 / 高）。</summary>
-    internal const float SkullAspect = 0.92f;
+    /// <summary>骷髅宽高比（宽 / 高）。量自战地 6 的 <c>t_ui_kill_icn</c>：50.16 / 60.00。</summary>
+    internal const float SkullAspect = 0.836f;
+
+    /// <summary>
+    /// 颧骨 / 下颌的凸多边形（x &gt;= 0 的一半）。拟合自战地 6 骷髅的半宽剖面：
+    /// 太阳穴最宽 0.416（ly 0.70）→ 颧骨收到 0.349（ly 0.40）→ 下颌再鼓到 0.416（ly 0.30）
+    /// → 下巴上方收成 0.186 宽的窄颈柱。
+    /// </summary>
+    private static readonly float[] SkullJawPoly =
+    {
+        0.000f, 0.560f, 0.380f, 0.550f, 0.408f, 0.430f, 0.416f, 0.290f,
+        0.340f, 0.185f, 0.205f, 0.158f, 0.000f, 0.150f,
+    };
 
     /// <summary>骷髅位图四周为描边留的像素。烘焙器据此算「位图高 / 本体高」，把图标按本体高度摆放。</summary>
     internal static int SkullPad(float outlinePx) => (int)MathF.Ceiling(Math.Max(0f, outlinePx)) + 2;
@@ -208,26 +249,40 @@ internal static class IconShapes
     /// </summary>
     private static float SkullBody(float lx, float ly, bool headshot)
     {
-        // 颅骨：偏宽的椭圆；下颌：圆角方块；用平滑并集把颧骨过渡出来
-        float cranium = SdEllipse(lx, ly, 0f, 0.60f, 0.455f, 0.40f);
-        float jaw = SdRoundBox(lx, ly, 0f, 0.255f, 0.245f, 0.245f, 0.085f);
-        float d = SMin(cranium, jaw, 0.12f);
+        // 颅骨：椭圆。实测颅顶略平（ly 1.00 处还有 0.36 宽），所以 ry 取到 0.320
+        float cranium = SdEllipse(lx, ly, 0f, 0.705f, 0.416f, 0.320f);
+        // 面颊 / 下颌：凸多边形。椭圆在 ly 0.55 以下收得太快，撑不住下颌的宽度
+        float jaw = SdConvexPolyXSym(lx, ly, SkullJawPoly);
+        // 下巴 / 牙列：窄圆角块，下端带圆角收口
+        float chin = SdRoundBox(lx, ly, 0f, 0.100f, 0.186f, 0.105f, 0.075f);
+        float d = SMin(cranium, jaw, 0.09f);
+        d = SMin(d, chin, 0.05f);
+
+        // 颞部台阶：战地 6 的骷髅在眼睛高度两侧各有一个小缺口（实测 ly 0.40 处半宽掉到 0.349）
+        float temple = Math.Min(
+            SdRoundBox(lx, ly, 0.404f, 0.405f, 0.055f, 0.035f, 0.015f),
+            SdRoundBox(lx, ly, -0.404f, 0.405f, 0.055f, 0.035f, 0.015f));
+        d = MathF.Max(d, -temple);
 
         if (headshot)
         {
             // 颅顶 V 形裂口：顶点朝下的三角形，从颅顶外面切进去
-            float notch = SdTriangle(lx, ly, 0f, 0.80f, -0.085f, 1.06f, 0.085f, 1.06f);
+            float notch = SdTriangle(lx, ly, 0f, 0.80f, -0.078f, 1.06f, 0.078f, 1.06f);
             d = Math.Max(d, -notch);
         }
         return d;
     }
 
-    /// <summary>五官（眼窝 / 鼻孔 / 牙缝）的有向距离，负数 = 在五官里面。</summary>
+    /// <summary>
+    /// 五官（眼窝 / 鼻孔 / 牙缝）的有向距离，负数 = 在五官里面。
+    /// 战地 6 实测：眼窝中心 (±0.187, 0.380)、半轴 0.107 x 0.090（**比高更宽**）；
+    /// 鼻孔中心 ly 0.241、外接 0.135 x 0.143。旧值把眼睛画在 0.525（半张脸的高度）上。
+    /// </summary>
     private static float SkullDetails(float lx, float ly)
     {
-        float eyeL = SdEllipse(lx, ly, -0.168f, 0.525f, 0.108f, 0.122f);
-        float eyeR = SdEllipse(lx, ly, 0.168f, 0.525f, 0.108f, 0.122f);
-        float nose = SdTriangle(lx, ly, 0f, 0.405f, -0.052f, 0.318f, 0.052f, 0.318f) - 0.012f;
+        float eyeL = SdEllipse(lx, ly, -0.187f, 0.380f, 0.107f, 0.090f);
+        float eyeR = SdEllipse(lx, ly, 0.187f, 0.380f, 0.107f, 0.090f);
+        float nose = SdTriangle(lx, ly, 0f, 0.157f, -0.079f, 0.325f, 0.079f, 0.325f) - 0.012f;
 
         float d = Math.Min(Math.Min(eyeL, eyeR), nose);
 
@@ -362,8 +417,14 @@ internal static class IconShapes
     /// </summary>
     internal const float EmblemCenterShift = EmblemHeightFactor * 0.5f - EmblemMainCenter;
 
-    /// <summary>两侧速度线的相对长度（占骷髅高度的比例），上下短、中间长，合起来像一只眼睛。</summary>
-    private static readonly float[] EmblemBarLengths = { 0.38f, 0.58f, 0.70f, 0.58f, 0.38f };
+    /// <summary>
+    /// 两侧速度线的相对长度（占骷髅高度的比例），上下短、中间长，合起来像一只眼睛。
+    /// 拟合战地 6 徽记实测的 14.22 / 16.67 / 20.00（骷髅高 32）：最外侧那对占最长的 71.1%。
+    /// </summary>
+    private static readonly float[] EmblemBarLengths = { 0.444f, 0.521f, 0.625f, 0.521f, 0.444f };
+
+    /// <summary>最外侧那两道速度线相对骷髅簇多让开的距离（战地 6 实测内侧 30 对 32，差 2 单位 = 0.0625 骷髅高）。</summary>
+    private const float EmblemBarSetback = 0.0625f;
 
     /// <summary>
     /// 多杀徽记：中间一簇骷髅，两侧各 5 道长短不一的横线（战地 6 的「双杀 / 三杀 / 四杀」横幅右侧那个图标）。
@@ -376,9 +437,10 @@ internal static class IconShapes
         var skulls = EmblemLayout(killCount);
 
         float s = skullHeightPx;
-        float barThick = 0.095f;
+        // 速度线的粗细与间距量自战地 6 徽记：粗 4、间距 8（正好 1:2），骷髅高 32 -> 0.125 / 0.25
+        float barThick = 0.125f;
         float barPitch = 0.25f;
-        float barGap = 0.07f;
+        float barGap = 0.125f;   // 战地 6 里这道缝正好等于一根线的粗细（旧值 0.07 太窄）
 
         // 先量出骷髅簇的水平范围，决定画布宽度
         float clusterHalf = 0f;
@@ -405,7 +467,9 @@ internal static class IconShapes
             {
                 float len = EmblemBarLengths[i];
                 float by = (2 - i) * barPitch;                  // 局部 Y：-0.5 .. +0.5
-                float inner = clusterHalf + barGap;             // 靠近骷髅那一端
+                // 最外侧两道往回收一点：外侧轮廓因此收成一只眼睛的形状
+                float setback = (i == 0 || i == EmblemBarLengths.Length - 1) ? EmblemBarSetback : 0f;
+                float inner = clusterHalf + barGap + setback;   // 靠近骷髅那一端
                 float outer = inner + len;
                 float x0 = Math.Min(inner, outer) * side;
                 float x1 = Math.Max(inner, outer) * side;

@@ -1,0 +1,156 @@
+# AyaHitmarker 0.5.0 预览截图脚本 —— 产出 _scratch\0.5.0-preview 的 01~07 与 11。
+# 图标预览 08~10 由 `--render-icons` 单独生成（不进游戏），见同目录 README。
+#
+# 用法：
+#   tools\verify\run_game.ps1 -Script tools\verify\preview-0.5.0.txt -ShotsDir D:\shots\p5
+#   python -P tools\verify\imgsheet.py D:\shots\p5 p_single  ...（拼图见 tools\verify\preview-0.5.0-sheets.md）
+#
+# 约定（同 kill-card.txt）：手动时钟下每条指令占一帧；`kill` 之后的第一帧画的是 age=0 的状态。
+# 缺省参数下卡片总时长 4.2s（停留 3.7s + 退场 0.5s）。
+# `kill N` 取 Behaviour/TestKills.cs 的第 N 条：1 普通PMC / 2 PMC爆头 / 3 神射手(史诗) /
+# 4 SCAV近战 / 5 首领爆炸 / 6 右臂 / 7 低等级爆头 / 8 满级长名字。
+
+wait 45                      # 等游戏进到主菜单
+log === preview 0.5.0 start ===
+clock manual
+
+# ---------------------------------------------------------------- A. 单杀稳定态 / 五连杀累加
+reset
+bg dark
+step 1
+kill 1
+step 1.6
+shot p_single
+
+reset
+bg dark
+step 1
+kill 1
+step 0.9
+kill 2
+step 0.9
+kill 3
+step 0.9
+kill 4
+step 0.9
+kill 5
+step 1.2
+shot p_penta
+
+# ---------------------------------------------------------------- B. 多杀横幅：双杀 / 三杀 / 四杀
+reset
+bg dark
+step 1
+kill 1
+step 0.9
+kill 2
+step 1.0
+shot p_dbl
+kill 3
+step 1.0
+shot p_triple
+kill 4
+step 1.0
+shot p_quad
+
+# ---------------------------------------------------------------- C. 亮背景下的可读性
+reset
+bg white
+step 1
+kill 8                       # 满级 PMC + 长名字
+step 1.6
+shot p_white
+
+reset
+bg snow
+step 1
+kill 1
+step 1.6
+shot p_snow
+
+# ---------------------------------------------------------------- D. 命中标记 / 伤害数字 / 击杀红色扩散
+reset
+bg white
+step 1
+hit
+step 0.12
+shot p_hit_white
+
+reset
+bg dark
+step 1
+hit
+step 0.12
+hit head
+step 0.12
+kill 2                       # 击杀：标记升级成红色粗线版，最新的伤害数字变红
+seq p_kill 10 0.04
+
+# ---------------------------------------------------------------- E. 入场逐帧
+reset
+bg dark
+step 1
+kill 2
+step 0.4
+kill 3                       # 并进同一张卡，入场时字段最全
+seq p_enter 12 0.0333
+
+# ---------------------------------------------------------------- F. 退场逐帧
+reset
+bg dark
+step 1
+kill 1
+step 3.65                    # 推到退场开始（3.7s）
+seq p_exit 18 0.0333
+
+# ---------------------------------------------------------------- G. 击杀标记扩散序列
+reset
+bg dark
+step 1
+hit
+step 0.1
+kill 1
+seq p_kmark 12 0.04
+
+# ---------------------------------------------------------------- H. 各种绶带（非多杀成就）
+reset
+bg dark
+step 1
+kill 1                       # 本局第一杀 → 先锋
+step 1.4
+shot p_r_first
+
+reset
+bg dark
+step 1
+death 3                      # 被第 3 条打死
+step 0.2
+kill 3                       # 再杀他 → 复仇者
+step 1.4
+shot p_r_revenge
+
+reset
+bg dark
+step 1
+kill 3                       # 远程爆头 → 神射手（史诗档）
+step 1.4
+shot p_r_marksman
+
+reset
+bg dark
+step 1
+kill 4                       # SCAV 近战 → 冷兵器
+step 1.4
+shot p_r_melee
+
+reset
+bg dark
+step 1
+kill 5                       # 首领 + 爆炸 → 首领猎杀者
+step 1.4
+shot p_r_boss
+
+step 1
+bg off
+log === preview 0.5.0 done ===
+quit

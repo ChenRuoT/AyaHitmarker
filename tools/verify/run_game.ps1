@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   启动游戏并执行 DebugHarness 脚本，脚本以 `quit` 结尾，游戏自己退出。
 
