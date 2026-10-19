@@ -1,7 +1,7 @@
-# 探查局第一轮实测（2026-10-19，同一进程三个连续战局）
+# 探查局实测（2026-10-19，两轮 · 各为同一进程三连局）
 
-> 原始日志：`BepInEx/LogOutput.log`（8235 行，单个游戏进程）。行号均指该文件。
-> 探针代码：[`Game/ReconProbe.cs`](../Game/ReconProbe.cs)；本轮开始前的部署是 `3bdcd1d` / `ca26c88`。
+> 第一轮日志：`BepInEx/LogOutput.log`（8235 行，单个游戏进程）；第二轮到第二轮验证见 §5（9357 行）。
+> 探针代码：[`Game/ReconProbe.cs`](../Game/ReconProbe.cs)；第一轮开始前的部署是 `3bdcd1d` / `ca26c88`。
 
 ## 0. 结论速览
 
@@ -9,7 +9,7 @@
 |---|---|---|
 | S2 我方被打时 `OnBeingHit` 是否触发 | ✅ **触发，且 `Direction` / `MasterOrigin` / `HitNormal` 可用** | 6872–6876 连续 5 条 `[recon-hit] victimLocal=True`（被 HANAVI 打：护甲 ×3、身体 ×1、护甲 ×1），字段完整；随后 6877 阵亡 |
 | S3 真实击杀经验能否读到 | ✅ **部分能**：`Kills` / `HeadShots` / `HitCount` / `CauseBodyDamage` / `CauseArmorDamage` 战局中实时更新；`ExpKill` 只在**死亡结算后**才出现（115），战局中读不到实时经验 | 7428 / 7975 击杀后计数立即变；7439 阵亡后 `ExpKill=115`、`totalSessionExp=231` |
-| S1 命中侧 `ProfileId` | ⚠️ **被下面的 bug 挡住，待第二轮**：击杀侧可稳定拿到（`[recon-kill]` 里两个 bot 的 ProfileId 不同且完整），但玩家自己的命中事件从第 2 局起收不到 | 7422 / 7970 击杀；0 条 `attackerLocal=True` 的 `[recon-hit]` |
+| S1 命中侧 `ProfileId` | ✅ **第二轮已确认**：同一目标多次命中的 id 稳定，且与击杀事件里的 id 完全一致（9 个受害者逐一核对） | 见 §5；`[recon-hit]` / `[recon-kill]` 里的 id 可直接对上 |
 | S4 当前语言 API | ✅ 离线查清（见 [recon-s4-language.md](recon-s4-language.md)） | `EFT.LocalizationManager.Instance.Culture` |
 
 ## 1. 新发现的严重 bug：连续战局的第 2 局起命中事件丢失
@@ -78,5 +78,7 @@
 - **命中事件恢复**：第 2 局 99 条 `[recon-hit]`（修复前同场景 0 条）、第 3 局 6 条；
   `[events] 本局第一发 OnBeingHit` 在第 2、3 局都出现（第 1 局没有交火）。
 - 无插件告警 / 错误，`droppedHits=0`；命中音效 64 次、击杀音效 9 次（3 普通 + 6 爆头）与击杀数一致。
-- 0.5.3 发布说明见 [releases/0.5.3.md](releases/0.5.3.md)；S1（命中侧 ProfileId 稳定性）现在可以正常补测。
+- **S1 同时补齐**：第 2 局 9 个受害者的命中侧 `ProfileId` 与击杀侧逐一相同
+  （如 `konstantin90s` 16 次命中都是 `6ad6335970acb10ec47a7c91`），命中侧 `ProfileId` 稳定、可跨命中 / 击杀对上同一个人。
+- 0.5.3 发布说明见 [releases/0.5.3.md](releases/0.5.3.md)。**S1–S4 全部回答完毕**，0.6 的 b / c 可以排期。
 

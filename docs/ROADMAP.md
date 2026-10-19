@@ -75,10 +75,11 @@
 >
 > **第二轮实测（0.5.3 修复后，同一进程三连局）**：3 次 `raid started/ended`、每局开局 `OnBeingHit 已绑定`
 > （dispatcher 指针三局都是 `0x26DFE7244C0`，证实根因）、第 2/3 局都有 `本局第一发 OnBeingHit`；
-> 第 2 局收到 **99 条命中事件**（修复前是 0）。S2 结论保持，S1 现在可以正常补测。
+> 第 2 局收到 **99 条命中事件**（修复前是 0）。
 >
-> **剩下一件事**：S1 的命中侧 `ProfileId` 稳定性（同一目标多次命中的 id 是否一致、不同目标是否不同）。
-> 0.6 b/c 开工前打一局、对着 `[recon-hit]` 的 `victim=名字(ProfileId)` 确认即可。
+> **✅ S1–S4 全部回答完毕**：S1 命中侧 `ProfileId` 稳定且与击杀侧一致（第 2 局 9 个受害者逐一核对）；
+> S2 挨打事件 + 方向可用；S3 击杀计数实时、`ExpKill` 要等结算；S4 读 `LocalizationManager.Instance.Culture`。
+> **下一步按原计划进入 0.6：先拆 `KillFeedLayer`，再做 a / d，然后 b / c。**
 
 
 ---

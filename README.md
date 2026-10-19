@@ -571,7 +571,9 @@ BF6 的成就官方叫 **Accolades（荣誉）**：`先锋 Vanguard` / `枪手 G
   0.5.3 起每局开局强制重绑（幂等）。
 - 自己被打**只做复仇记账、不出提示**。`GameEvents.OnGlobalBeingHit` 在建 `HitRecord` 之前就按 `aggressor.IsYourPlayer` 过滤掉了「我被打」的事件，所以 `HitRecord.VictimIsLocalPlayer` 实际只会在「自己打到自己」时为 true（`AyaBehaviour` 里直接跳过）。要做被击提示得先放开这个过滤；探查局 S2 已确认 `OnBeingHit` 在受害者是本机玩家时确实触发、`Direction` / `MasterOrigin` 可用（见 `docs/recon-findings-2026-10-19.md`），0.6 e 可以直接做。
 - **伤害数字没有 BF6 的「累加」**：BF6 里同一目标的伤害在同一位置滚动累计（`32 → 67 → 99`），击杀时变红；
-  这里仍是旧项目的「一行向右」。累加需要知道「这一发打的是不是同一个人」，`HitRecord` 里没有目标标识。
+  这里仍是旧项目的「一行向右」。累加需要知道「这一发打的是不是同一个人」——探查局 S1 已确认
+  `OnBeingHit` 的受害者 `ProfileId` 稳定、且与击杀事件一致（见 `docs/recon-findings-2026-10-19.md`），
+  0.6 b 把 id 冻进 `HitRecord` 即可做。
 - **程序化骷髅是 SDF 近似，不是 BF6 的原图**：形状按实录里的轮廓（圆颅 + 窄下颌 + 爆头颅顶 V 形裂口）画的，
   放大看偏「卡通」。想用自己的图：`5. 界面 → 图标样式 = CustomFiles`（骷髅 / 命中标记用 `Icons/*.png` 原样显示，不加描边）。
 - **卡片配置改了要等下一次击杀才生效**：文字 / 标签的宽度每杀量一次（`ForceMeshUpdate`），逐帧只读缓存。
