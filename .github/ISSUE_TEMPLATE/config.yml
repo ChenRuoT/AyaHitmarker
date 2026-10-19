@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 旧版 SPT 4.x / Mono
+    url: https://github.com/ChenRuoT/SimpleHitMarker
+    about: 本仓库只支持 SPTushonka 5.x（EFT 1.2.0.0, IL2CPP）。旧版请到 SimpleHitMarker 反馈。

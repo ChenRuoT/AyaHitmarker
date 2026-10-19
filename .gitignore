@@ -20,3 +20,10 @@ artifacts/
 .buildrefs/
 tests/artifacts/
 ref/*.mp4
+
+# 本地论坛发布素材与配图生成工具
+/docs/release-kit/
+/tools/release/prepare_forum_images.py
+
+# 本地日志证据（README §8 引用，不随源码发布）
+/tools/verify/evidence/
