@@ -11,6 +11,9 @@
     <InteropDir Condition="'$(InteropDir)' == ''">$(BepInExDir)/interop</InteropDir>
     <SptPluginDir>$(BepInExDir)/plugins/sptushonka</SptPluginDir>
     <PluginDeployDir>$(BepInExDir)/plugins/AyaHitmarker</PluginDeployDir>
+    <!-- 热重载部署（-p:HotReload=true）：ScriptEngine.IL2CPP 只扫描 scripts/，且要求
+         DLL 与 Icons/Sounds 在同一子目录（引擎会把 Assembly.Location 垫成这个目录）。 -->
+    <HotReloadDeployDir>$(BepInExDir)/scripts/AyaHitmarker</HotReloadDeployDir>
   </PropertyGroup>
 
   <PropertyGroup>

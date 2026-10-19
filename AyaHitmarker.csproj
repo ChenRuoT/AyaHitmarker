@@ -85,12 +85,45 @@
     <ItemGroup><Compile Include="$(IntermediateOutputPath)ReleaseVersion.g.cs" /></ItemGroup>
   </Target>
 
-  <!-- ===== 生成后自动部署到游戏 ===== -->
-  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' != 'false'">
+  <!-- ===== 生成后自动部署到游戏 =====
+       普通构建 → BepInEx/plugins/AyaHitmarker/（正式安装位置）。
+       热重载构建（-p:HotReload=true）→ BepInEx/scripts/AyaHitmarker/，供 ScriptEngine.IL2CPP 重载。
+       同一个插件不能同时出现在 plugins/ 与 scripts/：引擎看到重名会跳过 scripts 副本，
+       热重载就静默失效了。所以两个 target 互相撤回对方的副本。 -->
+  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' != 'false' and '$(HotReload)' != 'true'">
     <MakeDir Directories="$(PluginDeployDir)" />
+    <!-- 撤回上次热重载模式：备份改名回去由下面的 Copy 覆盖，scripts/ 副本直接删掉 -->
+    <Delete Files="$(PluginDeployDir)/$(TargetName).dll.se-disabled;$(PluginDeployDir)/$(TargetName).pdb.se-disabled" />
+    <Delete Files="$(HotReloadDeployDir)/$(TargetName).dll;$(HotReloadDeployDir)/$(TargetName).pdb" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginDeployDir)" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(PluginDeployDir)" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
-    <Message Importance="high" Text="[AyaHitmarker] deployed -> $(PluginDeployDir)" />
+    <Message Importance="high" Text="[AyaHitmarker] deployed -> $(PluginDeployDir)（scripts/ 热重载副本已撤回）" />
+  </Target>
+
+  <Target Name="DeployToScripts" AfterTargets="Build" Condition="'$(HotReload)' == 'true' and '$(DeployToGame)' != 'false'">
+    <PropertyGroup>
+      <!-- 优先照抄当前安装目录的资源（保留本机改过的图标 / 音效），没有就退回仓库 ReleaseAssets/ -->
+      <HotReloadAssetSource Condition="Exists('$(PluginDeployDir)/Icons') Or Exists('$(PluginDeployDir)/Sounds')">$(PluginDeployDir)</HotReloadAssetSource>
+      <HotReloadAssetSource Condition="'$(HotReloadAssetSource)' == ''">$(MSBuildThisFileDirectory)ReleaseAssets</HotReloadAssetSource>
+    </PropertyGroup>
+    <ItemGroup>
+      <!-- 排除插件 DLL/PDB：它们由下面显式的 Copy（TargetPath）负责，且很可能刚被 Move 走了 -->
+      <HotReloadAsset Include="$(HotReloadAssetSource)/**/*"
+                      Exclude="$(HotReloadAssetSource)/*.se-disabled;$(HotReloadAssetSource)/$(TargetName).dll;$(HotReloadAssetSource)/$(TargetName).pdb" />
+    </ItemGroup>
+    <!-- 先禁用 plugins 副本：游戏以普通模式运行时 plugins DLL 被锁，Move 会失败，
+         此时还没写 scripts/，构建失败但状态不变（退出游戏再跑一次即可）。
+         MSBuild 的 Move 任务没有 Overwrite，先删掉上次留下的备份。 -->
+    <Delete Files="$(PluginDeployDir)/$(TargetName).dll.se-disabled;$(PluginDeployDir)/$(TargetName).pdb.se-disabled" />
+    <Move SourceFiles="$(PluginDeployDir)/$(TargetName).dll" DestinationFiles="$(PluginDeployDir)/$(TargetName).dll.se-disabled" Condition="Exists('$(PluginDeployDir)/$(TargetName).dll')" />
+    <Move SourceFiles="$(PluginDeployDir)/$(TargetName).pdb" DestinationFiles="$(PluginDeployDir)/$(TargetName).pdb.se-disabled" Condition="Exists('$(PluginDeployDir)/$(TargetName).pdb')" />
+    <MakeDir Directories="$(HotReloadDeployDir)" />
+    <!-- 整个照抄（Icons/、Sounds/ 保留子目录结构），再写本次构建的 DLL/PDB。
+         脚本目录里的 DLL 是字节流加载、不锁文件，所以游戏运行时也能反复覆盖。 -->
+    <Copy SourceFiles="@(HotReloadAsset)" DestinationFiles="@(HotReloadAsset->'$(HotReloadDeployDir)/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(HotReloadDeployDir)" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(HotReloadDeployDir)" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+    <Message Importance="high" Text="[AyaHitmarker] hot-reload deploy -> $(HotReloadDeployDir)（plugins/ 副本已禁用）" />
   </Target>
 
 </Project>
