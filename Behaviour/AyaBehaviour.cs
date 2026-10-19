@@ -85,25 +85,43 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     private void OnDestroy()
     {
-        try
+        // 每一项独立 try/catch：任何一项失败都不能拦住后面的清理。
+        // 共用一个 try 时，画布一旦拆失败，图标 / 程序化图标 / 字体缓存就全部漏掉 ——
+        // 热重载下表现为每代多一层画布和一套 Unity 资源（见 AGENTS.md §5 热重载迭代）。
+        Cleanup("events", () =>
         {
             GameEvents.RaidStarted -= OnRaidStarted;
             GameEvents.RaidEnded -= OnRaidEnded;
-            StopAudioLoad();
-            _sound.Shutdown();
-            AudioBank.Invalidate(resetRetries: true);
+        });
+        Cleanup("audio-load", StopAudioLoad);
+        Cleanup("audio-host", () => _sound.Shutdown());
+        Cleanup("audio-bank", () => AudioBank.Invalidate(resetRetries: true));
 
-            // 热重载路径：画布根是 DontDestroyOnLoad 的，静态图标缓存也会钉住旧纹理。
-            // 不在这里清掉，重载一次就多一层画布 / 一套纹理（见 AGENTS.md §5 热重载迭代）。
-            _ui.Destroy();
-            IconBank.Unload();
-            ProceduralIcons.ClearCache();
-            UiTheme.Unload();
-            Plugin.Logger.LogInfo("[behaviour] OnDestroy：画布 / 音频宿主 / 静态缓存已清理");
+        // 热重载路径：画布根是 DontDestroyOnLoad 的，静态图标缓存也会钉住旧纹理。
+        // 不在这里清掉，重载一次就多一层画布 / 一套纹理。
+        Cleanup("canvas", () => _ui.Destroy());
+        Cleanup("icon-bank", IconBank.Unload);
+        Cleanup("procedural-icons", ProceduralIcons.ClearCache);
+        Cleanup("theme", UiTheme.Unload);
+
+        // Plugin.Unload() 已经先调过一次 Shutdown()，但旧代次可能在同一帧还有一次 Update 在跑：
+        // Poll() 看到 dispatcher 就会重新订阅 OnBeingHit。Shutdown() 自身幂等
+        // （_staticSubscribed / _lastDispatcher 双重判空），这里补一次即可兜住。
+        Cleanup("events-shutdown", GameEvents.Shutdown);
+
+        Plugin.Logger.LogInfo("[behaviour] OnDestroy：画布 / 音频宿主 / 静态缓存已清理");
+    }
+
+    /// <summary>卸载清理的单步包装：失败只告警，不打断其余清理步骤。</summary>
+    private static void Cleanup(string label, Action action)
+    {
+        try
+        {
+            action();
         }
         catch (Exception ex)
         {
-            Plugin.Logger.LogWarning($"[behaviour] OnDestroy: {ex.Message}");
+            Plugin.Logger.LogWarning($"[behaviour] 卸载步骤 '{label}' 失败（其余继续清理）: {ex.Message}");
         }
     }
 

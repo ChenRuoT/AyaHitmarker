@@ -1,12 +1,12 @@
 # 路线图
 
-> 写于 2026-10-15，基线 0.5.1；2026-10-19 更新 0.5.2 一节的进度。这是计划，不是承诺；每完成一项就在这里勾掉或改写，结论以 README 的实测记录为准。
+> 写于 2026-10-15，基线 0.5.1；2026-10-19 发布 0.5.2 并更新进度。这是计划，不是承诺；每完成一项就在这里勾掉或改写，结论以 README 的实测记录为准。
 > 所有条目都必须遵守 [AGENTS.md](../AGENTS.md) §3 的约束（零补丁、两个事件源、单一注入 MonoBehaviour、主线程边界、uGUI 写入纪律）。
 
 ## 现状
 
-0.5.1 已发布：命中标记、伤害数字、战地 6 式累加击杀卡片、成就、音效、设置面板、配置自动升级、全自动 CI 发布。
-315 项离线测试，DebugHarness 可脚本化逐帧截图。GitHub 上尚无 issue。
+0.5.2 已发布（2026-10-19）：命中标记、伤害数字、战地 6 式累加击杀卡片、成就、音效、设置面板、配置自动升级、全自动 CI 发布。
+315 项离线测试，DebugHarness 可脚本化逐帧截图，ScriptEngine.IL2CPP 支持热重载迭代。GitHub 上尚无 issue。
 
 **规划的出发点**：两个事件源里还有大量没用上的数据。`DamageInfo` 自带 `Direction` / `MasterOrigin` / `HitNormal` /
 `Penetrated` / `BlockedBy`，`DidArmorDamage` 已在 `HitRecord` 里；`OnBeingHit` 的第二个参数就是受害者 `Player`。
@@ -14,7 +14,9 @@
 
 ---
 
-## 0.5.2 — 收尾与首装体验（2026-10-19 推进）
+## 0.5.2 — 收尾与首装体验（2026-10-19 已发布）
+
+> 发布 **v0.5.2**（2026-10-19）。发布前补完的两项收尾（卸载清理健壮性）见本节末尾。
 
 | # | 事项 | 状态 | 结果与证据 |
 |---|---|---|---|
@@ -23,13 +25,13 @@
 | 3 | **文档对齐** | ✅ | 测试数 306 → 315（README §0 / §2、tests README；AGENTS.md 本来就是 315，README §8 / §13 里的 306 是当时的历史记录，保留）；`UiTheme.Font` 注释改为实际流程；README §10 的 `VictimIsLocalPlayer` 说法更正（「我被打」在 `OnGlobalBeingHit` 里就被过滤了，要做被击提示得先放开过滤并验证 S2）；README §6 补「cfg 分组 ↔ 面板分类」对照表，并更正分组名 `4. 音效` → `4. 音频` |
 | 4 | **设置面板实机验收** | ✅ 通过，并修了一个真 bug | 用遥控模式 + 键鼠输入工具逐项验收（枚举 / 颜色 / 偏移 / 滑块 / 快捷键编辑器 / Reset / 持久化，结果见 README §14）。**发现并修复**：分类顺序不是设计的 `00 → 90`，而是绑定顺序（`90` 最前、`00` 最后）——ConfigurationManager 不看 `Order`；改成在 `AyaConfig` 构造函数最前面按期望顺序先绑每个分类的代表条目 |
 | 5 | Issue 模板 | ✅（未在 GitHub 上渲染过） | `.github/ISSUE_TEMPLATE/bug_report.yml`（插件版本 / 游戏版本 / 哪里不正常 / 现象 / 复现 / 日志 / 脱敏确认）+ `config.yml`（旧版 SPT 4.x 指向 SimpleHitMarker）。YAML 表单要推送后才能看到实际效果 |
-| 6 | 工作区清理 | ⚠️ 部分完成 | 已做：删掉空的 `y/`；`tools/verify/evidence/` 加进 `.gitignore`（README §8 本来就写明「不随源码发布」）；`.gitignore` 里本地论坛素材的两条保留。**未做**：所有改动都还没提交，`git status` 干净要靠提交（按规矩只在你要求时才提交）。AGENTS.md 是你有意 `.gitignore` 的本地入口，不算「脏」 |
+| 6 | 工作区清理 | ✅ | 已做：删掉空的 `y/`；`tools/verify/evidence/` 加进 `.gitignore`（README §8 本来就写明「不随源码发布」）；`.gitignore` 里本地论坛素材的两条保留；0.5.2 的全部改动已随 `e82da96` 等提交，`git status` 干净。AGENTS.md 是你有意 `.gitignore` 的本地入口，不算「脏」 |
 
 ### 0.5.2 期间新增的工具与发现（不在原计划里）
 
 - **热重载迭代**（ScriptEngine.IL2CPP）已在真实游戏里验证：14 代连续重载 0 error、多代后截图与第 1 代逐字节相同、画布不叠、Texture2D / Sprite / TMP 字体 / Font / Material 逐代增量实测为 0（修复前每代 +2 / 0 / 0 / +2 / +5）。详见 README §11。
 - **遥控模式**：`watch` 指令 + `tools/verify/send-input.ps1` + `remote.txt`，用于需要「先发输入再看画面」的交互式验证。
-- **待办（建议 0.5.2 内顺手做）**：`AyaBehaviour.OnDestroy` 里四项清理共用一个 `try`，任何一项抛异常会跳过后面的（画布 / 图标 / 字体）——应各自包 `try`；`Plugin.Unload()` 先 `GameEvents.Shutdown()` 再销毁组件，理论上旧代的 `Update` 若在同一帧再跑一次，`Poll()` 会重订阅 `OnBeingHit`（引擎的残留清理多半兜得住，未复现）——`OnDestroy` 末尾再幂等调一次 `Shutdown()` 即可。
+- **✅ 已完成（0.5.2 发布前）**：`AyaBehaviour.OnDestroy` 的清理改为每项独立 `try`（`Cleanup(label, action)`），任一步失败只告警、不拖累画布 / 图标 / 字体 / 音频宿主的回收；并在 `OnDestroy` 末尾补一次幂等的 `GameEvents.Shutdown()`，兜住旧代次同一帧还有一次 `Update` 时 `Poll()` 重新订阅 `OnBeingHit` 的情况（`Shutdown` 自带 `_staticSubscribed` / `_lastDispatcher` 判空，可重复调用）。
 
 ---
 
