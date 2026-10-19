@@ -49,7 +49,7 @@
 注意：探查代码只在事件线程上**读值并转字符串**（§3.4），`SessionCounters` 的读取放主线程。
 
 > **准备状态（2026-10-19）**：诊断探针已就位（[`Game/ReconProbe.cs`](../Game/ReconProbe.cs)，只在 cfg 的
-> `启用诊断日志` 打开时输出）——`[recon-hit]`（S1/S2 原始事件：`victimLocal` / `ProfileId` /
+> `0. 调试 → 启用调试日志` 打开时输出）——`[recon-hit]`（S1/S2 原始事件：`victimLocal` / `ProfileId` /
 > `Direction` / `MasterOrigin` / `HitNormal`）、`[recon-kill]`（击杀双方 ProfileId）、
 > `[recon-xp]`（主线程 1Hz 读 `SessionCounters` + `TotalSessionExperience`）、`[diag]` 增加 `reconHits` / `reconKills`。
 > **S4 已离线查清**（见 [recon-s4-language.md](recon-s4-language.md)）：没有语言枚举，读

@@ -1,7 +1,7 @@
 # 探查局（0.6 之前）操作说明
 
 > 背景与判定目标见 [ROADMAP.md](ROADMAP.md) 的「探查局」一节。探针代码是
-> [`Game/ReconProbe.cs`](../Game/ReconProbe.cs)，**只在 cfg 的 `0. 调试 → 启用诊断日志 = true` 时输出**，
+> [`Game/ReconProbe.cs`](../Game/ReconProbe.cs)，**只在 cfg 的 `0. 调试 → 启用调试日志 = true` 时输出**，
 > 不参与玩法判定、不产生 UI / 音效。
 
 ## 一、准备（已由开发侧完成）
@@ -11,10 +11,11 @@
 
    ```ini
    [0. 调试]
-   启用诊断日志 = true
+   启用调试日志 = true
    ```
 
-   （也可以在游戏内 ConfigurationManager 的 `90. 调试与排障` 里打开。）
+   （也可以在游戏内 ConfigurationManager 勾选 Advanced 后的 `90. 调试与排障` 里打开。
+   当前机器的 cfg 里它已经是 `true`，通常不用改。）
 3. 正常启动游戏（SPT 启动器）。
 
 确认探针生效：进主菜单后 `LogOutput.log` 里应能看到 `[diag]` 行，并且带
