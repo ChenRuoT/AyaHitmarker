@@ -5,7 +5,7 @@
 ```powershell
 cd D:\EFTdev\dev\AyaHitmarker
 dotnet run --project tests/AyaHitmarker.LogicTests
-# 全部通过 → ALL PASS (306 checks)，退出码 0
+# 全部通过 → ALL PASS (315 checks)，退出码 0
 # 有失败   → 逐条打印 expected/actual，退出码 1
 
 # 把程序化图标渲染成 PNG 联系表，肉眼检查（不用进游戏）

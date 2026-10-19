@@ -34,13 +34,13 @@ BepInEx 与运行时由游戏整合包提供；玩家无需安装 .NET SDK。
 
 ## 常见问题
 
-- 没有文字或中文显示异常：将字体名称设为 `Microsoft YaHei`。
-- 没声音：检查音效开关和音量；尝试音效空间模式 `FollowCamera3D`。首次加载音效可能稍有延迟。
+- 没有文字或中文显示成方块：默认用的是游戏自带字体，它的回退链已包含中文，**字体名称请保持留空**。在当前游戏版本上系统字体（包括 `Microsoft YaHei`）无法转成 TMP 字体，填了也会自动退回游戏字体。仍有问题时，请把日志里 `[ui] 字体 … 中文字形` 那一行连同日志一起反馈。
+- 没声音：检查音效开关和音量；空间模式默认是 `FollowCamera3D`（唯一在真实战局里确认过出声的模式），可以切到 `Flat2D` 对比。首次加载音效可能稍有延迟。
 - 安装后没有反馈：确认 DLL 的位置与上图一致，目录不能多套一层版本名。
 - `F8 / F9 / F10` 是测试命中、击杀和阵亡的快捷键，主菜单也可使用；可以在设置中关闭。
 - 报告问题时请附游戏版本、插件版本和 `BepInEx/LogOutput.log` 中与 AyaHitmarker 相关的日志。提交前移除日志中的个人或认证信息。
 
-[问题反馈](https://github.com/ChenRuoT/AyaHitmarker/issues) · [发布维护流程](docs/RELEASING.md) · [版本说明](docs/releases/0.5.1.md)
+[问题反馈](https://github.com/ChenRuoT/AyaHitmarker/issues) · [发布维护流程](docs/RELEASING.md) · [版本说明](docs/releases/0.5.1.md) · [路线图](docs/ROADMAP.md)
 
 ## 致谢与许可
 
@@ -72,7 +72,7 @@ SPTushonka / Escape From Tarkov **1.2.0.0 (build 47965)** 的命中反馈插件�
 ```powershell
 cd D:\EFTdev\dev\AyaHitmarker
 dotnet build                                   # 0 warning / 0 error，通过后自动部署
-dotnet run --project tests/AyaHitmarker.LogicTests   # 离线逻辑测试（306 项）
+dotnet run --project tests/AyaHitmarker.LogicTests   # 离线逻辑测试（315 项）
 dotnet run --project tests/AyaHitmarker.LogicTests -- --render-icons D:\icons   # 把程序化图标渲染成 PNG 肉眼看
 ```
 
@@ -112,7 +112,7 @@ dotnet build
 
 ```powershell
 dotnet run --project tests/AyaHitmarker.LogicTests
-# ALL PASS (306 checks) → 退出码 0；有失败逐条打印 expected/actual → 退出码 1
+# ALL PASS (315 checks) → 退出码 0；有失败逐条打印 expected/actual → 退出码 1
 ```
 
 测的是**可判定的行为契约**：哪次击杀该出哪条缎带、得分怎么加、连杀进度到哪一档、卡片行序与间距、
@@ -219,8 +219,8 @@ Harmony 把按值传的结构体 marshal 成托管对象时，postfix 拿到的�
 | `3. 击杀信息` | 开关、锚点水平/垂直偏移（**水平默认 107→190**）、行间距、**卡片停留时长**；**故障特效开关**、卡片淡出时长、卡片文字描边；骷髅大小·间距·推挤速度·上限·弹出；**得分**（字号/颜色/水平偏移/滚动时长/弹出）；**成就横幅**（字号/高度/留白/偏移/文字色/四档强调色）；**连杀进度条**；**标签**（开关/字号/距离标签最小距离）；阵营 / 军衔徽章（**默认 40→72**）/ 徽章等级小标 / 名字 / 详情 / 方式 / 首领名称各字段开关与字号；8 种阵营配色 |
 | `3b. 击杀特效` | 环形特效开关与爆头/暴击/爆炸三套半径·粗细·颜色、延迟、时长；图标辉光开关/颜色/强度/扩散（**辉光只对「自定义文件」图标样式生效**，程序化骷髅自带描边） |
 | `3c. 击杀成就` | 复仇/多杀/枪手/掠夺者四个判定窗口、远程与神射手距离、精锐等级阈值；得分基础值与五项加成（爆头/远程/复仇/多杀/首领） |
-| `4. 音效` | 开关、总音量、四类音量、四个自定义文件路径（留空自动找 `Sounds/`） |
-| `5. 界面` | UI 缩放、画布层级、**字体名称**（默认空 = 游戏自带字体；要显示中文就填 `Microsoft YaHei`）、**图标样式**（`Procedural` 程序化绘制 / `CustomFiles` 沿用 `Icons/*.png` 按原样显示） |
+| `4. 音频` | 开关、总音量、四类音量、四个自定义文件路径（留空自动找 `Sounds/`）、空间模式（`FollowCamera3D` 默认 / `Flat2D`）及两个排障项 |
+| `5. 界面` | UI 缩放、画布层级、**字体名称**（默认空 = 游戏自带字体，已含中文，**保持留空**；系统字体在本游戏版本上建不出 TMP 字体，见下文「字体」）、**图标样式**（`Procedural` 程序化绘制 / `CustomFiles` 沿用 `Icons/*.png` 按原样显示） |
 
 > **命中提示 / 伤害数字的默认值仍然是旧 Mono 项目那份已经调过的实机配置**（`com.shiunaya.simplehitmarker.cfg`）：
 > `基础大小 = 71`、`显示时长 = 0.868`、`中心偏移 = 0,5` 这些数字看着眼熟是故意的。
@@ -228,6 +228,30 @@ Harmony 把按值传的结构体 marshal 成托管对象时，postfix 拿到的�
 >
 > BepInEx 的配置文件会把**首次运行时的默认值写死在磁盘上**，所以光改代码默认值，老用户永远拿不到新值。
 > 0.4.0 起有**一次性配置升级**（见下），不用再手动删 cfg。
+
+### cfg 分组 ↔ 设置面板分类
+
+上表是 cfg 文件里的 section（键名固定，**不能改名**：改名 = 新键、旧键变孤儿）。ConfigurationManager 里另有一套按使用顺序排的分类
+（§14，只是显示元数据，不改 cfg 的 section / 键 / 默认值），对应关系：
+
+| cfg 分组 | 面板分类 |
+|---|---|
+| `0. 调试` | 90 调试与排障 |
+| `1. 命中提示` | 10 命中提示 |
+| `2. 伤害数字` | 20 伤害数字 |
+| `3. 击杀信息` | 30 击杀卡片·内容 / 31 ·布局 / 32 ·配色 / 33 ·动画（`连杀时间窗口(秒)` 一项在 50） |
+| `3b. 击杀特效` | 40 击杀图标特效 |
+| `3c. 击杀成就` | 50 成就与计分规则 |
+| `4. 音频` | 60 音效（`空间模式` 和两个排障项在 90） |
+| `5. 界面` | 00 常用与整体界面 |
+
+共 151 项配置，默认显示 47 项，其余 104 项需要在 ConfigurationManager 里开启 **Advanced / 高级设置**。
+
+### 0.5.2：配置版本 2 → 3（自动）
+
+音效 `空间模式` 的默认值从 `Flat2D` 改为 `FollowCamera3D`（原因见 §8 (b)）。升级时**只把值仍等于 `Flat2D` 的重置成新默认**；
+本来就是 `FollowCamera3D` 的（比如作者本机）不变。局限：无法区分「从没动过」和「特意选了 Flat2D」，后者会被重置一次，
+升级后版本号变成 3，不会再重置，想用 2D 再改回去即可。日志里是同一行 `[config] 配置从 v2 升级到 v3：…`。
 
 ### 0.3.x → 0.4.0 的配置升级（自动）
 
@@ -247,6 +271,25 @@ Harmony 把按值传的结构体 marshal 成托管对象时，postfix 拿到的�
 `hit.ogg` / `headshot_hit.ogg` / `kill.ogg` / `headshot_kill.ogg`（`.wav` / `.mp3` 同样支持，也支持 `hit_headshot` / `kill_headshot` 这类写法）。
 
 PMC 军衔图标（可选）：`BepInEx/plugins/AyaHitmarker/Icons/RankIcons/Rank{1,5,...,75}.png`，没有就不显示。
+
+### 字体（实测，2026-10-19）
+
+默认（`字体名称` 留空）用游戏自带的 TMP 字体（`Jovanny Lemonad - Bender Normal SDF`），它的回退链里带中文。
+进图实测（`tools/verify/font-check.txt`）：
+
+| 实验 | 结果 |
+|---|---|
+| 屏上全部中文字符（`Game/*.cs` 字符串字面量，114 个）逐个 `HasCharacter(c, searchFallbacks, tryAdd)` | **缺字形 0 个**；暗底 / 白底下 8 种击杀场景 + 5 连杀 + 复仇共 18 张截图，横幅 / 标签 / 部位 / 击杀方式（连同西里尔字母的名字）均无方块 |
+| 系统字体名 → `Font.CreateDynamicFontFromOSFont` → `TMP_FontAsset.CreateFontAsset(font)`（Microsoft YaHei / Arial / SimHei） | **全部返回 null**，Unity 报 `Unable to load font face … Include Font Data` |
+| 字体文件 → `new Font(path)`（`msyh.ttc` / `arial.ttf` / `Deng.ttf` / `NotoSansSC-VF.ttf`） | **构造即抛 `ArgumentNullException`** |
+
+结论：这个游戏版本里系统字体建不出 TMP 字体资源，`字体名称` 填什么都会退回游戏字体；
+所以**不需要、也做不到**「挂 YaHei 做中文回退」。0.5.2 没有改默认字体，只做了这几件事：
+
+- 默认流程不再探测 Arial / Segoe UI（注定失败，而且每次失败都漏一个 `Font` + 它的材质与贴图，热重载下逐代累积）；
+- 用户显式填了字体名且失败时，销毁创建出来的 `Font`（含材质与贴图）；
+- 启动时在日志里写一行 `[ui] 字体 '…' 中文字形检查通过` / `缺少中文字形 […]`，用户反馈「方块」时一眼可判；
+- 调试脚本新增 `glyphs` 指令；`tools/verify/onscreen_chars.py` 从源码提取屏上字符集（`--update` 直接刷新 `font-check.txt`）。
 
 ## 7. ⚠️ 不要补 `GameWorld.OnDestroy`（方法体共享）
 
@@ -304,8 +347,10 @@ Patch a method with its own body instead
 
 **（b）「2D 一定行」没有在本版本验证过。** 唯一确认能出声的配置是
 `空间模式 = FollowCamera3D`。2D 那几次尝试都撞在"clip 已死"上，所以无法判断 2D 本身行不行。
-默认值仍按旧项目设成 `Flat2D`；如果 2D 真的无声，就保持 `FollowCamera3D`
-（`SoundPlayer.Tick` 每帧把声源挪到 `Camera.main`）。
+0.5.1 之前默认值按旧项目设成 `Flat2D`，但 0.5.1「用户真实战局实测确认修复」用的是本机 cfg 里的 `FollowCamera3D`，
+**`Flat2D` 至今没有任何战局内证据**（主菜单里也测不了：Meta XR Audio 在战局里接管空间音频，菜单音乐还会污染任何输出电平读数）。
+**0.5.2 起默认改成 `FollowCamera3D`**（`SoundPlayer.Tick` 每帧把声源挪到 `Camera.main`），配置版本 2 → 3：升级时只把仍等于 `Flat2D` 的重置成新默认。
+想试 2D 的人自己切回去，没声音就改回来。
 
 现在的加载流程（`Assets/AudioBank.cs`）：
 
@@ -519,7 +564,7 @@ BF6 的成就官方叫 **Accolades（荣誉）**：`先锋 Vanguard` / `枪手 G
   事件线程不做 `Time` 读取（不保证主线程，也不值得去碰 Unity）。
 - **战局结束只有一路检测**：轮询 `GlobalEventDispatcher` 实例变化（限频 4Hz）。
   所以从战局销毁到 UI 清空最多有 0.25 秒延迟 —— 实际感知不到（那 0.25 秒里画面已经切走了）。
-- 自己被打**只做复仇记账、不出提示**。`HitRecord.VictimIsLocalPlayer` 已经有了，想加提示很容易。
+- 自己被打**只做复仇记账、不出提示**。`GameEvents.OnGlobalBeingHit` 在建 `HitRecord` 之前就按 `aggressor.IsYourPlayer` 过滤掉了「我被打」的事件，所以 `HitRecord.VictimIsLocalPlayer` 实际只会在「自己打到自己」时为 true（`AyaBehaviour` 里直接跳过）。要做被击提示得先放开这个过滤，并确认 `OnBeingHit` 在受害者是本机玩家时确实触发（路线图「探查局」S2）。
 - **伤害数字没有 BF6 的「累加」**：BF6 里同一目标的伤害在同一位置滚动累计（`32 → 67 → 99`），击杀时变红；
   这里仍是旧项目的「一行向右」。累加需要知道「这一发打的是不是同一个人」，`HitRecord` 里没有目标标识。
 - **程序化骷髅是 SDF 近似，不是 BF6 的原图**：形状按实录里的轮廓（圆颅 + 窄下颌 + 爆头颅顶 V 形裂口）画的，
@@ -533,7 +578,8 @@ BF6 的成就官方叫 **Accolades（荣誉）**：`先锋 Vanguard` / `枪手 G
 
 最常见的几种：
 
-- `[ui] canvas ready ... font=MISSING` → 字体没解析成功，文本不显示。改 `5. 界面 → 字体名称`。
+- `[ui] canvas ready ... font=MISSING` → 连游戏自带 TMP 字体都取不到，文本不显示（极少见；`字体名称` 填系统字体帮不上忙，见 §6「字体」）。请带日志反馈。
+- `[ui] 字体 '…' 缺少中文字形 […]` → 对应文字会渲染成方块；`tools/verify/font-check.txt` 可以复现并逐字检查。
 - `[icons] 没有找到任何 PMC 军衔图标` → 图标文件没放对地方（应为 `Icons/RankIcons/Rank40.png` 这种）。
 - 本局完全没有命中提示 → 看有没有 `[events] 无法解析 GlobalEventDispatcher.Instance`。
 - 卡片位置/大小看着不对 → 先看 `[ui] canvas geometry` 和 `[kill] 屏幕坐标(左下原点)` 两行（需开诊断日志）。
@@ -583,12 +629,62 @@ python -P tools\verify\imgsheet.py D:\shots\v1 a_enter D:\shots\a_enter.png 480 
 脚本一行一条指令（`#` 注释）：`clock manual`（UI 时钟手动步进）、`step 0.0333`、`kill N`（造脚本表第 N 条击杀，
 走真实的判定 / 卡片 / 命中标记升级）、`hit [head]`、`death N`、`bg dark|mid|white|snow|grass|#RRGGBB|off`
 （画布后面垫纯色，验证各种背景下的可读性）、`shot name`、`seq name 14 0.0333`（连拍 14 张，每张之间 step 一帧）、
-`scale 0.1`（自动时钟慢放）、`wait 2`、`reset`、`log 文字`、`quit`。
+`scale 0.1`（自动时钟慢放）、`wait 2`、`waitmenu 90`（等主菜单场景加载完；热重载后同一进程自动跳过）、`glyphs 击杀爆头`（逐字检查当前字体有没有字形）、`watch`（遥控模式，见下）、`reset`、`log 文字`、`quit`。
 截图用 `ScreenCapture.CaptureScreenshot`（引擎在帧尾写文件）：**不依赖窗口焦点，也不会被 DPI 虚拟化坑**，
 手动时钟下动画时刻完全由脚本决定，不受掉帧 / 截图卡顿影响。游戏在 `quit` 时自己退出。
 
+### 遥控模式 + 输入工具：需要「先发输入、再看画面」的交互式验证
+
+设置面板这类要点鼠标 / 按键的界面，脚本没法事先排好时序。`watch` 指令让 harness 在脚本跑完后**不退出**，
+持续监听 `<shots>/cmd.txt`：外部往里写指令（读后即删），harness 就追加执行。`tools/verify/send-input.ps1` 负责给游戏窗口发键鼠输入：
+
+```powershell
+tools\verify\run_game.ps1 -Script tools\verify\remote.txt -ShotsDir D:\shots\remote -TimeoutSec 3600   # 另开终端
+tools\verify\send-input.ps1 -KeyDelayMs 80 focus wait:1.5 key:F12 wait:2.5                               # 打开 ConfigurationManager
+"shot a" | Set-Content D:\shots\remote\cmd.txt -Encoding ascii                                          # 截一张图
+"quit"   | Set-Content D:\shots\remote\cmd.txt -Encoding ascii                                          # 结束
+```
+
+`send-input.ps1` 的动作：`focus` / `key:F12` / `move:x,y` / `click:x,y` / `dclick` / `rclick` / `drag:x1,y1,x2,y2` / `wheel:x,y,n` / `text:abc` / `wait:秒`，
+坐标用截图的画面坐标（2560×1600 下左上角 0,0），脚本按游戏窗口的客户区自动换算。踩过的坑：
+
+- **游戏必须在前台**，否则 Unity 不处理（或吞掉）输入：每次都先 `focus`。注意进程的 `MainWindowHandle` 抓到的是 **BepInEx 控制台**，
+  工具里按类名 `UnityWndClass` 找真正的游戏窗口。
+- `focus` 内部按了一下 **Alt**（绕过前台锁）。如果此时界面正等着捕获按键（比如快捷键编辑器），Alt 会被当成用户按的键。
+- 游戏在后台 / 低帧率时按键会丢字符：`-KeyDelayMs 80`~`120`，并在输入之后多留 2 秒再截图。
+- 加载画面期间输入全部被吞，`waitmenu` 在 `MenuUIScene` 场景出现时就结束了（比真正进菜单早）：进菜单后再等几十秒。
+- 脚本文件含中文必须带 **UTF-8 BOM**，否则 Windows PowerShell 5.1 把中文当 ANSI 读、直接解析失败。
+
 > 0.4.0 的所有视觉调整都是这么验证的：先在 `--render-icons` 里看图标，再用 DebugHarness 逐帧看动画与各种背景。
 > 这条流程抓出过两处肉眼难发现的缺陷（NaN 哨兵比较导致 `sizeDelta` / `localScale` 写不进去，见 AGENTS.md §3.5）。
+
+### 热重载迭代（ScriptEngine.IL2CPP）：改代码不重启游戏
+
+适合 UI 布局 / 动画 / 文案 / 配置默认值的快速迭代：游戏只启动一次，之后每次构建约 1 秒后由引擎自动装载新 DLL。
+依赖独立仓库 `D:\EFTdev\dev\ScriptEngine.IL2CPP`（开发机上装在 `BepInEx/plugins/ScriptEngine.IL2CPP/`，**不随本插件发布**）；
+它只扫描 `BepInEx/scripts/`，所以切换模式由构建目标完成：
+
+```powershell
+dotnet build -p:HotReload=true     # 第一次切模式：游戏必须已退出（要把 plugins/ 里被锁的 DLL 改名为 *.se-disabled）
+tools\verify\run_game.ps1 -Script tools\verify\hot-reload.txt -ShotsDir D:\shots\hot -TimeoutSec 7200   # 另开终端：启动一次，脚本不 quit
+dotnet build -p:HotReload=true     # 之后每改一次代码；游戏开着也能构建（scripts/ 里的 DLL 是字节流加载，不锁文件）
+tools\verify\reload-scripts.ps1    # 可选：强制重载；-Command status / unload
+dotnet build                       # 收尾：必须先退出游戏。恢复 plugins/ 部署，并撤掉 scripts/ 下的 DLL / PDB
+```
+
+- 日志确认：`Reload (file) done: generation N, … 0 error(s)` → `[behaviour] Awake` → `[ui] canvas ready`。
+- `hot-reload.txt` 以 `waitmenu 90` 开头：本进程第一次运行时等主菜单场景（`MenuUIScene`）加载完，之后每代重载直接跳过；
+  `shot` / `seq` 每次重载都会从头重放并**覆盖同名截图**。`AYA_DEBUG_SHOTS` 不要指到 `BepInEx/scripts/` 里面（引擎监视那个目录）。
+- `reload-scripts.ps1` 在 Windows PowerShell 5.1 和 pwsh 7 下都能跑（文件必须带 UTF-8 BOM，否则 5.1 把中文当 ANSI 读会解析失败）。
+- 注入过类型的代次，Il2CppInterop 无法回收程序集，日志会打 `Generation N: its assemblies stay in memory (~218 KB)`，属正常，只是字节残留。
+- 卸载路径：`Plugin.Unload()` 销毁 `AyaBehaviour` → `OnDestroy` 拆画布（含所有 TMP 文本的材质实例）、音频宿主、图标 / 精灵 / 字体缓存。
+  **新增任何 `DontDestroyOnLoad` 对象或静态缓存，必须在这里一并清掉。**
+- 不验证事件源与真实战局行为，冷启动验收仍然要跑一遍普通模式。
+
+**实测（2026-10-19）**：冷启动 + 连续 14 代重载 0 error；多代之后同一场景的截图与第 1 代**逐字节相同**；
+`AyaHitmarker.Overlay` 画布始终只有 1 份；用 `Resources.FindObjectsOfTypeAll` 数对象，Texture2D / Sprite / TMP 字体 / Font / Material 的逐代增量都是 0。
+修复前每代固定漏 `+2 Texture2D / +2 Font / +5 Material`：来源是默认流程里注定失败的 Arial / Segoe UI 系统字体尝试（没销毁创建出的 Font 及其材质贴图），
+以及 3 个从未激活过的 TMP 文本（不走 `OnDestroy`，它们的 `(Instance)` 材质没人清）。
 
 ## 12. 参考
 
@@ -603,6 +699,8 @@ python -P tools\verify\imgsheet.py D:\shots\v1 a_enter D:\shots\a_enter.png 480 
 
 | 版本 | 内容 |
 |---|---|
+| 0.5.2（开发中） | **音效空间模式默认 `Flat2D` → `FollowCamera3D`**（配置版本 2 → 3，只重置仍是 `Flat2D` 的；`FollowCamera3D` 是唯一在战局里确认过出声的模式）；**热重载迭代**（`-p:HotReload=true`、`reload-scripts.ps1`、`waitmenu`）及完整的卸载路径（画布 / 音频宿主 / 图标与字体缓存 / TMP 材质实例，逐代泄漏实测为 0）；**字体**：停止探测注定失败的 Arial / Segoe UI，修正「填 Microsoft YaHei」的误导建议，启动时写字形覆盖日志，新增 `glyphs` 指令与 `font-check.txt`；**设置面板分类顺序修复**（`00` 原来排在最后、`90` 排在最前：ConfigurationManager 按首次绑定顺序排，不看 `Order`）；设置面板实机验收（枚举 / 颜色 / 偏移 / 滑块 / 快捷键 / Reset / 持久化）；
+遥控模式 `watch` + `send-input.ps1`；Issue 模板；文档对齐（测试数、cfg 分组名 `4. 音频`、`VictimIsLocalPlayer`）。 |
 | 0.5.1 | 修复战局中音效数据清空后持续无声：完整性检查与异步恢复、资源保活及旧请求回收；315 项离线测试与实机脚本通过，用户真实战局实测确认修复。 |
 | 0.5.0 | 设置面板分类与控件改进、程序化徽记调整；加入完整资源的安装 ZIP、统一版本号与自动 CI / tag / Release 流程。离线验证不能替代设置面板实机验收。 |
 | 0.4.0 | **击杀卡片与命中标记按 战地 6 实录重做**（两段原片逐帧拆解，见 §9）：**累加式卡片**（窗口内连杀并到同一张卡：骷髅并排 / 分数累计并从屏幕上的数字滚起 / 标签取并集 / 横幅与名字换最新）；**故障动效**（入场：标签最先出现、元素先以实心色块闪出再显影、分数数字乱跳着滚到终值；退场：骷髅+名字先闪灭、标签随后、分数最后硬切；可在配置里关掉）；**多杀横幅**（浅钢色底 + 深色字 + 档次强调色，双杀~五杀右边带骷髅徽记）；**标签**（击杀 / 爆头 / 近战 / 爆炸 / 狙击 / 距离的描边小方框）；**军衔徽章挪到卡片最左边并放大**（40 → 72px + 阵营色描边底板 + 等级小标）；**程序化图标**（骷髅含爆头 V 形裂口 / 多杀徽记 / 命中标记 / 标签框，SDF 绘制，任意尺寸边缘干净）；**命中标记深色描边**（旧图在白色背景上整个消失）+ **击杀红色扩散标记** + 淡出时向外扩散；伤害数字深色描边、爆头 / 击杀配色；卡片默认水平偏移 107 → 190（分数不再压命中标记）；**一次性配置升级**（只重置值仍等于旧默认的样式项，调过的保留，旧版独有的键清出 cfg）；**DebugHarness**（环境变量驱动的脚本化进图验证，手动步进 UI 时钟 + 引擎自截图）；**修了旧版两个缺陷**：`UiTextRow/UiImageRow` 的缩放在 `Hide()` 之后永远写不进去（NaN 哨兵比较，骷髅 / 得分 / 徽章的弹出动画其实从来没生效过）；命中图标 `中心偏移` 的 Y 符号与配置说明相反（默认 `0,5` 往上抬了 5px 而不是往下），伤害数字也改为跟随同一偏移；离线测试 113 → 306 项 |
@@ -637,9 +735,36 @@ ConfigurationManager 的 **Advanced / 高级设置**。配置版本是内部状�
   音效路径在下一局开始时重载。
 
 分类调整通过 Category / Order / IsAdvanced 等显示元数据实现（ConfigPanel.cs），
-cfg 的 section、key、类型与默认值保持原有定义，配置版本仍为 2，无需删 cfg。
+cfg 的 section、key、类型保持原有定义，无需删 cfg（0.5.2 起配置版本为 3，唯一变化是音效空间模式的默认值，见 §6）。
 因此旧文档中的“5. 界面”等是 cfg 分类，面板应到上面的新分类寻找。
 元数据采用 [ConfigurationManager 官方约定](https://github.com/BepInEx/BepInEx.ConfigurationManager/blob/master/ConfigurationManagerAttributes.cs)，不增加管理器 DLL 的硬依赖。
 
-验证边界：离线逻辑测试不加载 Unity，不能验证管理器实际排版。
-游戏内需检查 Advanced 显隐、分类顺序、枚举选择、颜色调节和重开面板后的值持久化。
+验证边界：离线逻辑测试不加载 Unity，不能验证管理器实际排版，面板只能进游戏看。
+
+### 实机验收（2026-10-19，ConfigurationManager 19.0.0）
+
+用 DebugHarness 遥控模式（`remote.txt`，见 §11）+ `send-input.ps1` 发真实键鼠输入、逐步截图，并直接读 cfg 文件确认落盘：
+
+| 项目 | 结果 |
+|---|---|
+| F12 打开面板、插件以 `AyaHitmarker 0.5.1` 列出 | 通过 |
+| 默认视图只显示 47 项；勾选 Advanced 后高级项（黄色标签）出现，包括整个 `90. 调试与排障` | 通过 |
+| 枚举下拉（`取值`：`Body Only` / `Total`） | 通过：选择后 cfg 立即变成 `取值 = Total`，Reset 回 `BodyOnly` |
+| 颜色控件：HEX 输入框 + 色块 + R/G/B/A 滑块 | 通过：输入未完成（5 位）时提示「未保存：需 6/8 位 HEX」，**cfg 与色块不变**；补成 6/8 位后保存并同步色块；`#12345678` 完整落盘 |
+| 命中中心偏移 X / Y 双输入框 | 通过：`12` → cfg `12,5`；输入 `1x` 时停在上一个有效值 `1,5` |
+| 范围滑块（拖动 + 数字框） | 通过：`基础大小` 拖到 357.3 并落盘，Reset 回 71 |
+| 原生快捷键编辑器（`Press any key combination` / `Clear` / `Reset`） | 通过：捕获按键并落盘，Reset 回 `F8` |
+| 值持久化 | 通过：每次修改 cfg 文件立即更新；测试结束后 cfg 与测试前逐项一致 |
+| **分类顺序** | **未通过 → 已修复**（见下） |
+
+**分类顺序的坑**：原来的实现靠分类名的数字前缀（`00` … `90`）和 `Order` 来排，**ConfigurationManager 并不按这个排**——
+分类的先后 = 各分类的条目在 ConfigFile 里**首次绑定**的先后（实测改 `Order` 没有任何效果）。
+`AyaConfig` 里 `0. 调试` 最先绑定、`5. 界面` 最后绑定，于是面板上 `90. 调试与排障` 排最前、`00. 常用与整体界面` 排最后
+（默认视图里 UI 缩放 / 图标样式沉在最底下）。0.5.0 / 0.5.1 都带着这个问题发布。
+修法：构造函数最前面按期望顺序先绑每个分类的一个代表条目（`UiScale` → `HitMarkerEnabled` → … → `DebugEnabled`），
+其余条目照旧在各自小节里绑定；这些条目的 section / 键 / 默认值不变，已有 cfg 的值与小节顺序实测不受影响。
+修复后实测：默认视图 `00 → 10 → 20 → 30 → 31 → 40 → 60`，高级视图 `00 → … → 40 → 50 → 60 → 90`。
+**新增分类 / 条目时，记得让每个分类的第一个绑定仍然按这个顺序**（`AyaConfig` 构造函数开头的「分类顺序锚点」）。
+
+仍存在的小瑕疵（管理器或布局造成，不影响功能）：枚举 `FollowCamera3D` 被管理器显示成 `Follow Camera3 D`；
+颜色输入未完成时的「未保存：需 6/8 位 HEX」提示在窄栏里被挤成三行。
