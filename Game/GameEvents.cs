@@ -153,6 +153,17 @@ internal static class GameEvents
     {
         try
         {
+            ReconProbe.NoteHitEvent();
+
+            bool victimIsLocal = victim != null && victim.IsYourPlayer;
+            var aggressor = info.Player?.iPlayer;
+            bool aggressorIsLocal = aggressor != null && aggressor.IsYourPlayer;
+
+            // 探查局（路线图 S1/S2）：在过滤之前记录本地玩家参与的事件。
+            // 「受害者是我」这条路径原来被下面的 !IsYourPlayer 直接丢掉，所以日志里从来没有它。
+            if (Plugin.Cfg.DebugEnabled.Value && (victimIsLocal || aggressorIsLocal))
+                ReconProbe.LogHit(info, victim, aggressor, victimIsLocal, aggressorIsLocal);
+
             float body = info.DidBodyDamage;
             float armor = info.DidArmorDamage;
 
@@ -160,10 +171,8 @@ internal static class GameEvents
             // 这条过滤正是旧 Mono 项目 DamagePatch.cs 里那句注释的等价物。
             if (body + armor <= 0.01f) return;
 
-            var aggressor = info.Player?.iPlayer;
-            if (aggressor == null || !aggressor.IsYourPlayer) return;
+            if (!aggressorIsLocal) return;
 
-            bool victimIsLocal = victim != null && victim.IsYourPlayer;
             var record = new HitRecord(
                 body,
                 armor,
@@ -216,7 +225,15 @@ internal static class GameEvents
     {
         try
         {
+            ReconProbe.NoteKillEvent();
+
             bool victimIsLocal = dead != null && dead.IsYourPlayer;
+            bool killerIsLocal = killer != null && killer.IsYourPlayer;
+
+            // 探查局（路线图 S1）：受害者 ProfileId 必须能跨「命中」与「击杀」对上同一个人。
+            // 只记本地玩家参与的击杀，避免 bot 混战时刷屏。
+            if (Plugin.Cfg.DebugEnabled.Value && (victimIsLocal || killerIsLocal))
+                ReconProbe.LogKill(dead, killer, victimIsLocal, killerIsLocal);
 
             // 我被打死：只记下「谁杀了我」，供之后判定「复仇者」。不产生任何 UI。
             if (victimIsLocal)

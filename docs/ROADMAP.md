@@ -48,6 +48,15 @@
 
 注意：探查代码只在事件线程上**读值并转字符串**（§3.4），`SessionCounters` 的读取放主线程。
 
+> **准备状态（2026-10-19）**：诊断探针已就位（[`Game/ReconProbe.cs`](../Game/ReconProbe.cs)，只在 cfg 的
+> `启用诊断日志` 打开时输出）——`[recon-hit]`（S1/S2 原始事件：`victimLocal` / `ProfileId` /
+> `Direction` / `MasterOrigin` / `HitNormal`）、`[recon-kill]`（击杀双方 ProfileId）、
+> `[recon-xp]`（主线程 1Hz 读 `SessionCounters` + `TotalSessionExperience`）、`[diag]` 增加 `reconHits` / `reconKills`。
+> **S4 已离线查清**（见 [recon-s4-language.md](recon-s4-language.md)）：没有语言枚举，读
+> `EFT.LocalizationManager.Instance.Culture`（interop 已把 internal 生成为 public），`ch` → 中文、其余 → English，
+> 只剩真实环境确认一次取值格式。用户操作步骤见 [recon-0.6.md](recon-0.6.md)，**打一局真实战局**即可收集 S1–S3。
+
+
 ---
 
 ## 0.6 — 命中反馈加深（零补丁）

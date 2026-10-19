@@ -68,6 +68,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             UiClock.EndFrame();
             _harness?.Tick();   // 在 UI 画完之后：此刻截图拿到的就是当前时钟下的画面
             _sound.Tick();      // 3D 空间模式下让声源跟随相机
+            if (Plugin.Cfg.DebugEnabled.Value) ReconProbe.Poll(Time.unscaledTime);
             DumpDiagnostics();
         }
         catch (Exception ex)
@@ -263,6 +264,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
     {
         _ui.ResetAll();
         _streaks.Reset();
+        ReconProbe.Reset();
 
         StartAudioLoad(invalidate: true);
     }
@@ -271,6 +273,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
     {
         _ui.ResetAll();
         _streaks.Reset();
+        ReconProbe.Reset();
     }
 
     private void StartAudioLoad(bool invalidate = false)
@@ -532,6 +535,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             $"droppedHits={FeedbackBus.DroppedHits} droppedKills={FeedbackBus.DroppedKills} " +
             $"font={(UiTheme.Font != null ? "ok" : "MISSING")} rankIcons={IconBank.RankIconStatus} " +
             $"streak={_streaks.CurrentStreak} raidKills={_streaks.RaidKills} " +
+            $"reconHits={ReconProbe.RawHitEvents} reconKills={ReconProbe.RawKillEvents} " +
             $"audioLoading={AudioBank.IsLoading} audio[{AudioBank.DebugStatus()}] " +
             $"hit={AudioBank.SourceOf(SoundKind.Hit)}");
     }
