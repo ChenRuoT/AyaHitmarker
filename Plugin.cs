@@ -56,6 +56,12 @@ public sealed class Plugin : BasePlugin
     /// <summary>音效目录：BepInEx/plugins/AyaHitmarker/Sounds/。</summary>
     internal static string SoundsDirectory { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// 唯一注入的 MonoBehaviour。保留引用，<see cref="Unload"/> 时显式销毁（热重载必需）：
+    /// 它的 OnDestroy 负责拆画布 / 音频宿主 / 静态图标缓存。
+    /// </summary>
+    private Behaviour.AyaBehaviour? _behaviour;
+
     public override void Load()
     {
         Instance = this;
@@ -77,7 +83,7 @@ public sealed class Plugin : BasePlugin
         Logger.LogInfo($"{PluginName} :: plugin dir = {PluginDirectory}");
 
         // 零补丁 —— 不构造 PatchManager（详见类注释）。
-        AddComponent<Behaviour.AyaBehaviour>();
+        _behaviour = AddComponent<Behaviour.AyaBehaviour>();
 
         Logger.LogInfo($"{PluginName} :: loaded (0 patches)");
     }
@@ -86,6 +92,22 @@ public sealed class Plugin : BasePlugin
     {
         try { Game.GameEvents.Shutdown(); }
         catch (Exception ex) { Logger.LogWarning($"shutdown: {ex.Message}"); }
+
+        // 热重载 / 正常卸载：销毁唯一注入的组件，触发 AyaBehaviour.OnDestroy 拆画布、音频宿主和静态缓存。
+        // 引擎的 LeftoverSweeper 也会兜底销毁注入类型实例，但不能依赖它 —— 普通 BepInEx 卸载路径没有它。
+        try
+        {
+            if (_behaviour != null)
+            {
+                UnityEngine.Object.Destroy(_behaviour);
+                _behaviour = null;
+                Logger.LogInfo("[behaviour] 已请求销毁 AyaBehaviour（画布 / 音效宿主由 OnDestroy 清理）");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning($"销毁 AyaBehaviour 失败: {ex.Message}");
+        }
 
         return true;
     }

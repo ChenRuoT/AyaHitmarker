@@ -538,8 +538,9 @@ internal sealed class AyaConfig
             new ConfigDescription("越大越靠前。EFT 自己的 HUD 一般在这个值以下。"));
         UiFontName = ConfigPanel.Bind(cfg, nameof(UiFontName), "5. 界面", "字体名称", "",
             new ConfigDescription(
-                "留空 = 自动依次尝试 Arial、Segoe UI 与游戏 TMP 字体。" +
-                "想显示中文就填系统字体名，比如 Microsoft YaHei（会运行时创建 TMP 字体资源）。"));
+                "留空 = 使用游戏自带的 TMP 字体（推荐）。它的回退链已包含中文，默认就能正常显示，不需要填写。" +
+                "填写系统字体名只在 Unity 能为它创建 TMP 字体时才生效；在当前游戏版本上实测 Microsoft YaHei / Arial / SimHei 都不行，" +
+                "会自动退回游戏字体。中文显示成方块时，请把日志里 [ui] 字体 … 中文字形 那一行发给作者。"));
         IconStyleMode = ConfigPanel.Bind(cfg, nameof(IconStyleMode), "5. 界面", "图标样式", IconStyle.Procedural,
             new ConfigDescription(
                 "Procedural（默认）= 骷髅 / 命中标记用程序化绘制，任意大小边缘干净，自带深色描边；" +

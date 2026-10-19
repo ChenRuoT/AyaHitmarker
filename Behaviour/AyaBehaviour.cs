@@ -92,6 +92,14 @@ internal sealed class AyaBehaviour : MonoBehaviour
             StopAudioLoad();
             _sound.Shutdown();
             AudioBank.Invalidate(resetRetries: true);
+
+            // 热重载路径：画布根是 DontDestroyOnLoad 的，静态图标缓存也会钉住旧纹理。
+            // 不在这里清掉，重载一次就多一层画布 / 一套纹理（见 AGENTS.md §5 热重载迭代）。
+            _ui.Destroy();
+            IconBank.Unload();
+            ProceduralIcons.ClearCache();
+            UiTheme.Unload();
+            Plugin.Logger.LogInfo("[behaviour] OnDestroy：画布 / 音频宿主 / 静态缓存已清理");
         }
         catch (Exception ex)
         {

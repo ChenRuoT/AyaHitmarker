@@ -64,6 +64,59 @@ internal static class IconBank
         _ringCache.Clear();
         _glowCache.Clear();
     }
+
+    /// <summary>
+    /// 释放静态资源（只在插件卸载 / 热重载路径调用）。
+    ///
+    /// 这些 Sprite / Texture2D 都是 <c>HideAndDontSave</c>（含 <c>DontUnloadUnusedAsset</c>），
+    /// **不能**指望 <c>Resources.UnloadUnusedAssets</c> 回收 —— 和 <c>AudioBank</c> 的 clip 一样必须显式
+    /// <c>Destroy</c>，否则每跑一代就留一整套 PNG / 环形 / 辉光纹理到进程退出。
+    /// </summary>
+    internal static void Unload()
+    {
+        var destroyedSprites = new HashSet<int>();
+        var destroyedTextures = new HashSet<int>();
+
+        void DestroySprite(Sprite? sprite)
+        {
+            if (sprite == null) return;
+            int spriteId;
+            try { spriteId = sprite.GetInstanceID(); } catch { return; }
+            if (!destroyedSprites.Add(spriteId)) return;
+
+            Texture2D? tex = null;
+            try { tex = sprite.texture; } catch { /* 已经销毁 */ }
+            UnityEngine.Object.Destroy(sprite);
+
+            if (tex != null)
+            {
+                try
+                {
+                    if (destroyedTextures.Add(tex.GetInstanceID())) UnityEngine.Object.Destroy(tex);
+                }
+                catch { /* 已经销毁 */ }
+            }
+        }
+
+        // 爆头骷髅缺图时会和普通骷髅是同一个对象，用 instance id 去重。
+        DestroySprite(SkullHead);
+        DestroySprite(Skull);
+        DestroySprite(Hit);
+
+        foreach (var sprite in _ringCache.Values) DestroySprite(sprite);
+        foreach (var sprite in _glowCache.Values) DestroySprite(sprite);
+        foreach (var sprite in _rankIcons.Values) DestroySprite(sprite);
+
+        Hit = null;
+        Skull = null;
+        SkullHead = null;
+        _ringCache.Clear();
+        _glowCache.Clear();
+        _rankIcons.Clear();
+        _rankAttempted = false;
+        Loaded = false;
+        RankIconStatus = "未探测";
+    }
     // ------------------------------------------------------------------ PMC 军衔图标（可选）
     //
     // 旧 Mono 项目的 SimpleHitMarker/RankIcons/Rank{tier}.png 在实际仓库里并不存在，

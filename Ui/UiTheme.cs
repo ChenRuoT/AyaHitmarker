@@ -14,6 +14,10 @@ internal static class UiTheme
     private static UnityEngine.Font? _osFont;   // 必须持有强引用，否则字体会被 GC 回收
     private static bool _fontAttempted;
 
+    /// <summary>当前 <see cref="_font"/> 是不是我们自己创建的（系统字体 → TMP_FontAsset）。
+    /// 只有自己创建的才能在卸载时销毁；游戏自带的 <c>TMP_Settings.defaultFontAsset</c> 绝不能 Destroy。</summary>
+    private static bool _fontOwned;
+
     private static readonly Dictionary<string, Color> _colorCache = new Dictionary<string, Color>(32);
 
     internal static Sprite WhiteSprite
@@ -33,10 +37,10 @@ internal static class UiTheme
 
     /// <summary>
     /// 字体解析顺序：
-    ///  1. 配置里的 OS 字体（默认 Microsoft YaHei）→ <c>TMP_FontAsset.CreateFontAsset</c>
-    ///     这条能同时覆盖拉丁 / 西里尔 / CJK，所以优先。
-    ///  2. 游戏自带的 <c>TMP_Settings.defaultFontAsset</c>（覆盖拉丁+西里尔，可能没有中文）。
-    ///  3. 常见 OS 字体兜底。
+    ///  1. 配置里显式填写的系统字体名 → <c>TMP_FontAsset.CreateFontAsset</c>。
+    ///     **本游戏版本上实测（README §6「字体」）所有系统字体都建不出来**（Microsoft YaHei / Arial / SimHei 全部返回 null），
+    ///     所以只在用户显式填写时才尝试；默认（留空）不再探测 Arial / Segoe UI。
+    ///  2. 游戏自带的 <c>TMP_Settings.defaultFontAsset</c>：它的回退链已覆盖屏上全部中文字符（<c>glyphs</c> 指令实测 0 缺字形）。
     /// </summary>
     internal static TMP_FontAsset? Font
     {
@@ -45,9 +49,15 @@ internal static class UiTheme
             if (_font != null || _fontAttempted) return _font;
             _fontAttempted = true;
 
-            _font = TryCreateFromOsFont(Plugin.Cfg.UiFontName.Value);
-            if (_font == null) _font = TryCreateFromOsFont("Arial");
-            if (_font == null) _font = TryCreateFromOsFont("Segoe UI");
+            string wanted = Plugin.Cfg.UiFontName.Value;
+            if (!string.IsNullOrWhiteSpace(wanted))
+            {
+                _font = TryCreateFromOsFont(wanted);
+                if (_font == null)
+                {
+                    Plugin.Logger.LogWarning($"[ui] 系统字体 '{wanted}' 建不出 TMP 字体资源（本游戏版本上系统字体一律不可用），改用游戏自带字体。");
+                }
+            }
 
             if (_font == null)
             {
@@ -62,8 +72,33 @@ internal static class UiTheme
                 }
             }
 
-            if (_font == null) Plugin.Logger.LogError("[ui] 找不到任何可用字体，文本将不显示。可在配置里改「5. 界面 → 字体名称」。");
+            if (_font == null) Plugin.Logger.LogError("[ui] 找不到任何可用字体，文本将不显示。");
+            else LogGlyphCoverage(_font);
             return _font;
+        }
+    }
+
+    /// <summary>
+    /// 往日志里写一行字形覆盖：屏上用到的中文只要有一个字不在字体（含回退链）里就会渲染成方块。
+    /// 用户反馈「中文显示成方块」时，这一行直接说明是字体的问题，不用再猜。
+    /// </summary>
+    private static void LogGlyphCoverage(TMP_FontAsset font)
+    {
+        const string sample = "击杀爆头双三复仇远程";
+        try
+        {
+            var missing = new System.Text.StringBuilder();
+            foreach (char c in sample)
+            {
+                if (!font.HasCharacter(c, true, true)) missing.Append(c);
+            }
+
+            if (missing.Length == 0) Plugin.Logger.LogInfo($"[ui] 字体 '{font.name}' 中文字形检查通过（{sample.Length} 个样本字）");
+            else Plugin.Logger.LogWarning($"[ui] 字体 '{font.name}' 缺少中文字形 [{missing}]，对应文字会显示成方块（反馈问题时请附上这一行）");
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogDebug($"[ui] 字形覆盖检查失败: {ex.Message}");
         }
     }
 
@@ -73,21 +108,57 @@ internal static class UiTheme
         _font = null;
         _osFont = null;
         _fontAttempted = false;
+        _fontOwned = false;
+    }
+
+    /// <summary>
+    /// 释放静态 UI 资源（只在插件卸载 / 热重载路径调用）。
+    ///
+    /// 白色精灵 / 纹理是 <c>HideAndDontSave</c> 的，必须显式 Destroy（同 AudioBank 的 clip）。
+    /// 字体只销毁「我们自己从系统字体创建的」：游戏自带的 TMP 字体是共享资源，Destroy 会连累别的 UI。
+    /// </summary>
+    internal static void Unload()
+    {
+        if (_whiteSprite != null) UnityEngine.Object.Destroy(_whiteSprite);
+        if (_whiteTexture != null) UnityEngine.Object.Destroy(_whiteTexture);
+        _whiteSprite = null;
+        _whiteTexture = null;
+        _colorCache.Clear();
+
+        if (_fontOwned && _font != null)
+        {
+            Texture2D? atlas = null;
+            Material? material = null;
+            try { atlas = _font.atlas; } catch { /* 已经销毁 */ }
+            try { material = _font.material; } catch { /* 已经销毁 */ }
+            UnityEngine.Object.Destroy(_font);
+            if (atlas != null) UnityEngine.Object.Destroy(atlas);
+            if (material != null) UnityEngine.Object.Destroy(material);
+        }
+
+        if (_osFont != null) DestroyOsFont(_osFont);
+
+        InvalidateFont();
     }
 
     private static TMP_FontAsset? TryCreateFromOsFont(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
+
+        UnityEngine.Font? osFont = null;
+        bool kept = false;
         try
         {
             // 注意：必须写全 Unity 的 Font。UiTheme 自己有个 Font 属性，简单名会被它遮蔽。
-            var osFont = UnityEngine.Font.CreateDynamicFontFromOSFont(name.Trim(), 48);
+            osFont = UnityEngine.Font.CreateDynamicFontFromOSFont(name.Trim(), 48);
             if (osFont == null) return null;
 
             var asset = TMP_FontAsset.CreateFontAsset(osFont);
             if (asset == null) return null;
 
             _osFont = osFont; // 保活
+            kept = true;
+            _fontOwned = true;
             asset.name = $"AyaHitmarker-{name}";
             Plugin.Logger.LogInfo($"[ui] 已从系统字体创建 TMP 字体资源: {name}");
             return asset;
@@ -97,6 +168,32 @@ internal static class UiTheme
             Plugin.Logger.LogDebug($"[ui] 系统字体 '{name}' 不可用: {ex.Message}");
             return null;
         }
+        finally
+        {
+            // 失败路径必须释放：热重载下每一代都会走到这里，不销毁就是每代漏一个 Font + 它的材质 / 贴图。
+            if (!kept && osFont != null) DestroyOsFont(osFont);
+        }
+    }
+
+    /// <summary>
+    /// 销毁系统字体。<c>Font</c> 的材质与贴图是独立的 Unity 对象，<c>Destroy(font)</c> 不会连带销毁，
+    /// 得先把它们摘出来逐个销毁（否则每个字体漏 1 个 Material + 1 个 Texture2D）。
+    /// </summary>
+    private static void DestroyOsFont(UnityEngine.Font font)
+    {
+        try
+        {
+            var material = font.material;
+            if (material != null)
+            {
+                var texture = material.mainTexture;
+                if (texture != null) UnityEngine.Object.Destroy(texture);
+                UnityEngine.Object.Destroy(material);
+            }
+        }
+        catch { /* 已经销毁 */ }
+
+        UnityEngine.Object.Destroy(font);
     }
 
     /// <summary>解析 "#RRGGBB" / "#RRGGBBAA" / "RRGGBB"，带缓存（UI 每帧读配置，不能每帧 parse）。</summary>

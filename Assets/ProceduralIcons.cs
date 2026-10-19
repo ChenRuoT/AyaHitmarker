@@ -39,6 +39,48 @@ internal static class ProceduralIcons
     private static bool _tagBoxFailed;
 
     /// <summary>
+    /// 清空缓存并销毁精灵 / 纹理（只在插件卸载 / 热重载路径调用）。
+    /// 正常游戏里不要清 —— 图层里还握着这些精灵的引用（见上面 Cache 的注释）。
+    /// 这些对象是 <c>HideAndDontSave</c> 的，必须显式 Destroy，否则每代烘出来的图标纹理都会留到进程退出。
+    /// </summary>
+    internal static void ClearCache()
+    {
+        var destroyedSprites = new HashSet<int>();
+        var destroyedTextures = new HashSet<int>();
+
+        void DestroyIcon(Sprite? sprite)
+        {
+            if (sprite == null) return;
+            int spriteId;
+            try { spriteId = sprite.GetInstanceID(); } catch { return; }
+            if (!destroyedSprites.Add(spriteId)) return;
+
+            Texture2D? tex = null;
+            try { tex = sprite.texture; } catch { /* 已经销毁 */ }
+            UnityEngine.Object.Destroy(sprite);
+
+            if (tex != null)
+            {
+                try
+                {
+                    if (destroyedTextures.Add(tex.GetInstanceID())) UnityEngine.Object.Destroy(tex);
+                }
+                catch { /* 已经销毁 */ }
+            }
+        }
+
+        foreach (var icon in Cache.Values)
+        {
+            if (icon.HasValue) DestroyIcon(icon.Value.Sprite);
+        }
+        Cache.Clear();
+
+        DestroyIcon(_tagBox);
+        _tagBox = null;
+        _tagBoxFailed = false;
+    }
+
+    /// <summary>
     /// 取缓存。精灵可能被引擎销毁（场景切换 / <c>Resources.UnloadUnusedAssets</c>）—— 这时 C# 引用还在、
     /// 但 <c>sprite == null</c> 为真（Unity 假 null，和音效 clip 同一个坑），必须丢掉重烘，不能把死精灵递出去。
     /// 烘焙失败（<c>null</c>）也缓存，别每帧重试。

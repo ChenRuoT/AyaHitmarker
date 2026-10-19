@@ -185,6 +185,51 @@ internal sealed class OverlayRoot
         KillFeed.Reset();
     }
 
+    /// <summary>
+    /// 销毁画布根（只在插件卸载 / 热重载时调用）。
+    ///
+    /// 根节点是 <c>DontDestroyOnLoad</c> 的：不主动销毁的话，旧代次的画布会一直留在场景里，
+    /// 每热重载一次就叠一层（调试底色、残留卡片都看得见）。销毁根节点会带走所有子物体。
+    /// </summary>
+    internal void Destroy()
+    {
+        try
+        {
+            if (_root != null)
+            {
+                DestroyTextMaterialInstances(_root);
+                UnityEngine.Object.Destroy(_root);
+            }
+        }
+        catch { /* 游戏退出时对象可能已经被销毁 */ }
+
+        _root = null;
+        _canvas = null;
+        _scaler = null;
+        _rect = null;
+        _backdrop = null;
+    }
+
+    /// <summary>
+    /// 销毁根下所有文本的 TMP 材质实例。<c>fontMaterial</c> / <c>outlineWidth</c> 会给每个文本建一份
+    /// 名字以 " (Instance)" 结尾的材质；文本被销毁时 TMP 的 <c>OnDestroy</c> 会清掉自己那份，
+    /// 但从未被激活过的文本不会走 <c>OnDestroy</c>，实例就漏了（实测热重载每代固定漏 3 个）。
+    /// 只动 " (Instance)" 材质：共享材质属于字体资源，绝不能销毁。
+    /// </summary>
+    private static void DestroyTextMaterialInstances(GameObject root)
+    {
+        const string suffix = " (Instance)";
+        foreach (var text in root.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true))
+        {
+            if (text == null) continue;
+            var material = text.fontSharedMaterial;
+            if (material != null && material.name.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                UnityEngine.Object.Destroy(material);
+            }
+        }
+    }
+
     internal void Tick()
     {
         Hitmarker.Tick();
