@@ -56,6 +56,17 @@
 > `EFT.LocalizationManager.Instance.Culture`（interop 已把 internal 生成为 public），`ch` → 中文、其余 → English，
 > 只剩真实环境确认一次取值格式。用户操作步骤见 [recon-0.6.md](recon-0.6.md)，**打一局真实战局**即可收集 S1–S3。
 
+> **第一轮实测结果（2026-10-19，同一进程三连局）**：S2 ✅ 触发且方向可用；S3 ✅ 部分可读
+> （击杀计数实时、`ExpKill` 要等结算）；S1 ⚠️ 被一个新发现的 bug 挡住。详见
+> [recon-findings-2026-10-19.md](recon-findings-2026-10-19.md)。
+>
+> **该 bug**：连续战局的第 2 局起 `GlobalEventDispatcher.OnBeingHit` 订阅失效（命中标记 / 命中音效整局消失），
+> 且战局边界从未被侦测到（streak / 得分跨局累计、开局不重载音频）。根因是 **dispatcher 实例在本版本里跨局不变**，
+> 旧「每局一个新实例」的判据不成立，而游戏换局时清掉了 `OnBeingHit` 的委托列表。
+> 修复：改用 `GameWorld.MainPlayer.Profile` 判战局边界，**每局开局强制重绑 `OnBeingHit`**（幂等），
+> 并新增 `[events] raid started (main player)` / `[events] 本局第一发 OnBeingHit` / `[diag] raidState=`。
+> **待第二轮 2–3 局实测确认**（验证清单在 findings 文档 §4）；确认通过后才能认为 S1 可做、0.6 b/c 可排期。
+
 
 ---
 

@@ -30,13 +30,16 @@ namespace AyaHitmarker.Game;
 /// </summary>
 internal static class GameEvents
 {
-    /// <summary>新的 raid 会话开始（GlobalEventDispatcher 换了实例）。</summary>
+    /// <summary>新的 raid 会话开始（主玩家已生成）。</summary>
     internal static event Action? RaidStarted;
 
     internal static event Action? RaidEnded;
 
     private static bool _staticSubscribed;
     private static IntPtr _lastDispatcher;
+    private static GlobalEventDispatcher? _subscribedDispatcher;
+    private static bool _inRaid;
+    private static bool _hitSeenThisRaid;
     private static bool _resolveLogged;
     private static float _nextPollTime;
 
@@ -45,6 +48,12 @@ internal static class GameEvents
     private static readonly Action<Player, IPlayer, DamageInfo, EBodyPart> OnPlayerDeadCb = OnPlayerDead;
 
     internal static bool DispatcherPresent => _lastDispatcher != IntPtr.Zero;
+
+    internal static bool InRaid => _inRaid;
+
+    /// <summary>诊断用：当前战局 / 订阅状态。</summary>
+    internal static string DebugState =>
+        $"inRaid={_inRaid} dispatcher=0x{_lastDispatcher.ToInt64():X}";
 
     /// <summary>进程内只需订阅一次（静态事件）。</summary>
     internal static void EnsureStaticSubscribed()
@@ -63,12 +72,20 @@ internal static class GameEvents
     }
 
     /// <summary>
-    /// 主线程每帧调用（内部限频）。
-    /// <c>GlobalEventDispatcher</c> 是 MonoBehaviour 单例，**每个 raid 一个新实例**，
-    /// 所以实例指针变化 = 新的 raid / 上一局结束；老实例销毁后订阅也随之失效，必须重订。
+    /// 主线程每帧调用（内部限频 4Hz）。
     ///
-    /// 解析要走 interop 的泛型静态属性（<c>Singleton&lt;T&gt;.Instance</c>），不是零成本，
-    /// 所以降频到 ~4Hz，而不是每帧都查。
+    /// <para>
+    /// **战局边界以主玩家为准。** 实测（2026-10-19 同一进程三连局）`GlobalEventDispatcher`
+    /// 的 Singleton 实例跨局**不变**（三个战局、dispatcher 指针一次都没变），
+    /// 所以不能用 dispatcher 指针判局。主玩家（`GameWorld.MainPlayer.Profile`）出现 = 进图，
+    /// 消失 = 回菜单 / 结算。
+    /// </para>
+    ///
+    /// <para>
+    /// **每局开局强制重绑 `OnBeingHit`。** 同一份日志里第 2、3 局玩家命中完全收不到事件
+    /// （击杀正常、`SessionCounters.HitCount` 在涨，说明事件链本身是通的），只有每局重绑
+    /// 才能兜住游戏在换局时清掉 / 替换 `OnBeingHit` 订阅的情况。重绑幂等（先摘再挂）。
+    /// </para>
     /// </summary>
     internal static void Poll()
     {
@@ -81,7 +98,7 @@ internal static class GameEvents
 
     private static void PollNow()
     {
-        GlobalEventDispatcher? dispatcher;
+        GlobalEventDispatcher? dispatcher = null;
         try
         {
             dispatcher = Comfort.Common.Singleton<GlobalEventDispatcher>.Instance;
@@ -96,31 +113,83 @@ internal static class GameEvents
             return;
         }
 
-        if (dispatcher == null)
+        bool inRaid = IsInRaid();
+        bool raidStarted = inRaid && !_inRaid;
+        bool raidEnded = !inRaid && _inRaid;
+        _inRaid = inRaid;
+
+        if (dispatcher != null)
         {
-            if (_lastDispatcher != IntPtr.Zero)
-            {
-                _lastDispatcher = IntPtr.Zero;
-                Raise(RaidEnded, "raid ended (dispatcher gone)");
-            }
-            return;
+            // 实例变了（正常情况）或新的一局（兜底）都重绑一次。
+            if (dispatcher.Pointer != _lastDispatcher || raidStarted)
+                BindOnBeingHit(dispatcher, raidStarted ? "raid started" : "dispatcher changed");
+        }
+        else if (_lastDispatcher != IntPtr.Zero)
+        {
+            _subscribedDispatcher = null;
+            _lastDispatcher = IntPtr.Zero;
         }
 
-        IntPtr ptr = dispatcher.Pointer;
-        if (ptr == _lastDispatcher) return;
+        if (raidStarted)
+        {
+            _hitSeenThisRaid = false;
+            Raise(RaidStarted, "raid started (main player)");
+        }
 
-        if (_lastDispatcher != IntPtr.Zero) Raise(RaidEnded, "raid ended (dispatcher replaced)");
+        if (raidEnded) Raise(RaidEnded, "raid ended (main player gone)");
+    }
 
-        _lastDispatcher = ptr;
+    /// <summary>
+    /// 每局第一发 OnBeingHit 打一行 —— 用来在日志里直接确认「这一局的命中事件到底通没通」，
+    /// 不用依赖诊断日志开关（0.5.2 之后的连续战局丢订阅问题就靠这行判定）。
+    /// </summary>
+    private static void NoteFirstHitOfRaid(Player? victim)
+    {
+        if (_hitSeenThisRaid) return;
+        _hitSeenThisRaid = true;
         try
         {
+            Plugin.Logger.LogInfo($"[events] 本局第一发 OnBeingHit（victim={SafeNickname(victim)}，inRaid={_inRaid}）");
+        }
+        catch { /* ignore */ }
+    }
+
+    /// <summary>
+    /// 进图判据：主玩家和档案都在。菜单 / 撤离结算界面里这两个都会消失。
+    /// 不能只看 <c>GameWorld.Instance</c>：MonoBehaviour 的 interop 代理被销毁后不是 C# null。
+    /// </summary>
+    private static bool IsInRaid()
+    {
+        try
+        {
+            var world = Comfort.Common.Singleton<GameWorld>.Instance;
+            return world != null && world.MainPlayer?.Profile != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>把 OnBeingHit 重绑到给定 dispatcher。幂等：先摘再挂，重复调用不会叠加。</summary>
+    private static void BindOnBeingHit(GlobalEventDispatcher dispatcher, string reason)
+    {
+        try
+        {
+            if (_subscribedDispatcher != null)
+            {
+                try { _subscribedDispatcher.OnBeingHit -= OnBeingHitCb; } catch { /* 旧对象可能已销毁 */ }
+            }
+
+            _subscribedDispatcher = dispatcher;
             dispatcher.OnBeingHit += OnBeingHitCb;
-            Raise(RaidStarted, "raid started (new dispatcher)");
+            _lastDispatcher = dispatcher.Pointer;
+            Plugin.Logger.LogInfo($"[events] OnBeingHit 已绑定（{reason}，dispatcher=0x{_lastDispatcher.ToInt64():X}，inRaid={_inRaid}）");
         }
         catch (Exception ex)
         {
             _lastDispatcher = IntPtr.Zero;
-            Plugin.Logger.LogError($"[events] 订阅 GlobalEventDispatcher.OnBeingHit 失败: {ex}");
+            Plugin.Logger.LogError($"[events] 订阅 GlobalEventDispatcher.OnBeingHit 失败（{reason}）: {ex}");
         }
     }
 
@@ -132,16 +201,10 @@ internal static class GameEvents
             _staticSubscribed = false;
         }
 
-        if (_lastDispatcher != IntPtr.Zero)
-        {
-            try
-            {
-                var d = Comfort.Common.Singleton<GlobalEventDispatcher>.Instance;
-                if (d != null) d.OnBeingHit -= OnBeingHitCb;
-            }
-            catch { /* ignore */ }
-            _lastDispatcher = IntPtr.Zero;
-        }
+        try { _subscribedDispatcher?.OnBeingHit -= OnBeingHitCb; } catch { /* ignore */ }
+        _subscribedDispatcher = null;
+        _lastDispatcher = IntPtr.Zero;
+        _inRaid = false;
 
         RaidStarted = null;
         RaidEnded = null;
@@ -154,6 +217,7 @@ internal static class GameEvents
         try
         {
             ReconProbe.NoteHitEvent();
+            NoteFirstHitOfRaid(victim);
 
             bool victimIsLocal = victim != null && victim.IsYourPlayer;
             var aggressor = info.Player?.iPlayer;

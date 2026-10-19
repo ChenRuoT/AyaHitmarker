@@ -532,6 +532,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
         Plugin.Logger.LogInfo(
             $"[diag] dispatcher={(GameEvents.DispatcherPresent ? "present" : "absent")} " +
+            $"raidState={GameEvents.DebugState} " +
             $"droppedHits={FeedbackBus.DroppedHits} droppedKills={FeedbackBus.DroppedKills} " +
             $"font={(UiTheme.Font != null ? "ok" : "MISSING")} rankIcons={IconBank.RankIconStatus} " +
             $"streak={_streaks.CurrentStreak} raidKills={_streaks.RaidKills} " +
