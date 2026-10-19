@@ -527,8 +527,10 @@ internal sealed class AyaConfig
         SoundFileKill = ConfigPanel.Bind(cfg, nameof(SoundFileKill), "4. 音频", "自定义:击杀", "", new ConfigDescription(SoundHint("kill")));
         SoundFileKillHeadshot = ConfigPanel.Bind(cfg, nameof(SoundFileKillHeadshot), "4. 音频", "自定义:爆头击杀", "", new ConfigDescription(SoundHint("headshot_kill")));
 
-        // ---- 排障开关：默认全部保持旧 Mono 项目的配置（都不开） ----
-        SoundSpatialMode = ConfigPanel.Bind(cfg, nameof(SoundSpatialMode), "4. 音频", "空间模式", SpatialMode.Flat2D,
+        // ---- 空间模式 + 排障开关：排障开关默认全部保持旧 Mono 项目的配置（都不开） ----
+        // 空间模式默认 3D 跟随相机：这是唯一在真实战局里确认过出声的模式（0.5.1 的战局实测就是在 3D 下做的）；
+        // 旧项目的 2D 做法在这个版本的 EFT（Meta XR Audio 接管空间音频）里没有任何战局内证据。0.5.2 起默认改 3D，配置版本 2 → 3。
+        SoundSpatialMode = ConfigPanel.Bind(cfg, nameof(SoundSpatialMode), "4. 音频", "空间模式", SpatialMode.FollowCamera3D,
             new ConfigDescription(
                 "3D 跟随相机（默认）= 声源每帧跟着相机，走游戏的声场管线（这个版本的 EFT 用 Meta XR Audio 做空间音频），" +
                 "是唯一在真实战局里确认过出声的模式。2D = 旧项目的做法，在战局里是否出声没有验证过；" +
@@ -559,15 +561,17 @@ internal sealed class AyaConfig
 
     /// <summary>
     /// 配置版本。每次「已有键的默认值变了」的设计改版 +1：
-    /// <c>1</c> = 0.3.0（旧卡片），<c>2</c> = 0.4.0（战地 6 卡片 + 带描边的命中标记）。
+    /// <c>1</c> = 0.3.0（旧卡片），<c>2</c> = 0.4.0（战地 6 卡片 + 带描边的命中标记），
+    /// <c>3</c> = 0.5.2（音效空间模式默认 Flat2D → FollowCamera3D）。
     /// </summary>
-    private const int CurrentConfigVersion = 2;
+    private const int CurrentConfigVersion = 3;
 
     /// <summary>
     /// 一次性配置升级。BepInEx 会把**首次运行时的默认值写死在磁盘上**，所以改了代码里的默认值，
     /// 已存在的 cfg 永远拿不到新值（AGENTS.md 里「改了默认值之后必须删 cfg」说的就是这个）。
-    /// 这里把「默认值变了」的样式项重置成新默认 —— 但**只重置值还等于 0.3.0 旧默认的**：用户自己调过的原样保留。
-    /// 垂直偏移、命中图标中心偏移、各种开关和音效相关的键压根不在名单里。
+    /// 这里把「默认值变了」的项重置成新默认 —— 但**只重置值还等于旧默认的**：用户自己调过的原样保留。
+    /// 垂直偏移、命中图标中心偏移、各种开关和其余音效键压根不在名单里。
+    /// 注意：「值等于旧默认」无法区分「从没动过」和「特意选了旧默认」，后者会被重置一次（升级后版本号抬高，不会再重置）。
     /// 旧版独有、新版已经不存在的动效键（入场位移、骷髅显示时长 …）会作为「孤儿」被清出文件。
     /// </summary>
     private void ApplyConfigMigration(ConfigFile cfg)
@@ -594,6 +598,9 @@ internal sealed class AyaConfig
             (ColorAchievementText, "#FFFFFFFF", 2), (ColorAchievementNormal, "#46505CFF", 2), (ColorAchievementGood, "#2F6FB5FF", 2),
             (ColorAchievementGreat, "#C2681AFF", 2), (ColorAchievementEpic, "#A32434FF", 2),
             (ColorUSEC, "#003399FF", 2), (ColorBEAR, "#FF8C00FF", 2), (ColorBOSS, "#FF0000FF", 2), (ColorRouges, "#333333FF", 2), (ColorSectant, "#006600FF", 2),
+
+            // 音效：空间模式默认 Flat2D → FollowCamera3D（0.5.2）
+            (SoundSpatialMode, SpatialMode.Flat2D, 3),
         };
 
         int reset = 0;     // 还是旧默认 → 换成新默认
@@ -630,8 +637,8 @@ internal sealed class AyaConfig
         cfg.Save();
 
         Plugin.Logger.LogInfo(
-            $"[config] 配置从 v{from} 升级到 v{CurrentConfigVersion}：{reset} 个仍是旧默认值的样式项已换成新默认，" +
-            $"{already} 个本来就是新默认，{kept} 个被你改过的保持原样；开关 / 音效相关的键没动。");
+            $"[config] 配置从 v{from} 升级到 v{CurrentConfigVersion}：{reset} 个仍是旧默认值的项已换成新默认，" +
+            $"{already} 个本来就是新默认，{kept} 个被你改过的保持原样；不在名单里的键没动。");
     }
 
     /// <summary>配置值与「旧默认值」是否相同。浮点留一点容差（文本往返会有末位误差），颜色不分大小写。</summary>
