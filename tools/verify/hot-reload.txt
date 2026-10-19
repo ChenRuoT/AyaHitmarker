@@ -1,0 +1,10 @@
+# 热重载迭代专用脚本：不 quit，游戏保持运行。
+# 每一代 ScriptEngine.IL2CPP 重载后，新的 DebugHarness 都会从头重放这个脚本，截图同名覆盖。
+# 用法见 AGENTS.md §5「热重载迭代」。
+waitmenu 90          # 本进程第一次运行等主菜单场景（MenuUIScene）加载完；之后各代重载直接跳过
+clock manual         # 动画时刻由 step 精确控制，截图不受掉帧 / 卡顿影响
+bg dark              # 画布后面垫纯色，方便看描边与可读性（白底可换 white / snow）
+kill 2               # 走真实连杀判定 → 累加卡片 / 徽记 / 军衔
+seq hot 12 0.0333    # 12 帧连拍 → <shots>/hot_00.png ... hot_11.png
+clock auto           # 回到自动时钟，之后可以继续按 F8 / F9 / F10 手动看
+log hot-reload scenario done

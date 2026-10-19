@@ -159,6 +159,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             _streaks.Reset();
         },
         Backdrop = color => _ui.SetBackdrop(color),
+        MenuReady = IsMainMenuLoaded,
         Audio = command =>
         {
             switch (command.ToLowerInvariant())
@@ -176,6 +177,42 @@ internal sealed class AyaBehaviour : MonoBehaviour
             Plugin.Logger.LogInfo($"[harness] audio {command}: loading={AudioBank.IsLoading} {AudioBank.DebugStatus()}");
         },
     };
+
+    /// <summary>
+    /// DebugHarness 的 <c>waitmenu</c> 判据：主菜单场景是否已经加载。
+    ///
+    /// **不能用 <see cref="GameEvents.DispatcherPresent"/>**：实测插件在主菜单加载之前就已经拿到
+    /// GlobalEventDispatcher 单例（启动日志里 `[events] raid started` 出现在主菜单之前），拿它当判据会让
+    /// 冷启动的脚本在加载画面里就跑完。这里检查所有已加载场景里有没有主菜单的 <c>MenuUIScene</c>。
+    /// 场景名对不上（或 API 不可用）时返回 false，由 waitmenu 的超时兜底。
+    /// </summary>
+    private static bool _sceneProbeWarned;
+
+    private static bool IsMainMenuLoaded()
+    {
+        try
+        {
+            int count = UnityEngine.SceneManagement.SceneManager.sceneCount;
+            for (int i = 0; i < count; i++)
+            {
+                string name = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).name;
+                if (!string.IsNullOrEmpty(name) &&
+                    name.IndexOf("MenuUIScene", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!_sceneProbeWarned)
+            {
+                _sceneProbeWarned = true;
+                Plugin.Logger.LogWarning($"[harness] 无法判断主菜单场景: {ex.Message}");
+            }
+        }
+        return false;
+    }
 
     private static void Step(string label, Action action)
     {

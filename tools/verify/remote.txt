@@ -1,0 +1,10 @@
+# DebugHarness 遥控模式脚本：等主菜单加载完就一直待命，由外部往 <shots>/cmd.txt 写指令。
+# 搭配 tools/verify/send-input.ps1（发键鼠输入）用来做需要交互的验证，比如设置面板：
+#
+#   tools/verify/run_game.ps1 -Script tools/verify/remote.txt -ShotsDir D:/shots/remote -TimeoutSec 3600   # 另开终端
+#   echo "shot a" > D:/shots/remote/cmd.txt                    # 截一张图（引擎在帧尾写文件）
+#   tools/verify/send-input.ps1 focus key:F12 wait:0.5          # 打开 ConfigurationManager
+#   echo quit > D:/shots/remote/cmd.txt                         # 结束
+waitmenu 90
+log remote ready
+watch

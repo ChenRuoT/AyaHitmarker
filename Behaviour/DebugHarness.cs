@@ -17,6 +17,7 @@ namespace AyaHitmarker.Behaviour;
 /// kill 2                 # 造脚本表里第 2 条击杀（走真实的连杀判定 / 卡片 / 音效）
 /// hit [head]             # 造一次命中（head = 爆头）
 /// death 3                # 模拟「被脚本表第 3 条的那个人打死」（之后杀他 = 复仇者）
+/// waitmenu [秒]          # 本进程首次运行时等主菜单场景（MenuUIScene）出现，之后各代直接返回
 /// step 0.0333            # 手动时钟前进 0.0333 秒
 /// shot name              # 截一张全屏图 → &lt;shots&gt;/name.png
 /// seq name 12 0.0333     # 连拍：shot name_00; step; shot name_01; step; ... 共 12 张
@@ -28,11 +29,15 @@ namespace AyaHitmarker.Behaviour;
 /// audio status           # 输出加载状态
 /// audio hit              # 播放音效（hit|head|kill|killhead），UI 截图指令仍保持静音
 /// reset                  # 重置 UI 与连杀状态
+/// glyphs 击杀爆头         # 检查这些字符在当前 UI 字体（含回退链）里有没有字形，缺的会渲染成方块
+/// watch                  # 脚本最后一条：不退出，持续监听 &lt;shots&gt;/cmd.txt，读到就把里面的指令追加执行并删掉文件（遥控模式）
 /// log 文字               # 往日志里写一行（脚本里做标记用）
 /// quit                   # 退出游戏
 /// </code>
 /// 截图用 <c>ScreenCapture.CaptureScreenshot</c>，由引擎在帧尾写文件：不依赖窗口焦点，
-/// 也不会被 Windows DPI 虚拟化坑（README §11）。输出目录取环境变量 <c>AYA_DEBUG_SHOTS</c>，缺省为插件目录下的 <c>_shots</c>。
+/// 也不会被 Windows DPI 虚拟化坑（README §11）。输出目录取环境变量 <c>AYA_DEBUG_SHOTS</c>，
+/// 缺省为系统临时目录下的 <c>AyaHitmarker_shots</c>（**不要指向 BepInEx/scripts/ 内部** ——
+/// 热重载时引擎会盯着那里，创建截图目录会多触发一次重载）。
 /// </summary>
 internal sealed class DebugHarness
 {
@@ -44,17 +49,28 @@ internal sealed class DebugHarness
         internal Action<string> Audio = _ => { };
         internal Action Reset = () => { };
         internal Action<Color?> Backdrop = _ => { };
+
+        /// <summary>「主菜单已就绪」判据（<c>waitmenu</c> 用）。默认 true，方便单独测试脚本解析。</summary>
+        internal Func<bool> MenuReady = () => true;
     }
 
     private readonly Hooks _hooks;
     private readonly List<string> _lines = new List<string>();
     private readonly string _shotDir;
+
+    /// <summary>「本进程已经过 waitmenu 启动等待」的标记。带进程 id：新开一局会重新等主菜单，热重载后跳过。</summary>
+    private readonly string _bootMarker;
+
     private int _index;
     private int _frameWait;
     private float _waitUntil = -1f;
+    private bool _waitingMenu;
+    private float _menuDeadline = -1f;
     private bool _done;
     private int _shotCount;
     private bool _quitting;
+    private bool _watching;
+    private int _watchFrame;
 
     internal static DebugHarness? TryCreate(Hooks hooks)
     {
@@ -67,7 +83,8 @@ internal sealed class DebugHarness
             return null;
         }
 
-        string dir = Environment.GetEnvironmentVariable("AYA_DEBUG_SHOTS") ?? Path.Combine(Plugin.PluginDirectory, "_shots");
+        string dir = Environment.GetEnvironmentVariable("AYA_DEBUG_SHOTS")
+                     ?? Path.Combine(Path.GetTempPath(), "AyaHitmarker_shots");
         return new DebugHarness(hooks, File.ReadAllLines(path), dir);
     }
 
@@ -75,6 +92,7 @@ internal sealed class DebugHarness
     {
         _hooks = hooks;
         _shotDir = shotDir;
+        _bootMarker = Path.Combine(shotDir, $".booted-{Environment.ProcessId}");
         foreach (string raw in lines)
         {
             string line = raw.Trim();
@@ -123,6 +141,17 @@ internal sealed class DebugHarness
             _waitUntil = -1f;
         }
 
+        if (_waitingMenu)
+        {
+            if (!_hooks.MenuReady() && Time.unscaledTime < _menuDeadline) return;
+
+            bool timedOut = !_hooks.MenuReady();
+            _waitingMenu = false;
+            MarkBooted();
+            if (timedOut) Plugin.Logger.LogWarning("[harness] waitmenu 超时（主菜单场景未出现），继续执行");
+            else Plugin.Logger.LogInfo("[harness] waitmenu 结束（主菜单已就绪）");
+        }
+
         if (_quitting)
         {
             _done = true;
@@ -131,8 +160,12 @@ internal sealed class DebugHarness
             return;
         }
 
+        if (_watching && _index >= _lines.Count) PollRemoteCommands();
+
         if (_index >= _lines.Count)
         {
+            if (_watching) return;   // 遥控模式：脚本跑完也不结束，继续等 cmd.txt
+
             _done = true;
             Plugin.Logger.LogInfo($"[harness] 脚本执行完毕（共截图 {_shotCount} 张）");
             return;
@@ -159,6 +192,18 @@ internal sealed class DebugHarness
         {
             case "wait":
                 _waitUntil = Time.unscaledTime + ParseFloat(arg1, 1f);
+                break;
+
+            case "waitmenu":
+                if (File.Exists(_bootMarker))
+                {
+                    Plugin.Logger.LogInfo("[harness] waitmenu：本进程已经过启动等待，直接继续");
+                    break;
+                }
+                _menuDeadline = Time.unscaledTime + ParseFloat(arg1, 90f);
+                _waitingMenu = !_hooks.MenuReady();
+                if (_waitingMenu) Plugin.Logger.LogInfo("[harness] 等待主菜单场景（MenuUIScene）…");
+                else MarkBooted();
                 break;
 
             case "clock":
@@ -206,6 +251,15 @@ internal sealed class DebugHarness
                 Plugin.Logger.LogInfo("[harness] " + line.Substring(3).Trim());
                 break;
 
+            case "watch":
+                _watching = true;
+                Plugin.Logger.LogInfo($"[harness] 遥控模式：往 {Path.Combine(_shotDir, "cmd.txt")} 写指令即可（读后即删）");
+                break;
+
+            case "glyphs":
+                CheckGlyphs(line.Substring(6).Trim());
+                break;
+
             case "quit":
                 _frameWait = 10;       // 给引擎一点时间把最后一张截图写完
                 _quitting = true;
@@ -217,12 +271,86 @@ internal sealed class DebugHarness
         }
     }
 
+    /// <summary>
+    /// 检查一批字符在当前 UI 字体（含回退链、允许动态补字）里是否都有字形，缺的会渲染成方块。
+    /// 比肉眼看截图可靠：一次覆盖屏上可能出现的全部字符。
+    /// </summary>
+    private static void CheckGlyphs(string chars)
+    {
+        var font = Ui.UiTheme.Font;
+        if (font == null)
+        {
+            Plugin.Logger.LogWarning("[harness] glyphs: UI 字体不可用（font=MISSING）");
+            return;
+        }
+
+        var missing = new System.Text.StringBuilder();
+        int checkedCount = 0;
+        foreach (char c in chars)
+        {
+            if (char.IsWhiteSpace(c)) continue;
+            checkedCount++;
+            if (!font.HasCharacter(c, true, true)) missing.Append(c);
+        }
+
+        Plugin.Logger.LogInfo($"[harness] glyphs: font='{font.name}' 检查 {checkedCount} 个字符，缺字形 {missing.Length} 个 [{missing}]");
+    }
+
+    /// <summary>
+    /// 遥控模式：每隔几帧看一眼 <c>&lt;shots&gt;/cmd.txt</c>，有就读出来追加到指令队列并删掉。
+    /// 用途：需要「先给游戏发键鼠输入、再看一眼画面」的交互式验证（比如设置面板），脚本没法事先排好时序。
+    /// </summary>
+    private void PollRemoteCommands()
+    {
+        if (++_watchFrame % 6 != 0) return;
+
+        string path = Path.Combine(_shotDir, "cmd.txt");
+        try
+        {
+            if (!File.Exists(path)) return;
+
+            string[] lines = File.ReadAllLines(path);
+            File.Delete(path);
+
+            int before = _lines.Count;
+            foreach (string raw in lines)
+            {
+                string line = raw.Trim();
+                if (line.Length == 0 || line[0] == '#') continue;
+                ExpandInto(line);
+            }
+            Plugin.Logger.LogInfo($"[harness] 收到遥控指令 {_lines.Count - before} 条");
+        }
+        catch (Exception ex)
+        {
+            // 写入方还没写完 / 文件被占用：下次再读
+            Plugin.Logger.LogDebug($"[harness] 读取 cmd.txt 失败: {ex.Message}");
+        }
+    }
+
     private void Shot(string name)
     {
         string path = Path.Combine(_shotDir, name + ".png");
         ScreenCapture.CaptureScreenshot(path);
         _shotCount++;
         _frameWait = 2;   // 引擎在帧尾写盘，等两帧再继续，别让下一条 step 抢在写盘前面
+    }
+
+    /// <summary>
+    /// 记录「本进程已经过 waitmenu 启动等待」。
+    /// 冷启动的脚本要等主菜单加载完才能截图；热重载后同一进程已经在菜单里，直接跳过。
+    /// 文件名带进程 id，所以新开一局游戏会重新等待。
+    /// </summary>
+    private void MarkBooted()
+    {
+        try
+        {
+            File.WriteAllText(_bootMarker, DateTime.UtcNow.ToString("O"));
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogWarning($"[harness] 写启动标记失败 {_bootMarker}: {ex.Message}");
+        }
     }
 
     private static Color? ParseBackdrop(string s)

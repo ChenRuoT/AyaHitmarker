@@ -1,0 +1,107 @@
+# 字体 / 中文字形检查（路线图 0.5.2 #1）。默认配置 = 游戏自带 TMP 字体，不依赖任何系统字体。
+#
+#  1) glyphs：屏上可能出现的全部中文字符（取自 Game/*.cs 的字符串字面量，共 114 个）逐个查字形。
+#     缺字形的字会渲染成方块；日志里看 "缺字形 0 个" 即通过。比肉眼看截图可靠。
+#  2) 暗底 / 白底下把 8 种击杀场景、5 连杀累加、复仇各截一张稳定帧，肉眼复核横幅 / 标签 / 部位 / 击杀方式。
+#
+# 用法：tools/verify/run_game.ps1 -Script tools/verify/font-check.txt -ShotsDir D:/shots/font
+# 字符集会随源码变：新增中文文案后跑 `python -P tools/verify/onscreen_chars.py --update` 重新生成下面那一行。
+waitmenu 90
+clock manual
+log === 字形覆盖 ===
+glyphs 三不专中主了五仇体倒催先兴兵内再冲冷击刺剂力势压双可右后命器四地坠境士复多失头夺奋宰家射局左干战手挡换掠斯无未本机杀枪械武毒气水泪温湮火灭炮炸焰爆片物狂狙猎环瓦知破神秒程竭第精素者胸脱腹腿臂致药落血躯辐近远连部钝锋锐间隔雷领首高
+
+log === dark 底：8 种击杀场景 ===
+bg dark
+reset
+kill 1
+step 1.2
+shot dark_1
+reset
+kill 2
+step 1.2
+shot dark_2
+reset
+kill 3
+step 1.2
+shot dark_3
+reset
+kill 4
+step 1.2
+shot dark_4
+reset
+kill 5
+step 1.2
+shot dark_5
+reset
+kill 6
+step 1.2
+shot dark_6
+reset
+kill 7
+step 1.2
+shot dark_7
+reset
+kill 8
+step 1.2
+shot dark_8
+
+log === white 底：8 种击杀场景 ===
+bg white
+reset
+kill 1
+step 1.2
+shot white_1
+reset
+kill 2
+step 1.2
+shot white_2
+reset
+kill 3
+step 1.2
+shot white_3
+reset
+kill 4
+step 1.2
+shot white_4
+reset
+kill 5
+step 1.2
+shot white_5
+reset
+kill 6
+step 1.2
+shot white_6
+reset
+kill 7
+step 1.2
+shot white_7
+reset
+kill 8
+step 1.2
+shot white_8
+
+log === 暗底：5 连杀累加（双杀 / 三杀 / 狂战士 …）===
+bg dark
+reset
+kill 6
+step 0.4
+kill 6
+step 0.4
+kill 6
+step 0.4
+kill 6
+step 0.4
+kill 6
+step 1.2
+shot dark_streak5
+
+log === 暗底：复仇者 ===
+reset
+death 3
+kill 3
+step 1.2
+shot dark_revenge
+
+log === done ===
+quit
