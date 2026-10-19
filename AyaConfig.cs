@@ -228,9 +228,32 @@ internal sealed class AyaConfig
 
     internal AyaConfig(ConfigFile cfg)
     {
-        // ---------------------------------------------------------------- 0. 诊断
+        // ---------------------------------------------------------------- 分类顺序锚点
+        // ConfigurationManager 里分类的先后 = 各分类的条目在 ConfigFile 里「首次绑定」的先后：
+        // 实测（19.0.0）它既不看 Order、也不按分类名排序，所以光靠 ConfigPanel 里的 Category 前缀排不出 00 → 90。
+        // 这里按面板上希望的顺序（00 常用 → 10 → 20 → 30–33 击杀卡片 → 40 → 50 → 60 音效 → 90 调试），
+        // 先绑每个分类的一个代表条目；其余条目仍在各自的小节里绑定。
+        // 这些条目的 section / 键 / 默认值与原来完全一致，只是挪到了这里；实测已有 cfg 的值与小节顺序都不受影响。
+        UiScale = ConfigPanel.Bind(cfg, nameof(UiScale), "5. 界面", "UI 缩放", 1f,
+            new ConfigDescription("整体缩放命中提示 / 伤害数字 / 击杀播报。", null, new object[] { 0.5f, 3f }));
+        HitMarkerEnabled = ConfigPanel.Bind(cfg, nameof(HitMarkerEnabled), "1. 命中提示", "启用", true);
+        DamageTextEnabled = ConfigPanel.Bind(cfg, nameof(DamageTextEnabled), "2. 伤害数字", "启用", true);
+        KillFeedEnabled = ConfigPanel.Bind(cfg, nameof(KillFeedEnabled), "3. 击杀信息", "启用", true);
+        KillFeedHorizontalOffset = ConfigPanel.Bind(cfg, nameof(KillFeedHorizontalOffset), "3. 击杀信息", "水平中心偏移", 190f,
+            new ConfigDescription(
+                "卡片脊线（骷髅 / 名字 / 标签的右对齐边）在屏幕中心**左侧**的像素数。正值向左，负值向右。" +
+                "分数从脊线往右长约 110 像素，所以默认 190 让它刚好落在准星左边、不压命中标记（旧项目的 107 会压到）。", null, new object[] { -2000f, 2000f }));
+        ColorScore = ConfigPanel.Bind(cfg, nameof(ColorScore), "3. 击杀信息", "得分颜色", "#FFFFFFFF");
+        CardExitDuration = ConfigPanel.Bind(cfg, nameof(CardExitDuration), "3. 击杀信息", "卡片淡出时长(秒)", 0.5f,
+            new ConfigDescription("卡片最后的退场动画有多长（骷髅 + 名字先闪灭，标签随后，分数最后硬切）。", null, new object[] { 0f, 5f }));
+        EnableRingEffect = ConfigPanel.Bind(cfg, nameof(EnableRingEffect), "3b. 击杀特效", "启用环形特效", true);
+        RevengeWindow = ConfigPanel.Bind(cfg, nameof(RevengeWindow), "3c. 击杀成就", "复仇判定窗口(秒)", 120f,
+            new ConfigDescription("记下「谁杀了我」，在这个时间窗内击杀同一人 = 复仇者。", null, new object[] { 5f, 3600f }));
+        SoundEnabled = ConfigPanel.Bind(cfg, nameof(SoundEnabled), "4. 音频", "启用音效", true);
         DebugEnabled = ConfigPanel.Bind(cfg, nameof(DebugEnabled), "0. 调试", "启用调试日志", false,
             new ConfigDescription("把每次命中/击杀/播放音效的原始字段写进 BepInEx/LogOutput.log。排查问题时再打开。"));
+
+        // ---------------------------------------------------------------- 0. 诊断
         TestHotkeysEnabled = ConfigPanel.Bind(cfg, nameof(TestHotkeysEnabled), "0. 调试", "启用测试快捷键", true,
             new ConfigDescription("按下面的键立刻造一次命中/击杀反馈，不需要真的打架。与调试日志开关无关。"));
         TestHitKey = ConfigPanel.Bind(cfg, nameof(TestHitKey), "0. 调试", "测试命中快捷键", new KeyboardShortcut(KeyCode.F8));
@@ -241,7 +264,6 @@ internal sealed class AyaConfig
 
         // ---------------------------------------------------------------- 1. 命中提示
         // 旧 cfg: 基础大小 71 / 显示时长 0.868 / 中心偏移 (0,5) / 动画缩放 1
-        HitMarkerEnabled = ConfigPanel.Bind(cfg, nameof(HitMarkerEnabled), "1. 命中提示", "启用", true);
         HitBaseSize = ConfigPanel.Bind(cfg, nameof(HitBaseSize), "1. 命中提示", "基础大小", 71f,
             new ConfigDescription("命中图标的基础绘制尺寸（画布像素），还会叠加 UI 缩放及爆头倍率。", null, new object[] { 8f, 512f }));
         HitDuration = ConfigPanel.Bind(cfg, nameof(HitDuration), "1. 命中提示", "显示时长(秒)", 0.868f,
@@ -283,7 +305,6 @@ internal sealed class AyaConfig
 
         // ---------------------------------------------------------------- 2. 伤害数字
         // 旧 cfg: 字号 21 / 间距 8 / 多段间距 12 / 颜色 FFFFFF / 描边白 25% 不透明 / 爆头描边 FF0000
-        DamageTextEnabled = ConfigPanel.Bind(cfg, nameof(DamageTextEnabled), "2. 伤害数字", "启用", true);
         DamageTextMode = ConfigPanel.Bind(cfg, nameof(DamageTextMode), "2. 伤害数字", "取值", DamageNumberMode.BodyOnly,
             new ConfigDescription(
                 "BodyOnly（默认，与旧项目一致）= 只算肉体伤害，打中护甲未穿透时数字为 0 → 不绘制；" +
@@ -316,11 +337,6 @@ internal sealed class AyaConfig
         // ---------------------------------------------------------------- 3. 击杀播报
         // 卡片按战地 6 重做：一张卡累加窗口内的连续击杀（骷髅并排 / 分数累计 / 标签取并集），
         // 入场是「色块显影 + 数字滚动」，退场是「错峰闪烁熄灭」。
-        KillFeedEnabled = ConfigPanel.Bind(cfg, nameof(KillFeedEnabled), "3. 击杀信息", "启用", true);
-        KillFeedHorizontalOffset = ConfigPanel.Bind(cfg, nameof(KillFeedHorizontalOffset), "3. 击杀信息", "水平中心偏移", 190f,
-            new ConfigDescription(
-                "卡片脊线（骷髅 / 名字 / 标签的右对齐边）在屏幕中心**左侧**的像素数。正值向左，负值向右。" +
-                "分数从脊线往右长约 110 像素，所以默认 190 让它刚好落在准星左边、不压命中标记（旧项目的 107 会压到）。", null, new object[] { -2000f, 2000f }));
         KillFeedVerticalOffset = ConfigPanel.Bind(cfg, nameof(KillFeedVerticalOffset), "3. 击杀信息", "垂直中心偏移", 0f,
             new ConfigDescription("主行（骷髅 + 分数）的中心位置。正值向下，负值向上。", null, new object[] { -2000f, 2000f }));
         KillFeedLineSpacing = ConfigPanel.Bind(cfg, nameof(KillFeedLineSpacing), "3. 击杀信息", "行间距", 4f,
@@ -335,8 +351,6 @@ internal sealed class AyaConfig
             new ConfigDescription(
                 "战地式的故障动效：入场时元素先以实心色块闪出再显影、分数数字乱跳着滚到终值；" +
                 "退场时错峰闪烁熄灭。**关闭 = 普通淡入淡出**（对闪烁敏感的话请关掉）。"));
-        CardExitDuration = ConfigPanel.Bind(cfg, nameof(CardExitDuration), "3. 击杀信息", "卡片淡出时长(秒)", 0.5f,
-            new ConfigDescription("卡片最后的退场动画有多长（骷髅 + 名字先闪灭，标签随后，分数最后硬切）。", null, new object[] { 0f, 5f }));
         CardTextOutline = ConfigPanel.Bind(cfg, nameof(CardTextOutline), "3. 击杀信息", "卡片文字描边", 0.14f,
             new ConfigDescription(
                 "卡片文字的深色描边强度（TMP 归一化宽度，0 = 不描边）。这是 24px 字号下的基准值，其他字号按比例缩放 —— " +
@@ -363,7 +377,6 @@ internal sealed class AyaConfig
         ShowScore = ConfigPanel.Bind(cfg, nameof(ShowScore), "3. 击杀信息", "显示得分", true,
             new ConfigDescription("显示卡片累计反馈得分。公式在「50. 成就与计分规则」，不是游戏经验值。"));
         FontSizeScore = ConfigPanel.Bind(cfg, nameof(FontSizeScore), "3. 击杀信息", "得分字号", 34, new ConfigDescription("", null, new object[] { 8, 72 }));
-        ColorScore = ConfigPanel.Bind(cfg, nameof(ColorScore), "3. 击杀信息", "得分颜色", "#FFFFFFFF");
         ScoreHorizontalOffset = ConfigPanel.Bind(cfg, nameof(ScoreHorizontalOffset), "3. 击杀信息", "得分水平偏移", 14f,
             new ConfigDescription("得分文字的左缘相对脊线向右多少像素。", null, new object[] { -500f, 500f }));
         ScoreCountDuration = ConfigPanel.Bind(cfg, nameof(ScoreCountDuration), "3. 击杀信息", "得分计数字时长(秒)", 0.25f,
@@ -450,7 +463,6 @@ internal sealed class AyaConfig
         ColorSectant = ConfigPanel.Bind(cfg, nameof(ColorSectant), "3. 击杀信息", "颜色_Sectant", "#3FBF5FFF");
 
         // ---------------------------------------------------------------- 3b. 击杀图标特效
-        EnableRingEffect = ConfigPanel.Bind(cfg, nameof(EnableRingEffect), "3b. 击杀特效", "启用环形特效", true);
         RingHeadshotEnabled = ConfigPanel.Bind(cfg, nameof(RingHeadshotEnabled), "3b. 击杀特效", "爆头时触发", true);
         RingEffectDelay = ConfigPanel.Bind(cfg, nameof(RingEffectDelay), "3b. 击杀特效", "延迟(秒)", 0.1f);
         RingEffectDuration = ConfigPanel.Bind(cfg, nameof(RingEffectDuration), "3b. 击杀特效", "时长(秒)", 0.3f);
@@ -474,8 +486,6 @@ internal sealed class AyaConfig
 
         // ---------------------------------------------------------------- 3c. 击杀成就 / 连杀
         // 「连杀重置窗口」复用 3. 击杀信息 里的「连杀时间窗口」，这里不重复给。
-        RevengeWindow = ConfigPanel.Bind(cfg, nameof(RevengeWindow), "3c. 击杀成就", "复仇判定窗口(秒)", 120f,
-            new ConfigDescription("记下「谁杀了我」，在这个时间窗内击杀同一人 = 复仇者。", null, new object[] { 5f, 3600f }));
         MultiKillWindow = ConfigPanel.Bind(cfg, nameof(MultiKillWindow), "3c. 击杀成就", "多杀判定窗口(秒)", 2.5f,
             new ConfigDescription("两次击杀间隔小于这个值 → 双杀 / 三杀 / 多杀。", null, new object[] { 0.5f, 30f }));
         GunnerWindow = ConfigPanel.Bind(cfg, nameof(GunnerWindow), "3c. 击杀成就", "枪手判定窗口(秒)", 4f,
@@ -500,7 +510,6 @@ internal sealed class AyaConfig
 
         // ---------------------------------------------------------------- 4. 音效
         // 旧 cfg: 命中 0.5 / 击杀 0.7，爆头不做区分
-        SoundEnabled = ConfigPanel.Bind(cfg, nameof(SoundEnabled), "4. 音频", "启用音效", true);
         SoundHitEnabled = ConfigPanel.Bind(cfg, nameof(SoundHitEnabled), "4. 音频", "启用命中音效", true);
         SoundKillEnabled = ConfigPanel.Bind(cfg, nameof(SoundKillEnabled), "4. 音频", "启用击杀音效", true);
         // 注意：音量必须用 AcceptableValueRange 而不是 ConfigDescription 的 tags。
@@ -521,8 +530,9 @@ internal sealed class AyaConfig
         // ---- 排障开关：默认全部保持旧 Mono 项目的配置（都不开） ----
         SoundSpatialMode = ConfigPanel.Bind(cfg, nameof(SoundSpatialMode), "4. 音频", "空间模式", SpatialMode.Flat2D,
             new ConfigDescription(
-                "2D = 旧项目做法。这个版本的 EFT 用 Meta XR Audio 做空间音频，" +
-                "如果 2D 完全没声音，改成「3D 跟随相机」走游戏的声场管线。"));
+                "3D 跟随相机（默认）= 声源每帧跟着相机，走游戏的声场管线（这个版本的 EFT 用 Meta XR Audio 做空间音频），" +
+                "是唯一在真实战局里确认过出声的模式。2D = 旧项目的做法，在战局里是否出声没有验证过；" +
+                "如果 3D 听起来被空间化处理得发闷，可以试试 2D，没声音就改回来。"));
         SoundBypassEffects = ConfigPanel.Bind(cfg, nameof(SoundBypassEffects), "4. 音频", "绕过效果链(排障)", false,
             new ConfigDescription(
                 "对应 AudioSource.bypassEffects + bypassListenerEffects + bypassReverbZones。" +
@@ -532,8 +542,6 @@ internal sealed class AyaConfig
             new ConfigDescription("对应 AudioSource.ignoreListenerPause。默认关闭。"));
 
         // ---------------------------------------------------------------- 5. 界面
-        UiScale = ConfigPanel.Bind(cfg, nameof(UiScale), "5. 界面", "UI 缩放", 1f,
-            new ConfigDescription("整体缩放命中提示 / 伤害数字 / 击杀播报。", null, new object[] { 0.5f, 3f }));
         UiSortingOrder = ConfigPanel.Bind(cfg, nameof(UiSortingOrder), "5. 界面", "画布层级", 9000,
             new ConfigDescription("越大越靠前。EFT 自己的 HUD 一般在这个值以下。"));
         UiFontName = ConfigPanel.Bind(cfg, nameof(UiFontName), "5. 界面", "字体名称", "",
