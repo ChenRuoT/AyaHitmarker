@@ -40,7 +40,7 @@ BepInEx 与运行时由游戏整合包提供；玩家无需安装 .NET SDK。
 - `F8 / F9 / F10` 是测试命中、击杀和阵亡的快捷键，主菜单也可使用；可以在设置中关闭。
 - 报告问题时请附游戏版本、插件版本和 `BepInEx/LogOutput.log` 中与 AyaHitmarker 相关的日志。提交前移除日志中的个人或认证信息。
 
-[问题反馈](https://github.com/ChenRuoT/AyaHitmarker/issues) · [发布维护流程](docs/RELEASING.md) · [版本说明](docs/releases/0.5.2.md) · [路线图](docs/ROADMAP.md)
+[问题反馈](https://github.com/ChenRuoT/AyaHitmarker/issues) · [发布维护流程](docs/RELEASING.md) · [版本说明](docs/releases/0.5.3.md) · [路线图](docs/ROADMAP.md)
 
 ## 致谢与许可
 
@@ -161,7 +161,8 @@ Player.OnPlayerDeadStatic ────────┤         FeedbackBus.Drain
 - **只有一个注入的托管类型**（`Behaviour/AyaBehaviour.cs`）。`BasePlugin` 不是 MonoBehaviour，
   所以由 `Plugin.Load()` 用 `AddComponent<T>()` 注入。其余 UI 全是 interop 自带组件。
 - **零补丁，因此不依赖 `SPTushonka.Reflection`。** 命中和击杀全是事件订阅；
-  战局结束靠轮询 `GlobalEventDispatcher` 实例变化检测。为什么连框架都不引：见 §7。
+  战局边界靠轮询主玩家（`GameWorld.MainPlayer.Profile`）出现/消失检测；`OnBeingHit` 每局开局重绑
+  （实测 `GlobalEventDispatcher` 实例跨局不变，换局时旧订阅会被游戏清掉）。为什么连框架都不引：见 §7。
 - 音效从 `Sounds/` 异步加载（见上），播放路径里**绝不触发加载**，没加载完就静默不响。
 
 ## 4. 实测结论：命中 / 击杀到底该挂哪儿
@@ -316,7 +317,8 @@ Patch a method with its own body instead
 不可补，必须换目标或者改用轮询/事件。
 
 **当前结论：这个插件不需要任何补丁，所以也不引用 `SPTushonka.Reflection` / `0Harmony`。**
-战局边界由 `GlobalEventDispatcher` 实例变化（`GameEvents.Poll()`，限频 4Hz）精确覆盖。
+战局边界由主玩家出现/消失判定（`GameEvents.Poll()`，限频 4Hz）；`OnBeingHit` 每局开局重绑
+（`GlobalEventDispatcher` 实例在 EFT 1.2.0.0 里跨局不变，旧「实例变化 = 换局」的判据已实测推翻）。
 
 顺带避开的第二个坑：`new PatchManager(this, autoPatch: true)` 在「本程序集里一个 `ModulePatch` 都没有」时
 会抛 `PatchException: Could not find any patches defined in the assembly during auto patching`，
@@ -562,9 +564,12 @@ BF6 的成就官方叫 **Accolades（荣誉）**：`先锋 Vanguard` / `枪手 G
   换文件需要重启（只探一次）。
 - **判定阈值以主线程时间为准**：多杀 / 连杀 / 复仇的时间戳在 `FeedbackBus.Drain` 时打，
   事件线程不做 `Time` 读取（不保证主线程，也不值得去碰 Unity）。
-- **战局结束只有一路检测**：轮询 `GlobalEventDispatcher` 实例变化（限频 4Hz）。
+- **战局边界以主玩家为准**：轮询 `GameWorld.MainPlayer.Profile` 出现/消失（限频 4Hz），
   所以从战局销毁到 UI 清空最多有 0.25 秒延迟 —— 实际感知不到（那 0.25 秒里画面已经切走了）。
-- 自己被打**只做复仇记账、不出提示**。`GameEvents.OnGlobalBeingHit` 在建 `HitRecord` 之前就按 `aggressor.IsYourPlayer` 过滤掉了「我被打」的事件，所以 `HitRecord.VictimIsLocalPlayer` 实际只会在「自己打到自己」时为 true（`AyaBehaviour` 里直接跳过）。要做被击提示得先放开这个过滤，并确认 `OnBeingHit` 在受害者是本机玩家时确实触发（路线图「探查局」S2）。
+  **不能用 `GlobalEventDispatcher` 实例判局**：实测（2026-10-19 三连局）它在整个进程里指针不变，
+  而且游戏换局时会清掉 `OnBeingHit` 订阅 —— 这正是 0.5.2 及以前「第 2 局起命中反馈消失」的原因；
+  0.5.3 起每局开局强制重绑（幂等）。
+- 自己被打**只做复仇记账、不出提示**。`GameEvents.OnGlobalBeingHit` 在建 `HitRecord` 之前就按 `aggressor.IsYourPlayer` 过滤掉了「我被打」的事件，所以 `HitRecord.VictimIsLocalPlayer` 实际只会在「自己打到自己」时为 true（`AyaBehaviour` 里直接跳过）。要做被击提示得先放开这个过滤；探查局 S2 已确认 `OnBeingHit` 在受害者是本机玩家时确实触发、`Direction` / `MasterOrigin` 可用（见 `docs/recon-findings-2026-10-19.md`），0.6 e 可以直接做。
 - **伤害数字没有 BF6 的「累加」**：BF6 里同一目标的伤害在同一位置滚动累计（`32 → 67 → 99`），击杀时变红；
   这里仍是旧项目的「一行向右」。累加需要知道「这一发打的是不是同一个人」，`HitRecord` 里没有目标标识。
 - **程序化骷髅是 SDF 近似，不是 BF6 的原图**：形状按实录里的轮廓（圆颅 + 窄下颌 + 爆头颅顶 V 形裂口）画的，
@@ -699,6 +704,7 @@ dotnet build                       # 收尾：必须先退出游戏。恢复 plu
 
 | 版本 | 内容 |
 |---|---|
+| 0.5.3 | **修连续战局命中反馈消失**：同一进程第 2 局起命中标记 / 命中音效整局不出现（击杀正常）。实测 `GlobalEventDispatcher` 实例跨局不变、换局时 `OnBeingHit` 订阅被游戏清掉，旧版只在启动订阅一次；现在**每局开局强制重绑**（幂等），三连局实测 99 条命中事件全部收到。**战局边界改用主玩家判定**（`GameWorld.MainPlayer.Profile` 出现/消失），连带修正连杀 / 每局击杀 / 得分 / 成就跨局累计与开局不重载音效、不清空 UI。新增 `[events] raid started (main player)` / `OnBeingHit 已绑定` / `本局第一发 OnBeingHit` 与 `[diag] raidState=` 诊断日志。配置版本不变（3）。 |
 | 0.5.2 | **音效空间模式默认 `Flat2D` → `FollowCamera3D`**（配置版本 2 → 3，只重置仍是 `Flat2D` 的；`FollowCamera3D` 是唯一在战局里确认过出声的模式）；**热重载迭代**（`-p:HotReload=true`、`reload-scripts.ps1`、`waitmenu`）及完整的卸载路径（画布 / 音频宿主 / 图标与字体缓存 / TMP 材质实例，逐代泄漏实测为 0）；**字体**：停止探测注定失败的 Arial / Segoe UI，修正「填 Microsoft YaHei」的误导建议，启动时写字形覆盖日志，新增 `glyphs` 指令与 `font-check.txt`；**设置面板分类顺序修复**（`00` 原来排在最后、`90` 排在最前：ConfigurationManager 按首次绑定顺序排，不看 `Order`）；设置面板实机验收（枚举 / 颜色 / 偏移 / 滑块 / 快捷键 / Reset / 持久化）；
 遥控模式 `watch` + `send-input.ps1`；Issue 模板；文档对齐（测试数、cfg 分组名 `4. 音频`、`VictimIsLocalPlayer`）；**卸载清理健壮性**：`OnDestroy` 各清理步骤彼此独立，任一步失败不拖累其余，并在末尾补一次幂等的 `GameEvents.Shutdown()`（兜住旧代次同帧 Update 重新订阅 `OnBeingHit`）。 |
 | 0.5.1 | 修复战局中音效数据清空后持续无声：完整性检查与异步恢复、资源保活及旧请求回收；315 项离线测试与实机脚本通过，用户真实战局实测确认修复。 |

@@ -66,3 +66,17 @@
 4. `[diag]` 的 `raidState=`：菜单 `inRaid=False`、战局 `inRaid=True`；dispatcher 指针跨局是否变？
 5. 新局 `[diag] raidKills` 从 0 开始（streak 每局归零）。
 6. S1 补测：打中同一个 bot 多次 → `[recon-hit] … victim=bot(ProfileId)` 的 id 是否稳定、不同 bot 是否不同。
+
+## 5. 第二轮验证：修复通过（2026-10-19 晚，同一进程三连局）
+
+用户按上面的清单又打了三局，`LogOutput.log`（9357 行）确认修复：
+
+- **逐局重绑**：`[events] OnBeingHit 已绑定（raid started…）` 出现 3 次（6217 / 7726 / 9123），
+  dispatcher 指针三局都是 `0x26DFE7244C0` —— 直接证实「实例跨局不变」的根因判断。
+- **战局边界**：`raid started (main player)` / `raid ended (main player gone)` 各 3 次（6219/6682、7728/8611、9125/9205），
+  `[diag]` 里 `raidState=inRaid=True/False` 切换正常；新局 `raidKills` 从 0 开始。
+- **命中事件恢复**：第 2 局 99 条 `[recon-hit]`（修复前同场景 0 条）、第 3 局 6 条；
+  `[events] 本局第一发 OnBeingHit` 在第 2、3 局都出现（第 1 局没有交火）。
+- 无插件告警 / 错误，`droppedHits=0`；命中音效 64 次、击杀音效 9 次（3 普通 + 6 爆头）与击杀数一致。
+- 0.5.3 发布说明见 [releases/0.5.3.md](releases/0.5.3.md)；S1（命中侧 ProfileId 稳定性）现在可以正常补测。
+
