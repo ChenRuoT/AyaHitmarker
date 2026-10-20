@@ -21,6 +21,7 @@ internal static class Program
         BodyPartFacts.Run();
         KillCardLayoutFacts.Run();
         KillCardModelFacts.Run();
+        DamageAccumFacts.Run();
         GlitchFacts.Run();
         IconShapeFacts.Run();
         AudioClipHealthFacts.Run();

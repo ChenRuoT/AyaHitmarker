@@ -16,6 +16,7 @@ namespace AyaHitmarker.Behaviour;
 /// bg dark                # 画布后面垫一块纯色（dark|mid|white|snow|grass|#RRGGBB|off）
 /// kill 2                 # 造脚本表里第 2 条击杀（走真实的连杀判定 / 卡片 / 音效）
 /// hit [head]             # 造一次命中（head = 爆头）
+/// hit armor [N]          # 造一次只打中护甲的命中（0.6 a：盾形标记 + 护甲配色）；N = 脚本表目标序号（与 kill N 配对，累加样式下对得上同一个槽）
 /// death 3                # 模拟「被脚本表第 3 条的那个人打死」（之后杀他 = 复仇者）
 /// waitmenu [秒]          # 本进程首次运行时等主菜单场景（MenuUIScene）出现，之后各代直接返回
 /// step 0.0333            # 手动时钟前进 0.0333 秒
@@ -43,7 +44,8 @@ internal sealed class DebugHarness
 {
     internal sealed class Hooks
     {
-        internal Action<bool> Hit = _ => { };
+        /// <summary>命中：headshot / armorOnly（0.6 a 护甲盾）/ 目标序号（与 <c>kill</c> 共用，累加样式下用来对上同一个目标）。</summary>
+        internal Action<bool, bool, int> Hit = (_, _, _) => { };
         internal Action<int> Kill = _ => { };
         internal Action<int> Death = _ => { };
         internal Action<string> Audio = _ => { };
@@ -224,8 +226,17 @@ internal sealed class DebugHarness
                 break;
 
             case "hit":
-                _hooks.Hit(arg1.Equals("head", StringComparison.OrdinalIgnoreCase));
+            {
+                // hit                → 普通命中（目标 1）
+                // hit head           → 爆头
+                // hit armor          → 只打中护甲（0.6 a 的盾形标记）
+                // hit head 3 / hit armor 3 / hit 3 → 指定测试击杀表里的目标序号（和 kill N 配对，累加样式下会对上同一个槽）
+                bool head = arg1.Equals("head", StringComparison.OrdinalIgnoreCase);
+                bool armor = arg1.Equals("armor", StringComparison.OrdinalIgnoreCase);
+                int target = head || armor ? ParseInt(t.Length > 2 ? t[2] : string.Empty, 1) : ParseInt(arg1, 1);
+                _hooks.Hit(head, armor, target);
                 break;
+            }
 
             case "kill":
                 _hooks.Kill(ParseInt(arg1, 1));

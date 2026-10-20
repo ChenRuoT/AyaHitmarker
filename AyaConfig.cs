@@ -32,6 +32,15 @@ internal enum DamageNumberMode
     Total = 1,
 }
 
+/// <summary>伤害数字的排布样式（0.6 b）。两种都保留，设置页可切换。</summary>
+internal enum DamageNumberLayout
+{
+    /// <summary>旧 Mono 项目样式：每次命中在右边多加一个数字，所有还活着的数字排成一行向右延伸。</summary>
+    LineRight = 0,
+    /// <summary>战地 6 样式：同一目标在窗口内只显示一个滚动累计的数字，击杀时变红。</summary>
+    Accumulate = 1,
+}
+
 /// <summary>
 /// 全部可调项。
 ///
@@ -63,6 +72,8 @@ internal sealed class AyaConfig
     internal ConfigEntry<string> KillMarkerColor { get; }
     internal ConfigEntry<float> KillMarkerScale { get; }
     internal ConfigEntry<float> KillMarkerDuration { get; }
+    internal ConfigEntry<bool> ArmorHitMarkerEnabled { get; }
+    internal ConfigEntry<string> ArmorHitMarkerColor { get; }
 
     // ---- 2. 伤害数字 ----
     internal ConfigEntry<bool> DamageTextEnabled { get; }
@@ -77,6 +88,10 @@ internal sealed class AyaConfig
     internal ConfigEntry<float> DamageTextPadding { get; }
     internal ConfigEntry<float> DamageMultiTextPadding { get; }
     internal ConfigEntry<float> DamageTextLifetime { get; }
+    internal ConfigEntry<DamageNumberLayout> DamageTextLayout { get; }
+    internal ConfigEntry<float> DamageAccumulateWindow { get; }
+    internal ConfigEntry<float> DamageAccumulateLifetime { get; }
+    internal ConfigEntry<string> DamageTextArmorColor { get; }
 
     // ---- 3. 击杀播报 ----
     internal ConfigEntry<bool> KillFeedEnabled { get; }
@@ -216,6 +231,10 @@ internal sealed class AyaConfig
     internal ConfigEntry<string> SoundFileHitHeadshot { get; }
     internal ConfigEntry<string> SoundFileKill { get; }
     internal ConfigEntry<string> SoundFileKillHeadshot { get; }
+    internal ConfigEntry<bool> SoundMultiKillEnabled { get; }
+    internal ConfigEntry<string> SoundFileDoubleKill { get; }
+    internal ConfigEntry<string> SoundFileTripleKill { get; }
+    internal ConfigEntry<string> SoundFileMultiKill { get; }
     internal ConfigEntry<SpatialMode> SoundSpatialMode { get; }
     internal ConfigEntry<bool> SoundBypassEffects { get; }
     internal ConfigEntry<bool> SoundIgnoreListenerPause { get; }
@@ -302,6 +321,12 @@ internal sealed class AyaConfig
             new ConfigDescription("击杀标记从基础大小向外扩散到的比例。", null, new object[] { 1f, 4f }));
         KillMarkerDuration = ConfigPanel.Bind(cfg, nameof(KillMarkerDuration), "1. 命中提示", "击杀标记时长(秒)", 0.5f,
             new ConfigDescription("", null, new object[] { 0.1f, 3f }));
+        ArmorHitMarkerEnabled = ConfigPanel.Bind(cfg, nameof(ArmorHitMarkerEnabled), "1. 命中提示", "护甲命中标记", true,
+            new ConfigDescription(
+                "只打中防弹板（本次命中只有护甲伤害、没有肉体伤害）时，把命中标记换成蓝灰色盾形，" +
+                "伤害数字也改用「护甲命中颜色」。关闭后回到普通 ✕ 标记。仅「图标样式 = Procedural」时生效。"));
+        ArmorHitMarkerColor = ConfigPanel.Bind(cfg, nameof(ArmorHitMarkerColor), "1. 命中提示", "护甲标记颜色", "#8FB6D9FF",
+            new ConfigDescription("护甲命中盾形标记的着色（白色部分相乘，深色描边不变）。"));
 
         // ---------------------------------------------------------------- 2. 伤害数字
         // 旧 cfg: 字号 21 / 间距 8 / 多段间距 12 / 颜色 FFFFFF / 描边白 25% 不透明 / 爆头描边 FF0000
@@ -333,6 +358,18 @@ internal sealed class AyaConfig
             new ConfigDescription("爆头命中的数字填充色（旧项目爆头只改描边，填充仍是白色）。填成和「颜色」一样就等于不区分。"));
         DamageTextKillColor = ConfigPanel.Bind(cfg, nameof(DamageTextKillColor), "2. 伤害数字", "击杀颜色", "#FF4A3DFF",
             new ConfigDescription("击杀那一下的数字会变成这个颜色（战地里最后一击的数字是红的）。"));
+        DamageTextLayout = ConfigPanel.Bind(cfg, nameof(DamageTextLayout), "2. 伤害数字", "排布方式", DamageNumberLayout.LineRight,
+            new ConfigDescription(
+                "一行向右（默认，旧项目样式）= 每次命中在右边多加一个数字，冒出一行；" +
+                "累加（战地 6 样式）= 同一个目标在窗口内只显示一个滚动累计的数字，击杀时变红。"));
+        DamageAccumulateWindow = ConfigPanel.Bind(cfg, nameof(DamageAccumulateWindow), "2. 伤害数字", "累加窗口(秒)", 2f,
+            new ConfigDescription(
+                "「排布方式 = 累加」时，同一目标在这段时间内再次命中就继续累加；超时后下一次命中另起一个数字。",
+                null, new object[] { 0.2f, 10f }));
+        DamageAccumulateLifetime = ConfigPanel.Bind(cfg, nameof(DamageAccumulateLifetime), "2. 伤害数字", "累加淡出时长(秒)", 0.9f,
+            new ConfigDescription("「排布方式 = 累加」时，停止命中（或击杀）后数字淡出的时间。", null, new object[] { 0.1f, 5f }));
+        DamageTextArmorColor = ConfigPanel.Bind(cfg, nameof(DamageTextArmorColor), "2. 伤害数字", "护甲命中颜色", "#9CC7E8FF",
+            new ConfigDescription("只打中护甲（本次命中没有肉体伤害）时数字的颜色，和「护甲命中标记」配套。"));
 
         // ---------------------------------------------------------------- 3. 击杀播报
         // 卡片按战地 6 重做：一张卡累加窗口内的连续击杀（骷髅并排 / 分数累计 / 标签取并集），
@@ -526,6 +563,13 @@ internal sealed class AyaConfig
         SoundFileHitHeadshot = ConfigPanel.Bind(cfg, nameof(SoundFileHitHeadshot), "4. 音频", "自定义:爆头命中", "", new ConfigDescription(SoundHint("headshot_hit")));
         SoundFileKill = ConfigPanel.Bind(cfg, nameof(SoundFileKill), "4. 音频", "自定义:击杀", "", new ConfigDescription(SoundHint("kill")));
         SoundFileKillHeadshot = ConfigPanel.Bind(cfg, nameof(SoundFileKillHeadshot), "4. 音频", "自定义:爆头击杀", "", new ConfigDescription(SoundHint("headshot_kill")));
+        SoundMultiKillEnabled = ConfigPanel.Bind(cfg, nameof(SoundMultiKillEnabled), "4. 音频", "启用连杀音效", true,
+            new ConfigDescription(
+                "双杀 / 三杀 / 四杀及以上分别用 Sounds/double_kill、triple_kill、multi_kill；" +
+                "文件不存在时回退普通击杀音效（不会静音）。连杀档位由「多杀判定窗口」决定。"));
+        SoundFileDoubleKill = ConfigPanel.Bind(cfg, nameof(SoundFileDoubleKill), "4. 音频", "自定义:双杀", "", new ConfigDescription(SoundHint("double_kill")));
+        SoundFileTripleKill = ConfigPanel.Bind(cfg, nameof(SoundFileTripleKill), "4. 音频", "自定义:三杀", "", new ConfigDescription(SoundHint("triple_kill")));
+        SoundFileMultiKill = ConfigPanel.Bind(cfg, nameof(SoundFileMultiKill), "4. 音频", "自定义:四杀及以上", "", new ConfigDescription(SoundHint("multi_kill")));
 
         // ---- 空间模式 + 排障开关：排障开关默认全部保持旧 Mono 项目的配置（都不开） ----
         // 空间模式默认 3D 跟随相机：这是唯一在真实战局里确认过出声的模式（0.5.1 的战局实测就是在 3D 下做的）；

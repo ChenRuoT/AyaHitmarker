@@ -25,7 +25,7 @@ internal sealed class SoundPlayer
     private AudioSource? _source;
     private bool _envLogged;
 
-    private static readonly bool[] _warned = new bool[4];
+    private static readonly bool[] _warned = new bool[(int)SoundKind.MultiKill + 1];
 
     internal void Shutdown()
     {
@@ -42,6 +42,35 @@ internal sealed class SoundPlayer
 
     internal void PlayKill(bool headshot) => Play(headshot ? SoundKind.KillHeadshot : SoundKind.Kill);
 
+    /// <summary>
+    /// 0.6 d：连杀音效。tier = 本次连杀的第几杀（2 = 双杀 …）。
+    /// 音效文件缺失或开关关闭时**回退普通击杀音效**（不静音、不额外叠一层）。
+    /// </summary>
+    internal void PlayMultiKill(int tier, bool headshot)
+    {
+        var cfg = Plugin.Cfg;
+        if (!cfg.SoundMultiKillEnabled.Value)
+        {
+            PlayKill(headshot);
+            return;
+        }
+
+        var kind = tier >= 4 ? SoundKind.MultiKill
+            : tier == 3 ? SoundKind.TripleKill
+            : SoundKind.DoubleKill;
+
+        // 可选文件没提供：直接回退普通击杀音效。不要在 Play 里走一遍告警。
+        if (AudioBank.Get(kind) == null)
+        {
+            if (cfg.DebugEnabled.Value)
+                Plugin.Logger.LogInfo($"[audio] {kind} 不可用，回退普通击杀音效（tier={tier}）");
+            PlayKill(headshot);
+            return;
+        }
+
+        Play(kind);
+    }
+
     private void Play(SoundKind kind)
     {
         var cfg = Plugin.Cfg;
@@ -53,7 +82,7 @@ internal sealed class SoundPlayer
             return;
         }
 
-        bool isKill = kind == SoundKind.Kill || kind == SoundKind.KillHeadshot;
+        bool isKill = kind >= SoundKind.Kill;
         if (isKill ? !cfg.SoundKillEnabled.Value : !cfg.SoundHitEnabled.Value)
         {
             WarnOnce(kind, isKill ? "击杀音效开关关闭" : "命中音效开关关闭");
@@ -85,7 +114,9 @@ internal sealed class SoundPlayer
                 SoundKind.Hit => cfg.SoundHitVolume.Value,
                 SoundKind.HitHeadshot => cfg.SoundHitHeadshotVolume.Value,
                 SoundKind.Kill => cfg.SoundKillVolume.Value,
-                _ => cfg.SoundKillHeadshotVolume.Value,
+                SoundKind.KillHeadshot => cfg.SoundKillHeadshotVolume.Value,
+                // 连杀音效跟击杀音效共用音量，设置页不再多一个滑条
+                _ => cfg.SoundKillVolume.Value,
             });
 
             if (vol <= 0.0001f)

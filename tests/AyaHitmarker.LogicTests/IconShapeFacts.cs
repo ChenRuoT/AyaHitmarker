@@ -214,5 +214,130 @@ internal static class IconShapeFacts
             Assert.Equal(6, IconShapes.TagBox(99).Width / 2 - 2, "描边宽度被钳到 6 以内");
             Assert.Equal(1, IconShapes.TagBox(0).Width / 2 - 2, "描边宽度至少 1 像素");
         }
+
+        ArmorMarkerFacts();
+    }
+
+    /// <summary>正方形位图的局部坐标（半边长 = 1，Y 向上，原点在正中）→ 像素下标。</summary>
+    private static (int x, int y) SquarePx(int size, float lx, float ly)
+        => ((int)MathF.Round(size * 0.5f + lx * size * 0.5f), (int)MathF.Round(size * 0.5f + ly * size * 0.5f));
+
+    private static int CountBlackPixels(IconBitmap bmp)
+    {
+        int n = 0;
+        for (int i = 0; i < bmp.Rgba.Length; i += 4)
+        {
+            if (bmp.Rgba[i + 3] > 100 && bmp.Rgba[i] < 40 && bmp.Rgba[i + 1] < 40 && bmp.Rgba[i + 2] < 40) n++;
+        }
+        return n;
+    }
+
+    private static bool SameBytes(IconBitmap a, IconBitmap b)
+    {
+        if (a.Rgba.Length != b.Rgba.Length) return false;
+        for (int i = 0; i < a.Rgba.Length; i++) if (a.Rgba[i] != b.Rgba[i]) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// 护甲命中标记的像素契约：盾形轮廓 + 白芯 + 黑描边，左右严格镜像，不裁切，可被 Image.color 相乘着色。
+    /// 好不好看由 <c>--render-icons</c> 的 armor_markers.png 肉眼看；这里挡「不对称 / 描边消失 / 贴边裁切 / 着色后无白芯」。
+    /// </summary>
+    private static void ArmorMarkerFacts()
+    {
+        Assert.Suite("Icon: 护甲盾");
+        {
+            const int S = 256;
+            float outline = 1.8f / (71f * 0.5f);   // 71px 显示、1.8px 描边（与命中标记同一套换算）
+            IconBitmap shield = IconShapes.ArmorMarker(S, outline);
+
+            Assert.Equal(S, shield.Width, "宽度 = 请求的边长（正方形）");
+            Assert.Equal(S, shield.Height, "高度 = 请求的边长（正方形）");
+            Assert.Equal(S * S * 4, shield.Rgba.Length, "RGBA 缓冲区大小正确");
+
+            IconBitmap clamped = IconShapes.ArmorMarker(16, outline);
+            Assert.Equal(32, clamped.Width, "sizePx < 32 被钳到 32");
+            Assert.Equal(32, clamped.Height, "钳制后仍是正方形");
+            Assert.Equal(32 * 32 * 4, clamped.Rgba.Length, "钳制后 RGBA 缓冲区大小正确");
+
+            // 左右逐像素完全镜像：RGB 与 alpha 都必须相等（盾形用 |x| 折半画，不需要容差）
+            bool mirror = true;
+            for (int y = 0; y < S && mirror; y++)
+            {
+                for (int x = 0; x < S; x++)
+                {
+                    if (Px(shield, x, y) != Px(shield, S - 1 - x, y)) { mirror = false; break; }
+                }
+            }
+            Assert.True(mirror, "左右逐像素完全镜像（含 RGB 与 alpha）");
+
+            // 白芯：中心与中轴线上有一大片不透明白（之后被 Image.color 相乘成护甲色）
+            var center = Px(shield, S / 2, S / 2);
+            Assert.True(center.a >= 250 && center.r >= 250 && center.g >= 250 && center.b >= 250,
+                "盾牌中心是不透明的白色");
+            int whiteAxis = 0;
+            for (int y = 0; y < S; y++)
+            {
+                var p = Px(shield, S / 2, y);
+                if (p.a >= 250 && p.r >= 250 && p.g >= 250 && p.b >= 250) whiteAxis++;
+            }
+            Assert.True(whiteAxis > S / 3, "中轴线上有一大片白色核心（> 边长/3 像素）");
+
+            // 黑描边：两侧竖边外缘一圈是被压黑的（着色相乘后仍是黑，白底上也不会消失）
+            var (bx, by) = SquarePx(S, 0.64f + outline * 0.5f, 0.4f);
+            var ring = Px(shield, bx, by);
+            Assert.True(ring.a > 100, "竖边外侧有描边（不透明度 > 100）");
+            Assert.True(ring.r < 40 && ring.g < 40 && ring.b < 40, "描边是黑色");
+            Assert.True(CountBlackPixels(shield) > 200, "整张图有足够多的黑色描边像素");
+
+            // 盾形轮廓：上沿是宽的平顶、向下逐渐收窄、下缘收成尖角（按行统计 alpha > 128 的列数）
+            int RowSpan(float ly)
+            {
+                int y = (int)MathF.Round(S * 0.5f + ly * S * 0.5f - 0.5f);
+                int count = 0;
+                for (int x = 0; x < S; x++) if (Px(shield, x, y).a > 128) count++;
+                return count;
+            }
+            int topSpan = RowSpan(0.66f);
+            int upperSpan = RowSpan(0.50f);
+            int middleSpan = RowSpan(-0.18f);
+            int lowerSpan = RowSpan(-0.45f);
+            int tipSpan = RowSpan(-0.78f);
+            Assert.True(topSpan > S / 2, "上沿是宽的平顶（同一行不透明像素 > 半幅）");
+            Assert.True(upperSpan > middleSpan, "上半部分比下半部分宽（两侧竖边）");
+            Assert.True(middleSpan > lowerSpan, "越往下越窄（下缘收拢）");
+            Assert.True(lowerSpan > tipSpan, "最下方只剩尖角");
+            Assert.True(tipSpan < S / 8, "下缘尖角很窄（是「盾」不是「碑」）");
+
+            // 四条边最外一圈全透明：居中、不裁切（0 / 正常 / 较粗描边都留了余量）
+            bool borderClear = true;
+            for (int pass = 0; pass < 3 && borderClear; pass++)
+            {
+                float o = pass == 0 ? 0f : pass == 1 ? outline : 0.1f;
+                IconBitmap b = pass == 1 ? shield : IconShapes.ArmorMarker(S, o);
+                for (int i = 0; i < S; i++)
+                {
+                    if (Px(b, i, 0).a != 0 || Px(b, i, S - 1).a != 0 ||
+                        Px(b, 0, i).a != 0 || Px(b, S - 1, i).a != 0) { borderClear = false; break; }
+                }
+            }
+            Assert.True(borderClear, "四条边最外一圈 alpha 都是 0（留白、不裁切）");
+
+            // 无描边：没有黑色像素（只剩白芯 + 白辉光），仍然对称、仍然不贴边
+            IconBitmap bare = IconShapes.ArmorMarker(S, 0f);
+            Assert.Equal(0, CountBlackPixels(bare), "outlineLocal = 0 时不存在黑色像素");
+            Assert.True(CountBlackPixels(bare) * 10 < CountBlackPixels(shield), "无描边版的黑色像素远少于有描边版");
+
+            // 参数钳制：outlineLocal 超出 0..0.2 时按端点处理
+            Assert.True(SameBytes(IconShapes.ArmorMarker(96, 5f), IconShapes.ArmorMarker(96, 0.2f)),
+                "outlineLocal > 0.2 被钳到 0.2");
+            Assert.True(SameBytes(IconShapes.ArmorMarker(96, -3f), IconShapes.ArmorMarker(96, 0f)),
+                "outlineLocal < 0 被钳到 0");
+
+            // 确定性 + 与 ✕ 形命中标记不是同一张图
+            Assert.True(SameBytes(shield, IconShapes.ArmorMarker(S, outline)), "两次调用逐字节一致（确定性）");
+            Assert.False(SameBytes(shield, IconShapes.HitMarker(S, outline)),
+                "与 HitMarker 同参数下字节不完全相同（两种图形）");
+        }
     }
 }

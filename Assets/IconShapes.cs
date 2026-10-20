@@ -596,6 +596,134 @@ internal static class IconShapes
         return canvas.ToBitmap(bleedWhite: true);
     }
 
+    // ------------------------------------------------------------------ 护甲命中标记
+
+    /// <summary>
+    /// 护甲盾的右半轮廓（局部单位，<b>半边长 = 1</b>，Y 向上，原点在盾牌正中）。
+    /// 只写 x &gt;= 0 的一半，另一半由 <see cref="SdXSymEdges"/> 按 <c>|x|</c> 折出来 ——
+    /// 所以左右是<b>按像素严格镜像</b>的：上沿略直（ly 0.78）、两侧竖边（|x| 0.64）、
+    /// 下缘收成一个尖角（ly -0.76）。轮廓是凸多边形，间距场精确，粗描边不会在角上崩掉。
+    /// </summary>
+    private static readonly float[] ArmorShieldPoly =
+    {
+        0.00f, 0.78f,   // 上沿中点
+        0.50f, 0.78f,   // 上沿右端（上沿保持水平，盾牌顶是平的）
+        0.64f, 0.69f,   // 右肩：上沿到竖边的短斜边
+        0.64f, 0.14f,   // 右侧竖边
+        0.55f, -0.18f,
+        0.42f, -0.45f,
+        0.25f, -0.64f,
+        0.00f, -0.76f,  // 下缘尖角
+    };
+
+    /// <summary>
+    /// 盾形轮廓的边表（每条边 4 个数：起点 x、起点 y、外法线 nx、外法线 ny）。
+    /// 判定与 <see cref="SdConvexPolyXSym"/> 完全一致，只是把「每像素重算一遍边法线」挪到静态初始化里 ——
+    /// 不预计算时同步烘焙约 24ms，会卡住主线程一两帧。
+    /// </summary>
+    private static readonly float[] ArmorShieldEdges = BuildXSymEdges(ArmorShieldPoly);
+
+    /// <summary>把「关于 y 轴对称的凸多边形右半轮廓」预处理成边表（见 <see cref="ArmorShieldEdges"/>）。</summary>
+    private static float[] BuildXSymEdges(float[] pts)
+    {
+        int n = pts.Length / 2;
+        float gx = 0f, gy = 0f;
+        for (int i = 0; i < n; i++) { gx += pts[i * 2]; gy += pts[i * 2 + 1]; }
+        gx /= n;
+        gy /= n;
+
+        var edges = new float[n * 4];
+        for (int i = 0; i < n; i++)
+        {
+            int j = (i + 1) % n;
+            float ex = pts[j * 2] - pts[i * 2];
+            float ey = pts[j * 2 + 1] - pts[i * 2 + 1];
+            float len = MathF.Sqrt(ex * ex + ey * ey);
+            float nx = ey / len;
+            float ny = -ex / len;
+            // 法线取「背离轮廓质心」的那一侧 = 外侧（与 SdConvexPolyXSym 同一规则）
+            if (nx * (pts[i * 2] - gx) + ny * (pts[i * 2 + 1] - gy) < 0f) { nx = -nx; ny = -ny; }
+            int k = i * 4;
+            edges[k] = pts[i * 2];
+            edges[k + 1] = pts[i * 2 + 1];
+            edges[k + 2] = nx;
+            edges[k + 3] = ny;
+        }
+        return edges;
+    }
+
+    /// <summary>用 <see cref="BuildXSymEdges"/> 的边表算有向距离（内部为负，按 |x| 折半保证左右对称）。</summary>
+    private static float SdXSymEdges(float x, float y, float[] edges)
+    {
+        float ax = MathF.Abs(x);
+        float d = float.NegativeInfinity;
+        for (int i = 0; i < edges.Length; i += 4)
+        {
+            d = MathF.Max(d, (ax - edges[i]) * edges[i + 2] + (y - edges[i + 1]) * edges[i + 3]);
+        }
+        return d;
+    }
+
+    /// <summary>盾形轮廓的有向距离（局部单位，内部为负）。左右对称由 |x| 折半保证。</summary>
+    private static float ArmorBody(float lx, float ly) => SdXSymEdges(lx, ly, ArmorShieldEdges);
+
+    /// <summary>辉光的支撑半径（局部单位）：超出这个距离就是全透明，保证位图最外圈留白。</summary>
+    private const float ArmorGlowRadius = 0.08f;
+
+    /// <summary>
+    /// 护甲命中标记：左右对称的盾形描边图标（白芯 + 黑描边 + 轻辉光，可被 <c>Image.color</c> 相乘着色）。
+    /// 打中防弹板时用它替换 ✕ 形命中标记 —— 轮廓一眼能认成「盾」。
+    /// 几何 / 尺寸约定与 <see cref="HitMarker"/> 一致：局部坐标「半边长 = 1」，位图居中；
+    /// 白色像素是本体，黑色像素是描边，运行时着色只影响白色部分。
+    /// </summary>
+    /// <param name="sizePx">位图边长（&lt; 32 会被钳到 32）。</param>
+    /// <param name="outlineLocal">描边宽度，单位是「半边长 = 1」的局部单位（= 描边像素 / (显示尺寸 / 2)）。</param>
+    internal static IconBitmap ArmorMarker(int sizePx, float outlineLocal)
+    {
+        sizePx = Math.Max(32, sizePx);
+        outlineLocal = Math.Clamp(outlineLocal, 0f, 0.2f);
+
+        int w = sizePx, h = sizePx;
+        float half = sizePx * 0.5f;
+        float inv = 1f / half;
+
+        // 位图像素 → 局部单位（原点在画布正中，Y 向上）
+        float BodySdf(float x, float y)
+        {
+            return ArmorBody((x - half) * inv, (y - half) * inv);
+        }
+
+        var canvas = new Canvas(w, h);
+
+        // 辉光：紧贴描边外缘的一圈柔光。用有限的支撑半径（超出即 0）：
+        // 盾牌上下都留够了余量，位图最外一圈因此保持完全透明，缩放时不会被裁出硬边。
+        var glow = new float[w * h];
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float d = BodySdf(x + 0.5f, y + 0.5f) - outlineLocal;
+                if (d <= 0f || d >= ArmorGlowRadius) continue;
+                float t = 1f - d / ArmorGlowRadius;
+                glow[y * w + x] = 0.30f * t * t;
+            }
+        }
+        canvas.Over(glow, 1f, 1f, 1f, 1f);
+
+        // 深色描边：盾形轮廓往外扩 outlineLocal，压一圈黑（半透明，边缘有抗锯齿）
+        if (outlineLocal > 0.0005f)
+        {
+            float[] outline = Raster(w, h, (x, y) => (BodySdf(x, y) - outlineLocal) * half);
+            canvas.Over(outline, 0f, 0f, 0f, 0.75f);
+        }
+
+        // 白芯：盾形本体整块白色，留给 Image.color 相乘着色
+        float[] core = Raster(w, h, (x, y) => BodySdf(x, y) * half);
+        canvas.Over(core, 1f, 1f, 1f, 1f);
+
+        return canvas.ToBitmap(bleedWhite: true);
+    }
+
     // ------------------------------------------------------------------ 标签框（9 宫格）
 
     /// <summary>

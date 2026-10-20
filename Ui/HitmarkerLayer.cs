@@ -26,6 +26,7 @@ internal sealed class HitmarkerLayer
     private float _start = -999f;
     private bool _shown;
     private bool _headshot;
+    private bool _armor;
     private bool _kill;
     private Vector2 _anchor;
 
@@ -53,13 +54,14 @@ internal sealed class HitmarkerLayer
         _go.SetActive(false);
     }
 
-    /// <summary>启动时把命中 / 击杀两个版本的标记都烘好，第一次命中不卡帧。</summary>
+    /// <summary>启动时把命中 / 击杀 / 护甲三个版本的标记都烘好，第一次命中不卡帧。</summary>
     internal void Warmup()
     {
         var cfg = Plugin.Cfg;
         float baseSize = Mathf.Max(1f, cfg.HitBaseSize.Value);
-        ResolveSprite(cfg, baseSize, false);
-        ResolveSprite(cfg, baseSize, true);
+        ResolveSprite(cfg, baseSize, kill: false, armor: false);
+        ResolveSprite(cfg, baseSize, kill: true, armor: false);
+        ResolveSprite(cfg, baseSize, kill: false, armor: true);
     }
 
     /// <summary>
@@ -92,11 +94,13 @@ internal sealed class HitmarkerLayer
     }
 
     /// <summary><paramref name="canvasAnchor"/> 是画布局部坐标（原点 = 屏幕中心）。</summary>
-    internal void Show(Vector2 canvasAnchor, bool headshot)
+    /// <param name="armorOnly">本次命中只打中护甲（0.6 a）：换成蓝灰盾形标记，可用配置关闭。</param>
+    internal void Show(Vector2 canvasAnchor, bool headshot, bool armorOnly)
     {
         float now = UiClock.Now;
         _anchor = canvasAnchor;
         _headshot = headshot;
+        _armor = armorOnly && Plugin.Cfg.ArmorHitMarkerEnabled.Value;
 
         // 命中事件和击杀事件谁先到不保证：如果击杀已经先把标记升级了，晚到的这个命中不能把它降级、更不能重新计时
         if (_kill && _shown && now - _start < KillStickWindow) return;
@@ -132,7 +136,7 @@ internal sealed class HitmarkerLayer
         }
 
         float baseSize = Mathf.Max(1f, cfg.HitBaseSize.Value);
-        Sprite? sprite = ResolveSprite(cfg, baseSize, _kill);
+        Sprite? sprite = ResolveSprite(cfg, baseSize, _kill, _armor);
         if (sprite == null)
         {
             Hide();
@@ -187,11 +191,13 @@ internal sealed class HitmarkerLayer
                 scale *= popScale + (1f - popScale) * popT;
             }
 
-            if (_headshot) scale *= Mathf.Max(1f, cfg.HitMarkerHeadshotScale.Value);
+            if (_headshot && !_armor) scale *= Mathf.Max(1f, cfg.HitMarkerHeadshotScale.Value);
 
-            tint = _headshot
-                ? UiTheme.Parse(cfg.HitMarkerHeadshotColor.Value, new Color(1f, 0.3f, 0.3f))
-                : UiTheme.Parse(cfg.HitMarkerColor.Value, Color.white);
+            tint = _armor
+                ? UiTheme.Parse(cfg.ArmorHitMarkerColor.Value, new Color(0.56f, 0.72f, 0.85f))
+                : _headshot
+                    ? UiTheme.Parse(cfg.HitMarkerHeadshotColor.Value, new Color(1f, 0.3f, 0.3f))
+                    : UiTheme.Parse(cfg.HitMarkerColor.Value, Color.white);
         }
 
         if (!ReferenceEquals(_lastSprite, sprite))
@@ -224,12 +230,13 @@ internal sealed class HitmarkerLayer
     // 精灵指纹：基础大小 / 描边宽度 / UI 缩放 / 样式任何一个变了才重新取（取一次要拼缓存键字符串，不能每帧做）
     private Sprite? _resolvedNormal;
     private Sprite? _resolvedKill;
+    private Sprite? _resolvedArmor;
     private float _fpBase = -1f;
     private float _fpOutline = -1f;
     private float _fpUi = -1f;
     private IconStyle _fpStyle = (IconStyle)(-1);
 
-    private Sprite? ResolveSprite(AyaConfig cfg, float baseSize, bool kill)
+    private Sprite? ResolveSprite(AyaConfig cfg, float baseSize, bool kill, bool armor)
     {
         var style = cfg.IconStyleMode.Value;
         float outline = cfg.HitMarkerOutlineWidth.Value;
@@ -246,6 +253,7 @@ internal sealed class HitmarkerLayer
             _fpUi = ui;
             _resolvedNormal = null;
             _resolvedKill = null;
+            _resolvedArmor = null;
         }
 
         if (style == IconStyle.CustomFiles) return Assets.IconBank.Hit;
@@ -260,6 +268,16 @@ internal sealed class HitmarkerLayer
             return _resolvedKill;
         }
 
+        if (armor)
+        {
+            if (_resolvedArmor == null)
+            {
+                var baked = Assets.ProceduralIcons.ArmorMarker(baseSize, outline);
+                _resolvedArmor = baked.HasValue ? baked.Value.Sprite : Assets.IconBank.Hit;
+            }
+            return _resolvedArmor;
+        }
+
         if (_resolvedNormal == null)
         {
             var baked = Assets.ProceduralIcons.HitMarker(baseSize, outline, bold: false);
@@ -272,6 +290,7 @@ internal sealed class HitmarkerLayer
     {
         _start = -999f;
         _kill = false;
+        _armor = false;
         Hide();
     }
 

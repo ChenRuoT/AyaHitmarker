@@ -163,6 +163,26 @@ internal static class ProceduralIcons
         return result;
     }
 
+    // ------------------------------------------------------------------ 护甲命中标记（0.6 a）
+
+    /// <param name="markerDisplayPx">标记整张图的显示边长（画布单位）。</param>
+    /// <param name="outlineDisplayPx">深色描边的显示宽度（画布单位）。</param>
+    internal static BakedIcon? ArmorMarker(float markerDisplayPx, float outlineDisplayPx)
+    {
+        float markerScreen = Mathf.Max(16f, markerDisplayPx) * UiScale();
+        int size = Quantize(markerScreen * 2f, 96, 256);
+
+        float local = Mathf.Max(0f, outlineDisplayPx) / (Mathf.Max(16f, markerDisplayPx) * 0.5f);
+        int localKey = Mathf.RoundToInt(Mathf.Clamp(local, 0f, 0.2f) * 250f);
+        string key = $"armor:{size}:{localKey}";
+        if (TryGetCached(key, out var cached)) return cached;
+
+        var bmp = IconShapes.ArmorMarker(size, localKey / 250f);
+        BakedIcon? result = Build(bmp, 1f, mipmaps: true);
+        Cache[key] = result;
+        return result;
+    }
+
     // ------------------------------------------------------------------ 标签框
 
     /// <summary>标签框九宫格精灵（描边 2 像素）。全局只有一张，不随尺寸变化。</summary>

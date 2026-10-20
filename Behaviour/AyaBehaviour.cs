@@ -169,10 +169,16 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     private DebugHarness.Hooks MakeHarnessHooks() => new DebugHarness.Hooks
     {
-        Hit = headshot =>
+        Hit = (headshot, armorOnly, targetIndex) =>
         {
-            _ui.Hitmarker.Show(Vector2.zero, headshot);
-            _ui.DamageNumbers.Show(Vector2.zero, headshot ? 142f : 76f, headshot);
+            var target = TestKills.At(targetIndex);
+            _ui.Hitmarker.Show(Vector2.zero, headshot, armorOnly);
+            _ui.DamageNumbers.Show(
+                Vector2.zero,
+                armorOnly ? 41.2f : headshot ? 142f : 76f,
+                headshot,
+                armorOnly,
+                target.VictimProfileId);
         },
         Kill = index => FireTestKill(TestKills.At(index), playSound: false),
         Death = index =>
@@ -354,8 +360,13 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 if (projected.HasValue) anchor = projected.Value;
             }
 
-            _ui.Hitmarker.Show(anchor, hit.Headshot);
-            _ui.DamageNumbers.Show(anchor, hit.DisplayDamage(cfg.DamageTextMode.Value), hit.Headshot);
+            _ui.Hitmarker.Show(anchor, hit.Headshot, hit.ArmorOnly);
+            _ui.DamageNumbers.Show(
+                anchor,
+                hit.DisplayDamage(cfg.DamageTextMode.Value),
+                hit.Headshot,
+                hit.ArmorOnly,
+                hit.TargetKey);
             _sound.PlayHit(hit.Headshot);
         }
 
@@ -378,9 +389,11 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
             // 击杀确认：命中标记升级成红色扩散版，最新的伤害数字变红（命中事件在上面的循环里已经处理过了）
             _ui.Hitmarker.PromoteToKill();
-            _ui.DamageNumbers.PromoteToKill();
+            _ui.DamageNumbers.PromoteToKill(kill.VictimProfileId);
 
-            _sound.PlayKill(kill.Headshot);
+            // 0.6 d：双杀 / 三杀 / 四杀及以上用可选连杀音效；文件缺失时回退普通击杀音效
+            if (analysis.MultiCount >= 2) _sound.PlayMultiKill(analysis.MultiCount, kill.Headshot);
+            else _sound.PlayKill(kill.Headshot);
         }
     }
 
@@ -394,8 +407,12 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
         _ui.KillFeed.Show(rec, analysis);
         _ui.Hitmarker.PromoteToKill();
-        _ui.DamageNumbers.PromoteToKill();
-        if (playSound) _sound.PlayKill(rec.Headshot);
+        _ui.DamageNumbers.PromoteToKill(rec.VictimProfileId);
+        if (playSound)
+        {
+            if (analysis.MultiCount >= 2) _sound.PlayMultiKill(analysis.MultiCount, rec.Headshot);
+            else _sound.PlayKill(rec.Headshot);
+        }
     }
 
     /// <summary>
@@ -417,9 +434,23 @@ internal sealed class AyaBehaviour : MonoBehaviour
             var hitKey = Plugin.Cfg.TestHitKey.Value;
             if (hitKey.MainKey != KeyCode.None && hitKey.IsDown())
             {
-                Plugin.Logger.LogInfo("[debug] 测试命中");
-                _ui.Hitmarker.Show(Vector2.zero, false);
-                _ui.DamageNumbers.Show(Vector2.zero, 76f, false);
+                // 按住 Shift = 模拟「只打中护甲」，用来单独验 0.6 a 的盾形标记与护甲配色
+                bool armorHit = false;
+                try
+                {
+                    armorHit = UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift);
+                }
+                catch { /* 输入后端不可用时按普通命中处理 */ }
+
+                var target = TestKills.Peek();
+                Plugin.Logger.LogInfo($"[debug] 测试命中（护甲={armorHit}，目标={target.VictimName}）");
+                _ui.Hitmarker.Show(Vector2.zero, false, armorHit);
+                _ui.DamageNumbers.Show(
+                    Vector2.zero,
+                    armorHit ? 41.2f : 76f,
+                    false,
+                    armorHit,
+                    target.VictimProfileId);
                 _sound.PlayHit(false);
             }
 

@@ -12,6 +12,11 @@ internal enum SoundKind
     HitHeadshot = 1,
     Kill = 2,
     KillHeadshot = 3,
+
+    // ---- 0.6 d：可选连杀音效（文件不存在就回退普通击杀音效） ----
+    DoubleKill = 4,
+    TripleKill = 5,
+    MultiKill = 6,
 }
 
 /// <summary>
@@ -22,7 +27,10 @@ internal enum SoundKind
 /// </summary>
 internal static class AudioBank
 {
-    private const int SlotCount = 4;
+    private const int SlotCount = (int)SoundKind.MultiKill + 1;
+
+    /// <summary>可选音效（双杀 / 三杀 / 四杀及以上）：文件缺失是正常情况，不按告警刷屏。</summary>
+    private static bool IsOptional(SoundKind kind) => kind >= SoundKind.DoubleKill;
 
     private static readonly AudioClip?[] _clips = new AudioClip?[SlotCount];
     private static readonly string[] _sources = new string[SlotCount];
@@ -142,7 +150,14 @@ internal static class AudioBank
                 {
                     _state[i] = 2;
                     _retries[i] = MaxRetries;
-                    Plugin.Logger.LogWarning($"[audio] {kind}: 在 Sounds/ 下没找到文件（候选: {string.Join(", ", CandidateNames(kind))}）");
+                    if (IsOptional(kind))
+                    {
+                        Plugin.Logger.LogInfo($"[audio] {kind}: 可选音效未提供（回退普通击杀音效；候选: {string.Join(", ", CandidateNames(kind))}）");
+                    }
+                    else
+                    {
+                        Plugin.Logger.LogWarning($"[audio] {kind}: 在 Sounds/ 下没找到文件（候选: {string.Join(", ", CandidateNames(kind))}）");
+                    }
                     continue;
                 }
 
@@ -402,6 +417,10 @@ internal static class AudioBank
             SoundKind.Hit => Plugin.Cfg.SoundFileHit.Value,
             SoundKind.HitHeadshot => Plugin.Cfg.SoundFileHitHeadshot.Value,
             SoundKind.Kill => Plugin.Cfg.SoundFileKill.Value,
+            SoundKind.KillHeadshot => Plugin.Cfg.SoundFileKillHeadshot.Value,
+            SoundKind.DoubleKill => Plugin.Cfg.SoundFileDoubleKill.Value,
+            SoundKind.TripleKill => Plugin.Cfg.SoundFileTripleKill.Value,
+            SoundKind.MultiKill => Plugin.Cfg.SoundFileMultiKill.Value,
             _ => Plugin.Cfg.SoundFileKillHeadshot.Value,
         };
 
@@ -429,6 +448,10 @@ internal static class AudioBank
         SoundKind.Hit => new[] { "hit.ogg", "hit.wav", "hit.mp3" },
         SoundKind.HitHeadshot => new[] { "headshot_hit.ogg", "hit_headshot.ogg", "headshot_hit.wav", "headshot_hit.mp3" },
         SoundKind.Kill => new[] { "kill.ogg", "kill.wav", "kill.mp3" },
+        SoundKind.KillHeadshot => new[] { "headshot_kill.ogg", "kill_headshot.ogg", "headshot_kill.wav", "headshot_kill.mp3" },
+        SoundKind.DoubleKill => new[] { "double_kill.ogg", "double_kill.wav", "double_kill.mp3" },
+        SoundKind.TripleKill => new[] { "triple_kill.ogg", "triple_kill.wav", "triple_kill.mp3" },
+        SoundKind.MultiKill => new[] { "multi_kill.ogg", "multi_kill.wav", "multi_kill.mp3" },
         _ => new[] { "headshot_kill.ogg", "kill_headshot.ogg", "headshot_kill.wav", "headshot_kill.mp3" },
     };
 }

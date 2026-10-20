@@ -16,6 +16,16 @@ internal readonly struct HitRecord
     internal readonly float ArmorDamage;
     internal readonly bool Headshot;
     internal readonly bool VictimIsLocalPlayer;
+
+    /// <summary>本次命中只有护甲伤害、没有肉体伤害（打中防弹板）。0.6 a 的护甲标记 / 护甲配色用。</summary>
+    internal readonly bool ArmorOnly;
+
+    /// <summary>
+    /// 目标标识（0.6 b 累加伤害用）：优先 <c>Player.ProfileId</c>，拿不到时退回归一化昵称。
+    /// 只读的一次性字符串快照，不持有 interop 对象。
+    /// </summary>
+    internal readonly string TargetKey;
+
     internal readonly Vector3 HitPoint;
 
     internal HitRecord(
@@ -23,12 +33,16 @@ internal readonly struct HitRecord
         float armorDamage,
         bool headshot,
         bool victimIsLocalPlayer,
+        bool armorOnly,
+        string targetKey,
         Vector3 hitPoint)
     {
         BodyDamage = bodyDamage;
         ArmorDamage = armorDamage;
         Headshot = headshot;
         VictimIsLocalPlayer = victimIsLocalPlayer;
+        ArmorOnly = armorOnly;
+        TargetKey = targetKey;
         HitPoint = hitPoint;
     }
 
@@ -51,6 +65,9 @@ internal readonly struct KillRecord
 
     /// <summary>归一化昵称（去空白 + 小写），只用于复仇判定，不显示。</summary>
     internal readonly string VictimKey;
+
+    /// <summary>受害者 <c>ProfileId</c>（0.6 b/c：把击杀与命中侧的目标对上；测试击杀用 <c>test:</c> 前缀）。</summary>
+    internal readonly string VictimProfileId;
 
     internal readonly int VictimLevel;
     internal readonly WildSpawnType Role;
@@ -80,6 +97,7 @@ internal readonly struct KillRecord
     internal KillRecord(
         string victimName,
         string victimKey,
+        string victimProfileId,
         int victimLevel,
         WildSpawnType role,
         string botType,
@@ -97,6 +115,7 @@ internal readonly struct KillRecord
     {
         VictimName = victimName;
         VictimKey = victimKey;
+        VictimProfileId = victimProfileId;
         VictimLevel = victimLevel;
         Role = role;
         BotType = botType;

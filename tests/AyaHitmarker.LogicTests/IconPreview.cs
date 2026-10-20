@@ -113,6 +113,7 @@ internal static class IconPreview
         RenderSkulls(Path.Combine(dir, "skulls.png"));
         RenderEmblems(Path.Combine(dir, "emblems.png"));
         RenderHitMarkers(Path.Combine(dir, "hitmarkers.png"));
+        RenderArmorMarkers(Path.Combine(dir, "armor_markers.png"));
         RenderTagBox(Path.Combine(dir, "tagbox.png"));
         Console.WriteLine("rendered icon sheets to " + Path.GetFullPath(dir));
         Bench();
@@ -141,6 +142,7 @@ internal static class IconPreview
         Time("emblem x5 @72", () => IconShapes.Emblem(5, 72));
         Time("hit marker 144px", () => IconShapes.HitMarker(144, 0.04f));
         Time("hit marker bold 144px", () => IconShapes.HitMarker(144, 0.04f, true));
+        Time("armor marker 142px", () => IconShapes.ArmorMarker(142, 1.8f / (71f * 0.5f)));
         Time("tag box", () => IconShapes.TagBox(2));
     }
 
@@ -233,6 +235,46 @@ internal static class IconPreview
             // 1:1 大图
             {
                 var bmp = IconShapes.HitMarker(256, 1.8f / (71 * 0.5f));
+                sheet.Blit(bmp, 5 * cell + 0, row * cell + 0, 0.66f, white);
+            }
+        }
+        sheet.Save(path);
+    }
+
+    private static void RenderArmorMarkers(string path)
+    {
+        int cell = 170;
+        // 列 = 描边 [0, 1.2, 1.8, 2.6]（屏幕像素，显示 71）× 白；再加蓝灰着色 + 1:1 大图
+        float[] outlinePx = { 0f, 1.2f, 1.8f, 2.6f };
+        var sheet = new Sheet(cell * 6, cell * Backgrounds.Length);
+        var white = Hex(0xFFFFFF);
+        // 护甲命中预期的蓝灰色（运行时由调用方 Image.color 相乘着色，这里只模拟）
+        var steel = Hex(0x9FB8D4);
+
+        for (int row = 0; row < Backgrounds.Length; row++)
+        {
+            var bg = Backgrounds[row];
+            sheet.FillRect(0, row * cell, sheet.W, cell, bg.r, bg.g, bg.b);
+
+            for (int c = 0; c < outlinePx.Length; c++)
+            {
+                const int display = 71;
+                float local = outlinePx[c] / (display * 0.5f);
+                var bmp = IconShapes.ArmorMarker(256, local);
+                float scale = display / 256f;
+                sheet.Blit(bmp, c * cell + (cell - display) / 2, row * cell + (cell - display) / 2, scale, white);
+            }
+
+            // 蓝灰着色版：显示尺寸 71，描边 1.8px
+            {
+                const int display = 71;
+                var bmp = IconShapes.ArmorMarker(256, 1.8f / (display * 0.5f));
+                sheet.Blit(bmp, 4 * cell + (cell - display) / 2, row * cell + (cell - display) / 2, display / 256f, steel);
+            }
+
+            // 1:1 大图
+            {
+                var bmp = IconShapes.ArmorMarker(256, 1.8f / (71f * 0.5f));
                 sheet.Blit(bmp, 5 * cell + 0, row * cell + 0, 0.66f, white);
             }
         }

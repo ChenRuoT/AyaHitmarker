@@ -72,6 +72,8 @@ internal static class TestKills
         return new KillRecord(
             name,
             NameKey.Normalize(name),
+            // 测试击杀没有真实 ProfileId：用稳定前缀，方便 0.6 b 的累加数字在 F8→F9 时对上同一个槽
+            "test:" + NameKey.Normalize(name),
             level,
             role,
             botType,

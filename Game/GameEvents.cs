@@ -237,19 +237,22 @@ internal static class GameEvents
 
             if (!aggressorIsLocal) return;
 
+            bool armorOnly = body <= 0.01f && armor > 0.01f;
             var record = new HitRecord(
                 body,
                 armor,
                 IsHeadCollider(info.BodyPartColliderType),
                 victimIsLocal,
+                armorOnly,
+                SafeTargetKey(victim),
                 info.HitPoint);
 
             if (Plugin.Cfg.DebugEnabled.Value)
             {
                 Plugin.Logger.LogInfo(
-                    $"[hit] victim={SafeNickname(victim)} body={record.BodyDamage:0.##} armor={record.ArmorDamage:0.##} " +
-                    $"total={record.TotalDamage:0.##} head={record.Headshot} " +
-                    $"collider={info.BodyPartColliderType} point={info.HitPoint} self={victimIsLocal}");
+                    $"[hit] victim={SafeNickname(victim)} key={record.TargetKey} body={record.BodyDamage:0.##} " +
+                    $"armor={record.ArmorDamage:0.##} total={record.TotalDamage:0.##} head={record.Headshot} " +
+                    $"armorOnly={record.ArmorOnly} collider={info.BodyPartColliderType} point={info.HitPoint} self={victimIsLocal}");
             }
 
             FeedbackBus.EnqueueHit(record);
@@ -320,6 +323,7 @@ internal static class GameEvents
             var record = new KillRecord(
                 victimName,
                 NameKey.Normalize(victimName),
+                SafeTargetKey(dead),
                 SafeLevel(dead),
                 role,
                 botType,
@@ -363,6 +367,22 @@ internal static class GameEvents
             return string.IsNullOrWhiteSpace(n) ? "Unknown" : n!;
         }
         catch { return "Unknown"; }
+    }
+
+    /// <summary>
+    /// 目标标识（0.6 b）：<c>ProfileId</c> 优先，拿不到时退回归一化昵称。
+    /// 在事件线程上把字符串抄出来，不让 interop 代理过界（AGENTS.md §3.4）。
+    /// </summary>
+    private static string SafeTargetKey(Player? p)
+    {
+        if (p == null) return string.Empty;
+        try
+        {
+            var id = p.ProfileId;
+            if (!string.IsNullOrWhiteSpace(id)) return id!;
+        }
+        catch { /* fallthrough */ }
+        return NameKey.Normalize(SafeNickname(p));
     }
 
     private static string SafeNickname(IPlayer? p)
