@@ -640,9 +640,16 @@ python -P tools\verify\imgsheet.py D:\shots\v1 a_enter D:\shots\a_enter.png 480 
 ```
 
 脚本一行一条指令（`#` 注释）：`clock manual`（UI 时钟手动步进）、`step 0.0333`、`kill N`（造脚本表第 N 条击杀，
-走真实的判定 / 卡片 / 命中标记升级）、`hit [head]`、`death N`、`bg dark|mid|white|snow|grass|#RRGGBB|off`
-（画布后面垫纯色，验证各种背景下的可读性）、`shot name`、`seq name 14 0.0333`（连拍 14 张，每张之间 step 一帧）、
-`scale 0.1`（自动时钟慢放）、`wait 2`、`waitmenu 90`（等主菜单场景加载完；热重载后同一进程自动跳过）、`glyphs 击杀爆头`（逐字检查当前字体有没有字形）、`watch`（遥控模式，见下）、`reset`、`log 文字`、`quit`。
+走真实的判定 / 卡片 / 命中标记升级）、`hit [head]`、`hit armor [N]`（只打护甲，验盾形标记）、`death N`、
+`bg dark|mid|white|snow|grass|#RRGGBB|off`（画布后面垫纯色，验证各种背景下的可读性）、`shot name`、
+`seq name 14 0.0333`（连拍 14 张，每张之间 step 一帧）、`scale 0.1`（自动时钟慢放）、`wait 2`、
+`waitmenu 90`（等主菜单场景加载完；热重载后同一进程自动跳过）、`glyphs 击杀爆头`（逐字检查当前字体有没有字形）、
+`watch`（遥控模式，见下）、`reset`、`log 文字`、`quit`。
+
+> **单次脚本截图数要 ≤ 20 张。** 实测超过 20 张后 `quit` 有概率以 `0xC0000005` 退出：
+> `ScreenCapture` 的写入队列在 `Application.Quit()` 时尚未清空，与插件逻辑无关（同一份脚本 20 张干净退出、25 张必崩；
+> 在 `quit` 前 `wait 3` 也没用）。验收脚本已按段拆开：`0.6-hitmarkers.txt`（19 张）/
+> `0.6-cards.txt`（16 张）/ `0.6b-accum.txt`（15 张）。
 截图用 `ScreenCapture.CaptureScreenshot`（引擎在帧尾写文件）：**不依赖窗口焦点，也不会被 DPI 虚拟化坑**，
 手动时钟下动画时刻完全由脚本决定，不受掉帧 / 截图卡顿影响。游戏在 `quit` 时自己退出。
 
@@ -712,7 +719,7 @@ dotnet build                       # 收尾：必须先退出游戏。恢复 plu
 
 | 版本 | 内容 |
 |---|---|
-| 0.6.0（开发中） | **0.6 a 护甲命中区分**：只打中护甲（`DidBodyDamage == 0`）时命中标记换成程序化**盾形**（蓝灰着色，可关），伤害数字用「护甲命中颜色」。**0.6 b 累加伤害数字**：新增 `排布方式 = 累加`（战地 6 样式，同一目标窗口内滚动累计、击杀变红、多目标垂直堆叠），**保留**原有「一行向右」作为默认样式；目标身份用探查局 S1 确认的 `ProfileId`，纯逻辑 `Game/DamageAccum.cs` + 离线测试覆盖。**0.6 d 连杀音效**：可选的 `Sounds/double_kill` / `triple_kill` / `multi_kill`，文件不存在时回退普通击杀音效；设置页新增开关与自定义路径。`F8` 测试命中支持按住 Shift 模拟护甲命中，harness 新增 `hit armor [N]`。离线测试 315 → 456 项。**卡片拆分**：`Ui/KillFeedLayer.cs` 1482 → 694 行，横幅 / 骷髅行 / 标签行 / 军衔徽章拆成 `KillCardBannerView` / `KillCardSkullRowView` / `KillCardTagRowView` / `KillCardBadgeView`，共用 `KillCardAnim` / `KillCardPalette`（纯提取，版式与动效保持不变）。**修了一次加载失败**：0.6 新增的 11 个配置键漏了 `ConfigPanel.For` 的面板分类映射，游戏加载插件时直接抛 `ArgumentException` 整个失败；现已补齐，并新增离线测试 `ConfigPresentationFacts` 静态对账（以后新键漏映射会在 `dotnet run` 阶段就报出来）。**实机已用 DebugHarness 验收**：主菜单 53 张截图（普通 ✕ / 爆头 ✕ / 蓝灰盾 / 护甲配色、卡片入场·稳定·退场、2~4 杀累加卡片）；`排布方式 = 累加` 另跑 15 张（单目标 76→152→294→370 滚动累计、击杀变红、多目标垂直堆叠）。 |
+| 0.6.0（开发中） | **0.6 a 护甲命中区分**：只打中护甲（`DidBodyDamage == 0`）时命中标记换成程序化**盾形**（蓝灰着色，可关），伤害数字用「护甲命中颜色」。**0.6 b 累加伤害数字**：新增 `排布方式 = 累加`（战地 6 样式，同一目标窗口内滚动累计、击杀变红、多目标垂直堆叠），**保留**原有「一行向右」作为默认样式；目标身份用探查局 S1 确认的 `ProfileId`，纯逻辑 `Game/DamageAccum.cs` + 离线测试覆盖。**0.6 d 连杀音效**：可选的 `Sounds/double_kill` / `triple_kill` / `multi_kill`，文件不存在时回退普通击杀音效；设置页新增开关与自定义路径。`F8` 测试命中支持按住 Shift 模拟护甲命中，harness 新增 `hit armor [N]`。离线测试 315 → 456 项。**卡片拆分**：`Ui/KillFeedLayer.cs` 1482 → 694 行，横幅 / 骷髅行 / 标签行 / 军衔徽章拆成 `KillCardBannerView` / `KillCardSkullRowView` / `KillCardTagRowView` / `KillCardBadgeView`，共用 `KillCardAnim` / `KillCardPalette`（纯提取，版式与动效保持不变）。**修了一次加载失败**：0.6 新增的 11 个配置键漏了 `ConfigPanel.For` 的面板分类映射，游戏加载插件时直接抛 `ArgumentException` 整个失败；现已补齐，并新增离线测试 `ConfigPresentationFacts` 静态对账（以后新键漏映射会在 `dotnet run` 阶段就报出来）。**实机已用 DebugHarness 验收**：主菜单 53 张截图（普通 ✕ / 爆头 ✕ / 蓝灰盾 / 护甲配色、卡片入场·稳定·退场、2~4 杀累加卡片）；`排布方式 = 累加` 另跑 15 张（单目标 76→152→294→370 滚动累计、击杀变红、多目标垂直堆叠）。验收脚本已按 ≤20 张/次拆成 `tools/verify/0.6-hitmarkers.txt` / `0.6-cards.txt` / `0.6b-accum.txt`（超过 20 张时 `quit` 会触发 Unity `ScreenCapture` 队列的 `0xC0000005` 退出，与插件逻辑无关）。 |
 | 0.5.3 | **修连续战局命中反馈消失**：同一进程第 2 局起命中标记 / 命中音效整局不出现（击杀正常）。实测 `GlobalEventDispatcher` 实例跨局不变、换局时 `OnBeingHit` 订阅被游戏清掉，旧版只在启动订阅一次；现在**每局开局强制重绑**（幂等），三连局实测 99 条命中事件全部收到。**战局边界改用主玩家判定**（`GameWorld.MainPlayer.Profile` 出现/消失），连带修正连杀 / 每局击杀 / 得分 / 成就跨局累计与开局不重载音效、不清空 UI。新增 `[events] raid started (main player)` / `OnBeingHit 已绑定` / `本局第一发 OnBeingHit` 与 `[diag] raidState=` 诊断日志。配置版本不变（3）。 |
 | 0.5.2 | **音效空间模式默认 `Flat2D` → `FollowCamera3D`**（配置版本 2 → 3，只重置仍是 `Flat2D` 的；`FollowCamera3D` 是唯一在战局里确认过出声的模式）；**热重载迭代**（`-p:HotReload=true`、`reload-scripts.ps1`、`waitmenu`）及完整的卸载路径（画布 / 音频宿主 / 图标与字体缓存 / TMP 材质实例，逐代泄漏实测为 0）；**字体**：停止探测注定失败的 Arial / Segoe UI，修正「填 Microsoft YaHei」的误导建议，启动时写字形覆盖日志，新增 `glyphs` 指令与 `font-check.txt`；**设置面板分类顺序修复**（`00` 原来排在最后、`90` 排在最前：ConfigurationManager 按首次绑定顺序排，不看 `Order`）；设置面板实机验收（枚举 / 颜色 / 偏移 / 滑块 / 快捷键 / Reset / 持久化）；
 遥控模式 `watch` + `send-input.ps1`；Issue 模板；文档对齐（测试数、cfg 分组名 `4. 音频`、`VictimIsLocalPlayer`）；**卸载清理健壮性**：`OnDestroy` 各清理步骤彼此独立，任一步失败不拖累其余，并在末尾补一次幂等的 `GameEvents.Shutdown()`（兜住旧代次同帧 Update 重新订阅 `OnBeingHit`）。 |

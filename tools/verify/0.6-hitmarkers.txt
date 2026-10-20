@@ -1,0 +1,30 @@
+# 0.6a 命中标记验证（主菜单即可；截图 19 张，≤20 以免触发 ScreenCapture 退出问题）
+# 覆盖：普通 ✕ / 爆头 ✕ / 护甲蓝灰盾 / 白底可读性
+waitmenu 90
+log === 0.6 hitmarkers start ===
+clock manual
+bg dark
+step 1
+
+reset
+hit 1
+seq hm_hit 8 0.0333
+
+reset
+hit head 1
+seq hm_head 5 0.0333
+
+reset
+hit armor 1
+seq hm_armor 5 0.0333
+
+reset
+bg white
+step 1
+hit armor 1
+step 0.2
+shot hm_armor_white
+
+bg off
+log === 0.6 hitmarkers done ===
+quit
