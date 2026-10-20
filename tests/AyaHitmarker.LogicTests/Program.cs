@@ -25,6 +25,7 @@ internal static class Program
         GlitchFacts.Run();
         IconShapeFacts.Run();
         AudioClipHealthFacts.Run();
+        ConfigPresentationFacts.Run();
 
         return Assert.Summary();
     }

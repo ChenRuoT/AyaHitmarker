@@ -1,0 +1,50 @@
+# 0.6b 累加伤害数字验证（cfg：排布方式 = Accumulate）
+waitmenu 90
+log === 0.6b accumulate start ===
+clock manual
+bg dark
+step 1
+
+# 同一目标连续命中：76 → 152 → 294(爆头) → 370
+hit 1
+step 0.3
+hit 1
+step 0.3
+hit head 1
+step 0.3
+shot acc_three
+hit 1
+step 0.2
+shot acc_four
+
+# 击杀 → 数字变红 + 弹出
+kill 1
+seq acc_kill 10 0.05
+step 1.5
+shot acc_after
+
+# 亮背景
+bg white
+reset
+step 1
+hit 1
+step 0.2
+hit 1
+step 0.2
+shot acc_white
+
+# 不同目标分开累计（目标 2 / 3 各打一次）：应出现两个数字槽
+reset
+bg dark
+step 1
+hit 2
+step 0.2
+hit 3
+step 0.2
+hit 2
+step 0.2
+shot acc_targets
+
+bg off
+log === 0.6b accumulate done ===
+quit

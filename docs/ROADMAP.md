@@ -92,10 +92,15 @@
 > 新增 `KillCardBannerView`（271 行）/ `KillCardSkullRowView`（312）/ `KillCardTagRowView`（218）/ `KillCardBadgeView`（167），
 > 以及共用的 `KillCardAnim`（本帧动画参数）与 `KillCardPalette`（配色 / 描边缩放）。行为保持不变（纯提取，没有改版式 / 动效参数）。
 
-> **进度（2026-10-20）**：**a ✅ / b ✅ / d ✅ 已实现**（0.6.0 开发中，离线测试 315 → 454 项；
+> **进度（2026-10-20）**：**a ✅ / b ✅ / d ✅ 已实现**（0.6.0 开发中，离线测试 315 → 456 项；
 > 盾形图标用 `--render-icons` 验过 `armor_markers.png`；b 保留了「一行向右」作为默认样式，新样式是设置项）。
 > **c（助攻）和 e（受击方向）未做**；`KillFeedLayer` 拆分 ✅ 已完成（见上），c 可以直接开工。
-> 待进游戏验收：护甲盾 / 累加数字 / 连杀音效（音效文件可先不放，验证回退普通击杀）。
+> **实机验收 ✅ 已完成**（DebugHarness，主菜单）：53 张截图覆盖普通 ✕ / 爆头 ✕ / 蓝灰盾 / 护甲配色、
+> 卡片入场·稳定·退场、2~4 杀累加卡片；`排布方式 = 累加` 另跑 15 张验证 76→152→294→370 累计、击杀变红、多目标堆叠。
+>
+> 期间踩过一个加载 bug：0.6 新增的 11 个配置键漏了 `ConfigPanel.For` 的面板分类映射，插件在加载阶段直接
+> 抛 `ArgumentException: Missing configuration presentation` 整个失败。已补齐，并新增离线测试
+> `ConfigPresentationFacts`（静态对账 `AyaConfig` 的 Bind 与 `ConfigPanel.For`）挡住同类问题。
 
 | # | 功能 | 价值 | 成本 / 风险 |
 |---|---|---|---|
