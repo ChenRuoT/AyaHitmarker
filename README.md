@@ -145,7 +145,9 @@ Player.OnPlayerDeadStatic ────────┤         FeedbackBus.Drain
 **击杀卡片的元素与动效**（详见 §9）：成就横幅（+ 多杀骷髅徽记）/ 骷髅行 + 累计得分 / 连杀进度条 /
 阵营 + 名字 / 标签（击杀 · 爆头 · 近战 · 距离）/ 详情，左侧是放大的军衔徽章。
 卡片本身是**累加模型**（`Ui/KillCardModel.cs`，纯逻辑可离线测），动效曲线在 `Ui/GlitchMath.cs`（纯数学），
-布局在 `Ui/KillCardLayout.cs`（纯数学），`Ui/KillFeedLayer.cs` 只负责把它们画到 uGUI 上。
+布局在 `Ui/KillCardLayout.cs`（纯数学），`Ui/KillFeedLayer.cs` 只负责把模型 → 布局 → 逐帧编排画到 uGUI 上
+（0.6 起横幅 / 骷髅行 / 标签行 / 军衔徽章已拆成 `KillCardBannerView` / `KillCardSkullRowView` /
+`KillCardTagRowView` / `KillCardBadgeView`，共用动画参数 `KillCardAnim` 与配色 `KillCardPalette`）。
 动画写 `localScale`（不触发 TMP 重排）与 `anchoredPosition`；**淡入淡出走 `CanvasGroup.alpha`**（同样不触发重建），
 所以每帧都在变的故障闪烁没有代价；尺寸 / 字号只在出生时写一次。
 所有 UI 动画读 `UiClock`（正常游戏里就是 `Time.unscaledTime`），调试脚本借它手动步进，逐帧截图。
@@ -710,7 +712,7 @@ dotnet build                       # 收尾：必须先退出游戏。恢复 plu
 
 | 版本 | 内容 |
 |---|---|
-| 0.6.0（开发中） | **0.6 a 护甲命中区分**：只打中护甲（`DidBodyDamage == 0`）时命中标记换成程序化**盾形**（蓝灰着色，可关），伤害数字用「护甲命中颜色」。**0.6 b 累加伤害数字**：新增 `排布方式 = 累加`（战地 6 样式，同一目标窗口内滚动累计、击杀变红、多目标垂直堆叠），**保留**原有「一行向右」作为默认样式；目标身份用探查局 S1 确认的 `ProfileId`，纯逻辑 `Game/DamageAccum.cs` + 离线测试覆盖。**0.6 d 连杀音效**：可选的 `Sounds/double_kill` / `triple_kill` / `multi_kill`，文件不存在时回退普通击杀音效；设置页新增开关与自定义路径。`F8` 测试命中支持按住 Shift 模拟护甲命中，harness 新增 `hit armor [N]`。离线测试 315 → 454 项。 |
+| 0.6.0（开发中） | **0.6 a 护甲命中区分**：只打中护甲（`DidBodyDamage == 0`）时命中标记换成程序化**盾形**（蓝灰着色，可关），伤害数字用「护甲命中颜色」。**0.6 b 累加伤害数字**：新增 `排布方式 = 累加`（战地 6 样式，同一目标窗口内滚动累计、击杀变红、多目标垂直堆叠），**保留**原有「一行向右」作为默认样式；目标身份用探查局 S1 确认的 `ProfileId`，纯逻辑 `Game/DamageAccum.cs` + 离线测试覆盖。**0.6 d 连杀音效**：可选的 `Sounds/double_kill` / `triple_kill` / `multi_kill`，文件不存在时回退普通击杀音效；设置页新增开关与自定义路径。`F8` 测试命中支持按住 Shift 模拟护甲命中，harness 新增 `hit armor [N]`。离线测试 315 → 454 项。**卡片拆分**：`Ui/KillFeedLayer.cs` 1482 → 694 行，横幅 / 骷髅行 / 标签行 / 军衔徽章拆成 `KillCardBannerView` / `KillCardSkullRowView` / `KillCardTagRowView` / `KillCardBadgeView`，共用 `KillCardAnim` / `KillCardPalette`（纯提取，版式与动效保持不变）。 |
 | 0.5.3 | **修连续战局命中反馈消失**：同一进程第 2 局起命中标记 / 命中音效整局不出现（击杀正常）。实测 `GlobalEventDispatcher` 实例跨局不变、换局时 `OnBeingHit` 订阅被游戏清掉，旧版只在启动订阅一次；现在**每局开局强制重绑**（幂等），三连局实测 99 条命中事件全部收到。**战局边界改用主玩家判定**（`GameWorld.MainPlayer.Profile` 出现/消失），连带修正连杀 / 每局击杀 / 得分 / 成就跨局累计与开局不重载音效、不清空 UI。新增 `[events] raid started (main player)` / `OnBeingHit 已绑定` / `本局第一发 OnBeingHit` 与 `[diag] raidState=` 诊断日志。配置版本不变（3）。 |
 | 0.5.2 | **音效空间模式默认 `Flat2D` → `FollowCamera3D`**（配置版本 2 → 3，只重置仍是 `Flat2D` 的；`FollowCamera3D` 是唯一在战局里确认过出声的模式）；**热重载迭代**（`-p:HotReload=true`、`reload-scripts.ps1`、`waitmenu`）及完整的卸载路径（画布 / 音频宿主 / 图标与字体缓存 / TMP 材质实例，逐代泄漏实测为 0）；**字体**：停止探测注定失败的 Arial / Segoe UI，修正「填 Microsoft YaHei」的误导建议，启动时写字形覆盖日志，新增 `glyphs` 指令与 `font-check.txt`；**设置面板分类顺序修复**（`00` 原来排在最后、`90` 排在最前：ConfigurationManager 按首次绑定顺序排，不看 `Order`）；设置面板实机验收（枚举 / 颜色 / 偏移 / 滑块 / 快捷键 / Reset / 持久化）；
 遥控模式 `watch` + `send-input.ps1`；Issue 模板；文档对齐（测试数、cfg 分组名 `4. 音频`、`VictimIsLocalPlayer`）；**卸载清理健壮性**：`OnDestroy` 各清理步骤彼此独立，任一步失败不拖累其余，并在末尾补一次幂等的 `GameEvents.Shutdown()`（兜住旧代次同帧 Update 重新订阅 `OnBeingHit`）。 |
