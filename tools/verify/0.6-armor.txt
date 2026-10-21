@@ -1,0 +1,42 @@
+# 0.6a 护甲命中样式渲染图（主菜单即可，13 张）
+# 护甲命中：白色十字 + 蓝色辉光 + 伤害数字右侧小盾标；对照普通命中 / 爆头
+waitmenu 90
+log === 0.6 armor visual start ===
+clock manual
+bg dark
+step 1
+
+reset
+hit armor 1
+seq armor_dark 8 0.0333
+
+reset
+bg white
+step 1
+hit armor 1
+step 0.2
+shot armor_white
+
+reset
+bg snow
+step 1
+hit armor 1
+step 0.2
+shot armor_snow
+
+reset
+bg dark
+step 1
+hit head 1
+step 0.2
+shot head_dark
+
+reset
+step 1
+hit 1
+step 0.2
+shot normal_dark
+
+bg off
+log === 0.6 armor visual done ===
+quit

@@ -1,0 +1,32 @@
+# 0.6b 累加样式下的护甲盾标渲染图（需 cfg: 排布方式 = Accumulate；6 张）
+waitmenu 90
+log === 0.6b accum armor start ===
+clock manual
+bg dark
+step 1
+
+hit armor 1
+step 0.3
+hit armor 1
+step 0.3
+shot acc_armor
+
+hit 1
+step 0.3
+shot acc_mixed
+
+step 2.2
+shot acc_faded
+
+bg white
+reset
+step 1
+hit armor 1
+step 0.2
+hit armor 1
+step 0.2
+shot acc_armor_white
+
+bg off
+log === 0.6b accum armor done ===
+quit

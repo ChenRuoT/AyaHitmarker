@@ -434,24 +434,20 @@ internal sealed class AyaBehaviour : MonoBehaviour
             var hitKey = Plugin.Cfg.TestHitKey.Value;
             if (hitKey.MainKey != KeyCode.None && hitKey.IsDown())
             {
-                // 按住 Shift = 模拟「只打中护甲」，用来单独验 0.6 a 的盾形标记与护甲配色
-                bool armorHit = false;
-                try
-                {
-                    armorHit = UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift);
-                }
-                catch { /* 输入后端不可用时按普通命中处理 */ }
+                // F8：**随机命中** —— 伤害数值 / 是否打中护甲 / 是否爆头全部随机。
+                // （旧版用 Shift+F8 模拟护甲命中，但游戏里 Shift 的组合键读不到；改成单键随机后每次按都能看到不同分支。）
+                bool headshot = UnityEngine.Random.value < 0.30f;
+                bool armorHit = UnityEngine.Random.value < 0.35f;
+                float damage = Mathf.Round(armorHit
+                    ? UnityEngine.Random.Range(8f, 90f)
+                    : UnityEngine.Random.Range(20f, 160f));
 
                 var target = TestKills.Peek();
-                Plugin.Logger.LogInfo($"[debug] 测试命中（护甲={armorHit}，目标={target.VictimName}）");
-                _ui.Hitmarker.Show(Vector2.zero, false, armorHit);
-                _ui.DamageNumbers.Show(
-                    Vector2.zero,
-                    armorHit ? 41.2f : 76f,
-                    false,
-                    armorHit,
-                    target.VictimProfileId);
-                _sound.PlayHit(false);
+                Plugin.Logger.LogInfo(
+                    $"[debug] 测试命中（随机）：伤害={damage:0} 爆头={headshot} 护甲={armorHit} 目标={target.VictimName}");
+                _ui.Hitmarker.Show(Vector2.zero, headshot, armorHit);
+                _ui.DamageNumbers.Show(Vector2.zero, damage, headshot, armorHit, target.VictimProfileId);
+                _sound.PlayHit(headshot);
             }
 
             var killKey = Plugin.Cfg.TestKillKey.Value;

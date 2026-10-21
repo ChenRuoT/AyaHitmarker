@@ -54,6 +54,11 @@ internal sealed class DamageNumberLayer
         internal float LastHeight = float.NaN;
         internal Color LastColor = new Color(-1f, -1f, -1f, -1f);
         internal bool Logged;
+
+        // 护甲命中：伤害数字右侧的小盾标（0.6 a 调整；盾不再替换命中标记）
+        internal UiImageRow? Shield;
+        internal Sprite? LastShieldSprite;
+        internal float LastShieldSize = float.NaN;
     }
 
     private readonly List<Entry> _live = new List<Entry>(16);
@@ -83,6 +88,21 @@ internal sealed class DamageNumberLayer
     private float _pendingKillUntil = -1f;
 
     internal void Attach(RectTransform parent) => _parent = parent;
+
+    /// <summary>护甲小盾标与数字之间的间距。</summary>
+    private const float ShieldGap = 4f;
+
+    /// <summary>小盾标的显示尺寸：跟着伤害字号缩放（21px 字号 → 约 18px），比命中标记小得多。</summary>
+    private static float ShieldSizeFor(float fontSize) => Mathf.Clamp(fontSize * 0.85f, 12f, 26f);
+
+    private static float ShieldOutlineFor(float size) => Mathf.Clamp(size * 0.06f, 0.4f, 1.0f);
+
+    /// <summary>启动时把护甲小盾标烘好（主线程同步烘焙，别留到第一次护甲命中）。</summary>
+    internal void Warmup()
+    {
+        float size = ShieldSizeFor(Mathf.Max(6f, Plugin.Cfg.DamageTextSize.Value));
+        Assets.ProceduralIcons.ArmorMarker(size, ShieldOutlineFor(size));
+    }
 
     /// <summary><paramref name="canvasAnchor"/> 是画布局部坐标（原点 = 屏幕中心）。</summary>
     /// <param name="armorOnly">本次命中只有护甲伤害（0.6 a：用护甲配色）。</param>
@@ -240,6 +260,7 @@ internal sealed class DamageNumberLayer
             if (!enabled || age < 0f || age >= e.Life || e.Damage < 0.5f)
             {
                 e.Go?.SetActive(false);
+                HideShield(e);
                 _live.RemoveAt(i);
                 Recycle(e);
             }
@@ -266,10 +287,14 @@ internal sealed class DamageNumberLayer
         Color armorFill = UiTheme.Parse(cfg.DamageTextArmorColor.Value, new Color(0.62f, 0.78f, 0.92f));
 
         float x = startX;
+        float shieldBase = ShieldSizeFor(cfg.DamageTextSize.Value);
         for (int i = 0; i < _live.Count; i++)
         {
             var e = _live[i];
             if (e.Rt == null || e.Text == null) continue;
+
+            float shieldSize = e.ArmorOnly ? shieldBase : 0f;
+            float shieldGap = e.ArmorOnly ? ShieldGap : 0f;
 
             float alpha = Mathf.Clamp01(1f - (now - e.Start) / e.Life);
             // 击杀数字前 40% 保持全亮，别一出来就开始淡
@@ -296,15 +321,16 @@ internal sealed class DamageNumberLayer
             }
 
             // 击杀的数字弹得更用力
+            float entryScale = 1f;
             float entryPop = e.Kill ? Mathf.Max(popScale, 1.45f) : popScale;
             if (entryPop > 1.0001f)
             {
                 float popT = UiAnim.OutBack(UiAnim.Clamp01((now - e.PopStart) / popDuration));
-                float scale = entryPop + (1f - entryPop) * popT;
-                if (float.IsNaN(e.LastScale) || Mathf.Abs(e.LastScale - scale) > 0.002f)
+                entryScale = entryPop + (1f - entryPop) * popT;
+                if (float.IsNaN(e.LastScale) || Mathf.Abs(e.LastScale - entryScale) > 0.002f)
                 {
-                    e.LastScale = scale;
-                    e.Rt.localScale = new Vector3(scale, scale, 1f);
+                    e.LastScale = entryScale;
+                    e.Rt.localScale = new Vector3(entryScale, entryScale, 1f);
                 }
             }
             else if (float.IsNaN(e.LastScale))
@@ -329,7 +355,11 @@ internal sealed class DamageNumberLayer
                 e.Text.color = color;
             }
 
-            x += e.Width + spacing;
+            // 护甲命中：小盾标贴在数字右侧，不遮命中标记也不遮下一个数字
+            if (e.ArmorOnly) DrawShield(e, x, e.Width, baseY, shieldSize, armorFill, alpha, entryScale);
+            else HideShield(e);
+
+            x += e.Width + shieldGap + shieldSize + spacing;
         }
     }
 
@@ -486,6 +516,17 @@ internal sealed class DamageNumberLayer
                 text.color = color;
             }
 
+            // 护甲槽：小盾标贴在累计数字右侧
+            if (slot.ArmorOnly)
+            {
+                float scaleNow = float.IsNaN(e.LastScale) ? 1f : e.LastScale;
+                DrawShield(e, startX, e.Width, y, ShieldSizeFor(fontSize), armorFill, alpha, scaleNow);
+            }
+            else
+            {
+                HideShield(e);
+            }
+
             if (cfg.DebugEnabled.Value && !e.Logged)
             {
                 e.Logged = true;
@@ -502,6 +543,7 @@ internal sealed class DamageNumberLayer
             var e = _accumEntries[i];
             if (e.Used) continue;
             e.Go?.SetActive(false);
+            HideShield(e);
             _accumEntries.RemoveAt(i);
             Recycle(e);
         }
@@ -548,6 +590,7 @@ internal sealed class DamageNumberLayer
         for (int i = 0; i < _live.Count; i++)
         {
             _live[i].Go?.SetActive(false);
+            HideShield(_live[i]);
             Recycle(_live[i]);
         }
         _live.Clear();
@@ -555,6 +598,7 @@ internal sealed class DamageNumberLayer
         for (int i = 0; i < _accumEntries.Count; i++)
         {
             _accumEntries[i].Go?.SetActive(false);
+            HideShield(_accumEntries[i]);
             Recycle(_accumEntries[i]);
         }
         _accumEntries.Clear();
@@ -566,6 +610,41 @@ internal sealed class DamageNumberLayer
 
     private static string FormatDamage(float damage)
         => FormatDamageByKey(Mathf.Max(0, Mathf.RoundToInt(damage)));
+
+    /// <summary>取（并按尺寸缓存）小盾标精灵；尺寸随字号变，变了一次才重取。</summary>
+    private Sprite? ResolveShield(Entry e, float size)
+    {
+        var cached = e.LastShieldSprite;
+        if (cached != null && Mathf.Abs(e.LastShieldSize - size) < 0.01f) return cached;
+
+        var baked = Assets.ProceduralIcons.ArmorMarker(size, ShieldOutlineFor(size));
+        e.LastShieldSize = size;
+        e.LastShieldSprite = baked.HasValue ? baked.Value.Sprite : null;
+        return e.LastShieldSprite;
+    }
+
+    /// <summary>把盾标画在数字右侧。<paramref name="left"/> = 数字矩形左缘（数字是左对齐的）。</summary>
+    private void DrawShield(Entry e, float left, float numberWidth, float y, float size, Color tint, float alpha, float scale)
+    {
+        if (e.Shield == null) return;
+        if (alpha <= 0.01f)
+        {
+            e.Shield.Hide();
+            return;
+        }
+
+        var sprite = ResolveShield(e, size);
+        if (sprite == null)
+        {
+            e.Shield.Hide();
+            return;
+        }
+
+        Vector2 center = new Vector2(left + numberWidth + ShieldGap + size * 0.5f, y);
+        e.Shield.Apply(center, new Vector2(size, size), sprite, UiTheme.WithAlpha(tint, alpha * tint.a), scale);
+    }
+
+    private static void HideShield(Entry e) => e.Shield?.Hide();
 
     private static string FormatDamageByKey(int key)
     {
@@ -591,6 +670,8 @@ internal sealed class DamageNumberLayer
             e.LastTextKey = int.MinValue;
             e.LastFontSize = -1f;
             e.LastOutlineKey = int.MinValue;
+            e.LastShieldSprite = null;
+            e.LastShieldSize = float.NaN;
             e.Logged = false;
             e.TargetKey = string.Empty;
             e.Used = false;
@@ -611,6 +692,8 @@ internal sealed class DamageNumberLayer
         e.Go = go;
         e.Text = text;
         e.Rt = rt;
+        // 盾标建在数字之后（更靠上），但它在数字右侧、不会遮挡文字
+        e.Shield = UiImageRow.Create("AyaHitmarker.DamageShield", _parent);
         go.SetActive(false);
         return e;
     }
@@ -618,6 +701,7 @@ internal sealed class DamageNumberLayer
     private void Recycle(Entry e)
     {
         if (_pool.Count >= 64) return;
+        HideShield(e);
         e.TargetKey = string.Empty;
         e.Used = false;
         _pool.Add(e);

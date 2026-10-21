@@ -66,6 +66,7 @@ internal sealed class OverlayRoot
         // 预热程序化图标（主线程同步烘焙，别留到第一次命中 / 多杀时才烘）
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Hitmarker.Warmup();
+        DamageNumbers.Warmup();
         KillFeed.Warmup();
         Plugin.Logger.LogInfo($"[icons] 程序化图标预热完成（{sw.ElapsedMilliseconds} ms）");
 

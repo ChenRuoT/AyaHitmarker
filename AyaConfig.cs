@@ -323,10 +323,10 @@ internal sealed class AyaConfig
             new ConfigDescription("", null, new object[] { 0.1f, 3f }));
         ArmorHitMarkerEnabled = ConfigPanel.Bind(cfg, nameof(ArmorHitMarkerEnabled), "1. 命中提示", "护甲命中标记", true,
             new ConfigDescription(
-                "只打中防弹板（本次命中只有护甲伤害、没有肉体伤害）时，把命中标记换成蓝灰色盾形，" +
-                "伤害数字也改用「护甲命中颜色」。关闭后回到普通 ✕ 标记。仅「图标样式 = Procedural」时生效。"));
+                "只打中防弹板（本次命中只有护甲伤害、没有肉体伤害）时，十字标记保持白色、外面加一圈蓝色辉光，" +
+                "伤害数字右侧出现一个小盾标。关闭后护甲命中与普通命中完全一样。"));
         ArmorHitMarkerColor = ConfigPanel.Bind(cfg, nameof(ArmorHitMarkerColor), "1. 命中提示", "护甲标记颜色", "#8FB6D9FF",
-            new ConfigDescription("护甲命中盾形标记的着色（白色部分相乘，深色描边不变）。"));
+            new ConfigDescription("护甲命中时十字外围的辉光颜色；伤害数字右侧的小盾标也用它着色。"));
 
         // ---------------------------------------------------------------- 2. 伤害数字
         // 旧 cfg: 字号 21 / 间距 8 / 多段间距 12 / 颜色 FFFFFF / 描边白 25% 不透明 / 爆头描边 FF0000
@@ -369,7 +369,7 @@ internal sealed class AyaConfig
         DamageAccumulateLifetime = ConfigPanel.Bind(cfg, nameof(DamageAccumulateLifetime), "2. 伤害数字", "累加淡出时长(秒)", 0.9f,
             new ConfigDescription("「排布方式 = 累加」时，停止命中（或击杀）后数字淡出的时间。", null, new object[] { 0.1f, 5f }));
         DamageTextArmorColor = ConfigPanel.Bind(cfg, nameof(DamageTextArmorColor), "2. 伤害数字", "护甲命中颜色", "#9CC7E8FF",
-            new ConfigDescription("只打中护甲（本次命中没有肉体伤害）时数字的颜色，和「护甲命中标记」配套。"));
+            new ConfigDescription("只打中护甲（本次命中没有肉体伤害）时数字的颜色；数字右侧的小盾标同色。"));
 
         // ---------------------------------------------------------------- 3. 击杀播报
         // 卡片按战地 6 重做：一张卡累加窗口内的连续击杀（骷髅并排 / 分数累计 / 标签取并集），

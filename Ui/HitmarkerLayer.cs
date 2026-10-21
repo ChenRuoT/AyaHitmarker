@@ -23,6 +23,18 @@ internal sealed class HitmarkerLayer
     private Image? _img;
     private RectTransform? _rt;
 
+    // 护甲命中：十字保持白色，外面加一圈蓝色辉光（独立 Image，画在十字下面）。
+    // 0.6a 调整后盾标不再替换命中标记，而是出现在伤害数字右侧（见 DamageNumberLayer）。
+    private GameObject? _glowGo;
+    private Image? _glowImg;
+    private RectTransform? _glowRt;
+    private Sprite? _glowSprite;
+    private Sprite? _glowSource;
+    private int _glowSpread;
+    private Sprite? _lastGlowSprite;
+    private float _lastGlowSize = -1f;
+    private Color _lastGlowColor = new Color(-1f, -1f, -1f, -1f);
+
     private float _start = -999f;
     private bool _shown;
     private bool _headshot;
@@ -36,6 +48,22 @@ internal sealed class HitmarkerLayer
 
     internal void Attach(RectTransform parent)
     {
+        // 先建辉光：创建顺序 = 绘制顺序，辉光必须在十字下面
+        _glowGo = new GameObject("AyaHitmarker.HitGlow");
+        _glowImg = _glowGo.AddComponent<Image>();
+        _glowImg.raycastTarget = false;
+        _glowImg.preserveAspect = true;
+        _glowImg.color = Color.clear;
+        _glowRt = UiTheme.Rect(_glowGo);
+        if (_glowRt != null)
+        {
+            _glowRt.SetParent(parent, false);
+            _glowRt.anchorMin = new Vector2(0.5f, 0.5f);
+            _glowRt.anchorMax = new Vector2(0.5f, 0.5f);
+            _glowRt.pivot = new Vector2(0.5f, 0.5f);
+        }
+        _glowGo.SetActive(false);
+
         _go = new GameObject("AyaHitmarker.Hit");
         _img = _go.AddComponent<Image>();
         _img.raycastTarget = false;
@@ -54,14 +82,14 @@ internal sealed class HitmarkerLayer
         _go.SetActive(false);
     }
 
-    /// <summary>启动时把命中 / 击杀 / 护甲三个版本的标记都烘好，第一次命中不卡帧。</summary>
+    /// <summary>启动时把命中 / 击杀标记和护甲辉光都烘好，第一次命中不卡帧。</summary>
     internal void Warmup()
     {
         var cfg = Plugin.Cfg;
         float baseSize = Mathf.Max(1f, cfg.HitBaseSize.Value);
-        ResolveSprite(cfg, baseSize, kill: false, armor: false);
-        ResolveSprite(cfg, baseSize, kill: true, armor: false);
-        ResolveSprite(cfg, baseSize, kill: false, armor: true);
+        Sprite? normal = ResolveSprite(cfg, baseSize, kill: false);
+        ResolveSprite(cfg, baseSize, kill: true);
+        if (normal != null) EnsureGlowSprite(baseSize, normal);
     }
 
     /// <summary>
@@ -94,7 +122,10 @@ internal sealed class HitmarkerLayer
     }
 
     /// <summary><paramref name="canvasAnchor"/> 是画布局部坐标（原点 = 屏幕中心）。</summary>
-    /// <param name="armorOnly">本次命中只打中护甲（0.6 a）：换成蓝灰盾形标记，可用配置关闭。</param>
+    /// <param name="armorOnly">
+    /// 本次命中只打中护甲（0.6 a）：十字保持白色、外面加一圈蓝色辉光，可用配置关闭。
+    /// 盾标由 <see cref="DamageNumberLayer"/> 画在伤害数字右侧。
+    /// </param>
     internal void Show(Vector2 canvasAnchor, bool headshot, bool armorOnly)
     {
         float now = UiClock.Now;
@@ -136,7 +167,7 @@ internal sealed class HitmarkerLayer
         }
 
         float baseSize = Mathf.Max(1f, cfg.HitBaseSize.Value);
-        Sprite? sprite = ResolveSprite(cfg, baseSize, _kill, _armor);
+        Sprite? sprite = ResolveSprite(cfg, baseSize, _kill);
         if (sprite == null)
         {
             Hide();
@@ -193,8 +224,9 @@ internal sealed class HitmarkerLayer
 
             if (_headshot && !_armor) scale *= Mathf.Max(1f, cfg.HitMarkerHeadshotScale.Value);
 
+            // 护甲命中的十字保持白色；「是不是护甲」靠外面的蓝色辉光表达
             tint = _armor
-                ? UiTheme.Parse(cfg.ArmorHitMarkerColor.Value, new Color(0.56f, 0.72f, 0.85f))
+                ? Color.white
                 : _headshot
                     ? UiTheme.Parse(cfg.HitMarkerHeadshotColor.Value, new Color(1f, 0.3f, 0.3f))
                     : UiTheme.Parse(cfg.HitMarkerColor.Value, Color.white);
@@ -225,18 +257,94 @@ internal sealed class HitmarkerLayer
 
         _rt.localScale = new Vector3(scale, scale, 1f);
         _rt.anchoredPosition = _anchor + CenterOffset(cfg);
+
+        // 护甲命中：白色十字外围加一圈蓝色辉光
+        if (_armor && !kill) DrawGlow(cfg, baseSize, alpha, scale);
+        else HideGlow();
+    }
+
+    /// <summary>
+    /// 护甲辉光：用命中标记的精灵现烘一张柔光贴图（<see cref="Assets.IconBank.GetGlow"/>），
+    /// 颜色由 <c>ArmorHitMarkerColor</c> 决定，跟着十字一起缩放 / 淡出。
+    /// </summary>
+    private void DrawGlow(AyaConfig cfg, float baseSize, float alpha, float scale)
+    {
+        if (_glowGo == null || _glowImg == null || _glowRt == null) return;
+
+        Sprite? normal = ResolveSprite(cfg, baseSize, kill: false);
+        if (normal == null)
+        {
+            HideGlow();
+            return;
+        }
+
+        EnsureGlowSprite(baseSize, normal);
+        var glowSprite = _glowSprite;
+        if (glowSprite == null)
+        {
+            HideGlow();
+            return;
+        }
+
+        if (!_glowGo.activeSelf) _glowGo.SetActive(true);
+        if (!ReferenceEquals(_lastGlowSprite, glowSprite))
+        {
+            _lastGlowSprite = glowSprite;
+            _glowImg.sprite = glowSprite;
+        }
+
+        // GlowPadRatio 把「图标本体尺寸」换算成「含辉光留白的贴图尺寸」；再放大一点让光晕散出去
+        float glowSize = baseSize * Assets.IconBank.GlowPadRatio(normal, _glowSpread) * 1.15f;
+        if (Mathf.Abs(_lastGlowSize - glowSize) > 0.01f)
+        {
+            _lastGlowSize = glowSize;
+            _glowRt.sizeDelta = new Vector2(glowSize, glowSize);
+        }
+
+        _glowRt.anchoredPosition = _anchor + CenterOffset(cfg);
+        _glowRt.localScale = new Vector3(scale, scale, 1f);
+
+        Color tint = UiTheme.Parse(cfg.ArmorHitMarkerColor.Value, new Color(0.56f, 0.72f, 0.85f));
+        Color color = UiTheme.WithAlpha(tint, Mathf.Clamp01(alpha * 1.55f) * tint.a);
+        if (_lastGlowColor.a < 0f
+            || Mathf.Abs(color.a - _lastGlowColor.a) > 0.004f
+            || Mathf.Abs(color.r - _lastGlowColor.r) > 0.004f
+            || Mathf.Abs(color.g - _lastGlowColor.g) > 0.004f
+            || Mathf.Abs(color.b - _lastGlowColor.b) > 0.004f)
+        {
+            _lastGlowColor = color;
+            _glowImg.color = color;
+        }
+    }
+
+    private void EnsureGlowSprite(float baseSize, Sprite source)
+    {
+        int spread = Mathf.Clamp(Mathf.RoundToInt(baseSize * 0.15f), 3, 22);
+        if (ReferenceEquals(_glowSource, source) && _glowSpread == spread && _glowSprite != null) return;
+
+        _glowSource = source;
+        _glowSpread = spread;
+        _glowSprite = Assets.IconBank.GetGlow(source, spread);
+        _lastGlowSprite = null;
+        _lastGlowSize = -1f;
+        _lastGlowColor = new Color(-1f, -1f, -1f, -1f);
+    }
+
+    private void HideGlow()
+    {
+        if (_glowGo != null && _glowGo.activeSelf) _glowGo.SetActive(false);
+        _lastGlowColor = new Color(-1f, -1f, -1f, -1f);
     }
 
     // 精灵指纹：基础大小 / 描边宽度 / UI 缩放 / 样式任何一个变了才重新取（取一次要拼缓存键字符串，不能每帧做）
     private Sprite? _resolvedNormal;
     private Sprite? _resolvedKill;
-    private Sprite? _resolvedArmor;
     private float _fpBase = -1f;
     private float _fpOutline = -1f;
     private float _fpUi = -1f;
     private IconStyle _fpStyle = (IconStyle)(-1);
 
-    private Sprite? ResolveSprite(AyaConfig cfg, float baseSize, bool kill, bool armor)
+    private Sprite? ResolveSprite(AyaConfig cfg, float baseSize, bool kill)
     {
         var style = cfg.IconStyleMode.Value;
         float outline = cfg.HitMarkerOutlineWidth.Value;
@@ -253,7 +361,8 @@ internal sealed class HitmarkerLayer
             _fpUi = ui;
             _resolvedNormal = null;
             _resolvedKill = null;
-            _resolvedArmor = null;
+            _glowSource = null;
+            _glowSprite = null;
         }
 
         if (style == IconStyle.CustomFiles) return Assets.IconBank.Hit;
@@ -266,16 +375,6 @@ internal sealed class HitmarkerLayer
                 _resolvedKill = baked.HasValue ? baked.Value.Sprite : Assets.IconBank.Hit;
             }
             return _resolvedKill;
-        }
-
-        if (armor)
-        {
-            if (_resolvedArmor == null)
-            {
-                var baked = Assets.ProceduralIcons.ArmorMarker(baseSize, outline);
-                _resolvedArmor = baked.HasValue ? baked.Value.Sprite : Assets.IconBank.Hit;
-            }
-            return _resolvedArmor;
         }
 
         if (_resolvedNormal == null)
@@ -301,5 +400,6 @@ internal sealed class HitmarkerLayer
         _lastColor = new Color(-1f, -1f, -1f, -1f);
         if (_img != null) _img.color = Color.clear;
         if (_go != null && _go.activeSelf) _go.SetActive(false);
+        HideGlow();
     }
 }
