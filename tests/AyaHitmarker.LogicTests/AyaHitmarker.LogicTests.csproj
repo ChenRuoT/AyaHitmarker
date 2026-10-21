@@ -22,6 +22,7 @@
     <Compile Include="../../Ui/KillCardModel.cs" Link="Ui/KillCardModel.cs" />
     <Compile Include="../../Ui/UiAnim.cs" Link="Ui/UiAnim.cs" />
     <Compile Include="../../Ui/GlitchMath.cs" Link="Ui/GlitchMath.cs" />
+    <Compile Include="../../Ui/HitDirectionMath.cs" Link="Ui/HitDirectionMath.cs" />
     <Compile Include="../../Assets/AudioClipHealth.cs" Link="Assets/AudioClipHealth.cs" />
     <Compile Include="../../Assets/IconShapes.cs" Link="Assets/IconShapes.cs" />
   </ItemGroup>

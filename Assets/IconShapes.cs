@@ -724,6 +724,36 @@ internal static class IconShapes
         return canvas.ToBitmap(bleedWhite: true);
     }
 
+    // ------------------------------------------------------------------ 受击方向指示的柔光粒子（0.6 e）
+
+    /// <summary>
+    /// 柔光圆点粒子：白色圆点，中心不透明、向边缘按二次方衰减到完全透明（不留硬边）。
+    /// 运行时用 <c>Image.color</c> 乘成白 / 黄 / 红三档颜色，和图标一样只烘一张。
+    /// </summary>
+    internal static IconBitmap SoftDot(int sizePx)
+    {
+        int w = Math.Max(8, sizePx);
+        int h = w;
+        float half = w * 0.5f;
+
+        var canvas = new Canvas(w, h);
+        var cov = new float[w * h];
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float dx = (x + 0.5f - half) / half;
+                float dy = (y + 0.5f - half) / half;
+                float r2 = dx * dx + dy * dy;
+                if (r2 >= 1f) continue;
+                float t = 1f - r2;         // 二次衰减
+                cov[y * w + x] = t * t;    // 边缘更柔
+            }
+        }
+        canvas.Over(cov, 1f, 1f, 1f, 1f);
+        return canvas.ToBitmap(bleedWhite: true);
+    }
+
     // ------------------------------------------------------------------ 标签框（9 宫格）
 
     /// <summary>

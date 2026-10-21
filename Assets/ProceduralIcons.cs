@@ -183,6 +183,21 @@ internal static class ProceduralIcons
         return result;
     }
 
+    // ------------------------------------------------------------------ 受击方向指示的柔光粒子（0.6 e）
+
+    /// <summary>柔光圆点粒子（白色，中心不透明、边缘二次衰减）。粒子用的 SoftDot 直接乘 Image.color 着色。</summary>
+    internal static Sprite? SoftDot(float displayPx)
+    {
+        int size = Quantize(Mathf.Max(8f, displayPx) * UiScale() * 2f, 48, 256);
+        string key = $"dot:{size}";
+        if (TryGetCached(key, out var cached)) return cached?.Sprite;
+
+        var bmp = IconShapes.SoftDot(size);
+        BakedIcon? result = Build(bmp, 1f, mipmaps: true);
+        Cache[key] = result;
+        return result?.Sprite;
+    }
+
     // ------------------------------------------------------------------ 标签框
 
     /// <summary>标签框九宫格精灵（描边 2 像素）。全局只有一张，不随尺寸变化。</summary>

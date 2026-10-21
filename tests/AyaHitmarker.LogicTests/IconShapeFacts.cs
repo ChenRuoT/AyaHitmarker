@@ -339,5 +339,32 @@ internal static class IconShapeFacts
             Assert.False(SameBytes(shield, IconShapes.HitMarker(S, outline)),
                 "与 HitMarker 同参数下字节不完全相同（两种图形）");
         }
+
+        // ---- 0.6 e 受击方向指示的柔光粒子 ----
+        Assert.Suite("图标：受击方向柔光粒子");
+
+        const int D = 64;
+        IconBitmap dot = IconShapes.SoftDot(D);
+        Assert.Equal(D, dot.Width, "SoftDot 宽度 = 请求尺寸");
+        Assert.Equal(D, dot.Height, "SoftDot 高度 = 请求尺寸");
+        Assert.True(Px(dot, D / 2, D / 2).a >= 250, "中心接近不透明");
+        Assert.Equal(0, Px(dot, 0, 0).a, "左上角透明（圆外留白）");
+        Assert.Equal(0, Px(dot, D - 1, D - 1).a, "右下角透明");
+
+        int lastAlpha = 256;
+        bool monotonic = true;
+        for (int x = D / 2; x < D; x++)
+        {
+            int a = Px(dot, x, D / 2).a;
+            if (a > lastAlpha) { monotonic = false; break; }
+            lastAlpha = a;
+        }
+        Assert.True(monotonic, "沿半径向外 alpha 单调不增（中心亮、边缘柔）");
+        Assert.Greater(Px(dot, D / 2, D / 2).a, Px(dot, D - 2, D / 2).a, "中心比边缘亮");
+
+        var dotCorner = Px(dot, 0, 0);
+        Assert.Equal(255, dotCorner.r, "透明角落 RGB 填白（mipmap 缩小时不发灰）");
+        Assert.True(SameBytes(dot, IconShapes.SoftDot(D)), "两次调用逐字节一致（确定性）");
+        Assert.Equal(8, IconShapes.SoftDot(1).Width, "尺寸下限 8");
     }
 }

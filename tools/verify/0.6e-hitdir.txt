@@ -1,0 +1,47 @@
+# 0.6e 受击方向指示渲染图（主菜单即可，12 张）
+# taken <角度°> [伤害] [armor]：0 = 正前（椭圆上端）、90 = 右、180 = 背后、270 = 左
+waitmenu 90
+log === 0.6e hitdir start ===
+clock manual
+bg dark
+step 1
+
+reset
+taken 0 20
+seq dir_front_yellow 6 0.0333
+
+reset
+taken 90 120
+step 0.1
+shot dir_right_heavy
+
+reset
+taken 180 30 armor
+step 0.1
+shot dir_back_armor
+
+reset
+taken 270 25
+step 0.1
+shot dir_left_yellow
+
+reset
+taken 0 60
+step 0.1
+shot dir_front_heavy
+
+reset
+bg white
+taken 45 20
+step 0.1
+shot dir_white
+
+reset
+bg snow
+taken 135 25 armor
+step 0.1
+shot dir_snow
+
+bg off
+log === 0.6e hitdir done ===
+quit

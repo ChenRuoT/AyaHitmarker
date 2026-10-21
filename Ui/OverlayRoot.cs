@@ -26,6 +26,7 @@ internal sealed class OverlayRoot
 
     internal HitmarkerLayer Hitmarker { get; } = new HitmarkerLayer();
     internal DamageNumberLayer DamageNumbers { get; } = new DamageNumberLayer();
+    internal HitDirectionLayer HitDirection { get; } = new HitDirectionLayer();
     internal KillFeedLayer KillFeed { get; } = new KillFeedLayer();
 
     internal bool IsReady => _root != null;
@@ -60,6 +61,7 @@ internal sealed class OverlayRoot
         {
             Hitmarker.Attach(_rect);
             DamageNumbers.Attach(_rect);
+            HitDirection.Attach(_rect);
             KillFeed.Attach(_rect);
         }
 
@@ -67,6 +69,7 @@ internal sealed class OverlayRoot
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Hitmarker.Warmup();
         DamageNumbers.Warmup();
+        HitDirection.Warmup();
         KillFeed.Warmup();
         Plugin.Logger.LogInfo($"[icons] 程序化图标预热完成（{sw.ElapsedMilliseconds} ms）");
 
@@ -183,6 +186,7 @@ internal sealed class OverlayRoot
     {
         Hitmarker.Reset();
         DamageNumbers.Reset();
+        HitDirection.Reset();
         KillFeed.Reset();
     }
 
@@ -235,6 +239,7 @@ internal sealed class OverlayRoot
     {
         Hitmarker.Tick();
         DamageNumbers.Tick();
+        HitDirection.Tick();
         KillFeed.Tick();
     }
 }

@@ -26,6 +26,7 @@ internal static class Program
         IconShapeFacts.Run();
         AudioClipHealthFacts.Run();
         ConfigPresentationFacts.Run();
+        HitDirectionFacts.Run();
 
         return Assert.Summary();
     }

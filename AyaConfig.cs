@@ -75,6 +75,15 @@ internal sealed class AyaConfig
     internal ConfigEntry<bool> ArmorHitMarkerEnabled { get; }
     internal ConfigEntry<string> ArmorHitMarkerColor { get; }
 
+    // 0.6 e 受击方向指示
+    internal ConfigEntry<bool> HitDirectionEnabled { get; }
+    internal ConfigEntry<string> HitDirectionColorAbsorb { get; }
+    internal ConfigEntry<string> HitDirectionColorNormal { get; }
+    internal ConfigEntry<string> HitDirectionColorHeavy { get; }
+    internal ConfigEntry<float> HitDirectionHeavyDamage { get; }
+    internal ConfigEntry<string> HitDirectionEllipse { get; }
+    internal ConfigEntry<float> HitDirectionDuration { get; }
+
     // ---- 2. 伤害数字 ----
     internal ConfigEntry<bool> DamageTextEnabled { get; }
     internal ConfigEntry<DamageNumberMode> DamageTextMode { get; }
@@ -327,6 +336,24 @@ internal sealed class AyaConfig
                 "伤害数字右侧出现一个小盾标。关闭后护甲命中与普通命中完全一样。"));
         ArmorHitMarkerColor = ConfigPanel.Bind(cfg, nameof(ArmorHitMarkerColor), "1. 命中提示", "护甲标记颜色", "#8FB6D9FF",
             new ConfigDescription("护甲命中时十字外围的辉光颜色；伤害数字右侧的小盾标也用它着色。"));
+
+        // ---- 0.6 e 受击方向指示 ----
+        HitDirectionEnabled = ConfigPanel.Bind(cfg, nameof(HitDirectionEnabled), "1. 命中提示", "受击方向指示", true,
+            new ConfigDescription(
+                "受到伤害时，在屏幕中央的透明椭圆盘上、按攻击者所在方位亮起一簇粒子（二次函数突起，底部密顶部疏）。" +
+                "护甲吸收的钝伤 = 白色，普通伤害 = 黄色，重伤 = 红色；伤害越高突起越明显。"));
+        HitDirectionColorAbsorb = ConfigPanel.Bind(cfg, nameof(HitDirectionColorAbsorb), "1. 命中提示", "受击指示:护甲吸收颜色", "#FFFFFFFF",
+            new ConfigDescription("受击指示里「只被护甲吸收的钝伤」的颜色。"));
+        HitDirectionColorNormal = ConfigPanel.Bind(cfg, nameof(HitDirectionColorNormal), "1. 命中提示", "受击指示:普通伤害颜色", "#FFD24AFF",
+            new ConfigDescription("受击指示里普通伤害的颜色。"));
+        HitDirectionColorHeavy = ConfigPanel.Bind(cfg, nameof(HitDirectionColorHeavy), "1. 命中提示", "受击指示:重伤颜色", "#FF3B30FF",
+            new ConfigDescription("受击指示里重伤（肉体伤害 ≥ 重伤阈值）的颜色。"));
+        HitDirectionHeavyDamage = ConfigPanel.Bind(cfg, nameof(HitDirectionHeavyDamage), "1. 命中提示", "受击指示:重伤阈值", 35f,
+            new ConfigDescription("肉体伤害达到这个值就按「重伤」的红色绘制。", null, new object[] { 1f, 200f }));
+        HitDirectionEllipse = ConfigPanel.Bind(cfg, nameof(HitDirectionEllipse), "1. 命中提示", "受击指示:椭圆半径", "320,150",
+            new ConfigDescription("受击指示椭圆的水平/垂直半径（画布像素，「长轴在水平方向」）。格式：X,Y。"));
+        HitDirectionDuration = ConfigPanel.Bind(cfg, nameof(HitDirectionDuration), "1. 命中提示", "受击指示:持续时长(秒)", 0.9f,
+            new ConfigDescription("一簇受击粒子从出现到完全淡出的时间。", null, new object[] { 0.1f, 3f }));
 
         // ---------------------------------------------------------------- 2. 伤害数字
         // 旧 cfg: 字号 21 / 间距 8 / 多段间距 12 / 颜色 FFFFFF / 描边白 25% 不透明 / 爆头描边 FF0000

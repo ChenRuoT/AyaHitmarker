@@ -28,6 +28,12 @@ internal readonly struct HitRecord
 
     internal readonly Vector3 HitPoint;
 
+    /// <summary>
+    /// 0.6 e 受击方向：从**受害者指向攻击者来源**的世界向量（<c>MasterOrigin - HitPoint</c>，
+    /// 取不到时退回 <c>-Direction</c>）。事件线程上算好、存值类型，主线程再用相机换算成屏幕方位角。
+    /// </summary>
+    internal readonly Vector3 IncomingDirection;
+
     internal HitRecord(
         float bodyDamage,
         float armorDamage,
@@ -35,7 +41,8 @@ internal readonly struct HitRecord
         bool victimIsLocalPlayer,
         bool armorOnly,
         string targetKey,
-        Vector3 hitPoint)
+        Vector3 hitPoint,
+        Vector3 incomingDirection)
     {
         BodyDamage = bodyDamage;
         ArmorDamage = armorDamage;
@@ -44,6 +51,7 @@ internal readonly struct HitRecord
         ArmorOnly = armorOnly;
         TargetKey = targetKey;
         HitPoint = hitPoint;
+        IncomingDirection = incomingDirection;
     }
 
     internal float TotalDamage => BodyDamage + ArmorDamage;

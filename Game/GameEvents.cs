@@ -235,9 +235,15 @@ internal static class GameEvents
             // 这条过滤正是旧 Mono 项目 DamagePatch.cs 里那句注释的等价物。
             if (body + armor <= 0.01f) return;
 
-            if (!aggressorIsLocal) return;
+            // 0.6 e：受害者是我时也要送到主线程（受击方向指示用）。
+            // 其他 bot 互相打（我既不是受害者也不是攻击者）仍然丢弃，避免无谓的队列流量。
+            if (!aggressorIsLocal && !victimIsLocal) return;
 
+            // 攻击者方位 = 弹道来源 - 命中点（取不到时用 -Direction）。只存世界向量，主线程再换算成屏幕角度。
             bool armorOnly = body <= 0.01f && armor > 0.01f;
+            Vector3 incoming = info.MasterOrigin - info.HitPoint;
+            if (incoming.sqrMagnitude < 0.01f) incoming = -info.Direction;
+
             var record = new HitRecord(
                 body,
                 armor,
@@ -245,7 +251,8 @@ internal static class GameEvents
                 victimIsLocal,
                 armorOnly,
                 SafeTargetKey(victim),
-                info.HitPoint);
+                info.HitPoint,
+                incoming);
 
             if (Plugin.Cfg.DebugEnabled.Value)
             {

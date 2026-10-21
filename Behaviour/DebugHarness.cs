@@ -46,6 +46,10 @@ internal sealed class DebugHarness
     {
         /// <summary>命中：headshot / armorOnly（0.6 a 护甲盾）/ 目标序号（与 <c>kill</c> 共用，累加样式下用来对上同一个目标）。</summary>
         internal Action<bool, bool, int> Hit = (_, _, _) => { };
+
+        /// <summary>受击方向（0.6 e）：方位角度（0 = 正前，+ = 右，180 = 背后）/ 伤害 / 是否护甲吸收。</summary>
+        internal Action<float, float, bool> Taken = (_, _, _) => { };
+
         internal Action<int> Kill = _ => { };
         internal Action<int> Death = _ => { };
         internal Action<string> Audio = _ => { };
@@ -235,6 +239,19 @@ internal sealed class DebugHarness
                 bool armor = arg1.Equals("armor", StringComparison.OrdinalIgnoreCase);
                 int target = head || armor ? ParseInt(t.Length > 2 ? t[2] : string.Empty, 1) : ParseInt(arg1, 1);
                 _hooks.Hit(head, armor, target);
+                break;
+            }
+
+            case "taken":
+            {
+                // taken <角度°> [伤害] [armor]
+                // taken 0            → 正前方、60 伤害、普通颜色
+                // taken 180 80       → 背后、80 伤害
+                // taken 90 30 armor  → 右侧、护甲吸收的钝伤（白色）
+                float degrees = ParseFloat(arg1, 0f);
+                float damage = ParseFloat(t.Length > 2 ? t[2] : string.Empty, 60f);
+                bool armorTaken = t.Length > 3 && t[3].Equals("armor", StringComparison.OrdinalIgnoreCase);
+                _hooks.Taken(degrees, damage, armorTaken);
                 break;
             }
 

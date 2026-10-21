@@ -181,6 +181,11 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 target.VictimProfileId);
         },
         Kill = index => FireTestKill(TestKills.At(index), playSound: false),
+        Taken = (degrees, damage, armorOnly) =>
+        {
+            // 0.6 e：调试/验收入口，直接按给定方位角生成粒子（真实路径走 Camera 换算）
+            _ui.HitDirection.ShowDebug(degrees * Mathf.Deg2Rad, damage, armorOnly);
+        },
         Death = index =>
         {
             string killer = TestKills.At(index).VictimName;
@@ -350,8 +355,12 @@ internal sealed class AyaBehaviour : MonoBehaviour
         {
             var hit = _hits[i];
 
-            // 自己被打也会触发 GlobalBeingHit（aggressor 是别人）。v1 只提示「我打中了别人」。
-            if (hit.VictimIsLocalPlayer) continue;
+            // 自己被打：0.6 e 的受击方向指示走这条路径（不再像 v1 那样直接丢弃）
+            if (hit.VictimIsLocalPlayer)
+            {
+                _ui.HitDirection.Show(hit);
+                continue;
+            }
 
             Vector2 anchor = Vector2.zero;
             if (atHitPoint)
