@@ -28,6 +28,7 @@ internal sealed class OverlayRoot
     internal DamageNumberLayer DamageNumbers { get; } = new DamageNumberLayer();
     internal HitDirectionLayer HitDirection { get; } = new HitDirectionLayer();
     internal KillFeedLayer KillFeed { get; } = new KillFeedLayer();
+    internal AssistCardLayer AssistCards { get; } = new AssistCardLayer();
 
     internal bool IsReady => _root != null;
 
@@ -63,6 +64,7 @@ internal sealed class OverlayRoot
             DamageNumbers.Attach(_rect);
             HitDirection.Attach(_rect);
             KillFeed.Attach(_rect);
+            AssistCards.Attach(_rect);
         }
 
         // 预热程序化图标（主线程同步烘焙，别留到第一次命中 / 多杀时才烘）
@@ -71,6 +73,7 @@ internal sealed class OverlayRoot
         DamageNumbers.Warmup();
         HitDirection.Warmup();
         KillFeed.Warmup();
+        AssistCards.Warmup();
         Plugin.Logger.LogInfo($"[icons] 程序化图标预热完成（{sw.ElapsedMilliseconds} ms）");
 
         LogCanvasGeometry();
@@ -188,6 +191,7 @@ internal sealed class OverlayRoot
         DamageNumbers.Reset();
         HitDirection.Reset();
         KillFeed.Reset();
+        AssistCards.Reset();
     }
 
     /// <summary>
@@ -241,5 +245,6 @@ internal sealed class OverlayRoot
         DamageNumbers.Tick();
         HitDirection.Tick();
         KillFeed.Tick();
+        AssistCards.Tick();
     }
 }

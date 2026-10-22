@@ -318,8 +318,9 @@ internal static class GameEvents
                 return;
             }
 
-            if (killer == null || !killer.IsYourPlayer) return;
-
+            // 0.6 c：受害者不是我时，即使击杀者也不是我（bot 混战 / 队友击杀），也要把这条记录送到主线程 ——
+            // 主线程用它去「我最近打过谁」的助攻表里查，决定要不要出助攻提示；
+            // 击杀卡片 / 得分 / 连杀仍然只处理 KillerIsLocalPlayer = true 的记录。
             bool headshot = bodyPart == EBodyPart.Head;
             WildSpawnType role = SafeRole(dead);
             string botType = BotTypeMapping.GetBotType(role);
@@ -344,9 +345,10 @@ internal static class GameEvents
                 DamageMethod.IsMelee(damageType),
                 DamageMethod.IsExplosive(damageType),
                 DamageMethod.IsSniper(damageType),
-                SafeDistance(killer, dead));
+                killerIsLocal ? SafeDistance(killer!, dead) : 0f,
+                killerIsLocal);
 
-            if (Plugin.Cfg.DebugEnabled.Value)
+            if (Plugin.Cfg.DebugEnabled.Value && (victimIsLocal || killerIsLocal))
             {
                 Plugin.Logger.LogInfo(
                     $"[kill] victim={record.VictimName} lv={record.VictimLevel} role={record.Role} " +

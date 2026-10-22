@@ -89,6 +89,7 @@ internal static class TestKills
             melee,
             explosive,
             sniperDamage: false,
-            distance);
+            distance,
+            killerIsLocalPlayer: true);
     }
 }

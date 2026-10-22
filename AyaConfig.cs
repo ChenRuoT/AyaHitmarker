@@ -109,6 +109,11 @@ internal sealed class AyaConfig
     internal ConfigEntry<float> KillFeedLineSpacing { get; }
     internal ConfigEntry<float> KillFeedDuration { get; }
 
+    // ---- 0.6 c 助攻提示 ----
+    internal ConfigEntry<bool> AssistEnabled { get; }
+    internal ConfigEntry<float> AssistWindowSeconds { get; }
+    internal ConfigEntry<float> AssistNoticeDuration { get; }
+
     internal ConfigEntry<bool> ShowSkull { get; }
     internal ConfigEntry<float> SkullSize { get; }
     internal ConfigEntry<float> SkullSpacing { get; }
@@ -409,6 +414,14 @@ internal sealed class AyaConfig
             new ConfigDescription(
                 "从**最后一杀**到卡片完全消失的总时长（含最后的闪烁熄灭）。窗口内再杀一个会把卡片续上并累加。" +
                 "战地 6 实录里整张卡约 3.4 秒；这里信息更多，默认长一点。", null, new object[] { 1f, 30f }));
+        AssistEnabled = ConfigPanel.Bind(cfg, nameof(AssistEnabled), "3. 击杀信息", "启用助攻提示", true,
+            new ConfigDescription(
+                "我打过的目标被别人打死时，在击杀卡片下方弹出一条「助攻 + 伤害量」提示；" +
+                "名字 / 阵营沿用击杀卡片的样式。"));
+        AssistWindowSeconds = ConfigPanel.Bind(cfg, nameof(AssistWindowSeconds), "3. 击杀信息", "助攻判定窗口(秒)", 8f,
+            new ConfigDescription("最后一次命中后多久内目标被别人打死才算助攻。", null, new object[] { 0.5f, 30f }));
+        AssistNoticeDuration = ConfigPanel.Bind(cfg, nameof(AssistNoticeDuration), "3. 击杀信息", "助攻提示时长(秒)", 2.8f,
+            new ConfigDescription("助攻提示从出现到完全淡出的总时长。", null, new object[] { 0.5f, 10f }));
 
         // ---- 卡片动效 ----
         CardGlitchEnabled = ConfigPanel.Bind(cfg, nameof(CardGlitchEnabled), "3. 击杀信息", "故障特效", true,

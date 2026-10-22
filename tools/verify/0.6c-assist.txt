@@ -1,0 +1,42 @@
+# 0.6c 助攻提示渲染图（主菜单即可）
+# assist <测试击杀表序号> [伤害]：用第 N 条测试击杀的受害者名字 / 阵营，伤害量自己给
+waitmenu 90
+log === 0.6c assist start ===
+clock manual
+bg dark
+step 1
+
+reset
+assist 1 120
+seq assist_anim 6 0.05
+
+reset
+assist 2 35
+step 0.15
+shot assist_scav
+
+reset
+bg white
+assist 5 350
+step 0.15
+shot assist_boss_white
+
+reset
+bg snow
+assist 8 87
+step 0.15
+shot assist_snow
+
+reset
+bg dark
+kill 1
+step 0.5
+assist 5 150
+step 0.4
+shot assist_with_card
+step 1.2
+shot assist_with_card_late
+
+bg off
+log === 0.6c assist done ===
+quit

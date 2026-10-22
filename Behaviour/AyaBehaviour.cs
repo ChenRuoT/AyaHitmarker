@@ -28,6 +28,9 @@ internal sealed class AyaBehaviour : MonoBehaviour
     /// <summary>连杀/成就判定。纯托管状态，只在主线程碰。</summary>
     private KillStreakTracker _streaks = new KillStreakTracker();
 
+    /// <summary>0.6 c 助攻：主线程记录「我最近打过谁」，别人打死该目标时结算（纯逻辑，可离线测）。</summary>
+    private readonly AssistTracker _assists = new AssistTracker();
+
     // 协程相关引用必须自己持有：Il2CppManagedEnumerator 内部用 GCHandle 指向托管迭代器，
     // 托管侧的包装对象一旦被 GC，原生侧就是 "Handle is not initialized"。
     private Coroutine? _audioCoroutine;
@@ -186,6 +189,20 @@ internal sealed class AyaBehaviour : MonoBehaviour
             // 0.6 e：调试/验收入口，直接按给定方位角生成粒子（真实路径走 Camera 换算）
             _ui.HitDirection.ShowDebug(degrees * Mathf.Deg2Rad, damage, armorOnly);
         },
+        Assist = (index, damage) =>
+        {
+            // 0.6 c：调试/验收入口，按测试击杀表的受害者数据生成一条助攻提示
+            var rec = TestKills.At(index);
+            _ui.AssistCards.Show(new AssistRecord(
+                rec.VictimName,
+                rec.Role,
+                rec.BotType,
+                rec.IsPmc,
+                rec.VictimIsBoss,
+                rec.VictimLevel,
+                damage,
+                rec.Headshot));
+        },
         Death = index =>
         {
             string killer = TestKills.At(index).VictimName;
@@ -195,6 +212,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         {
             _ui.ResetAll();
             _streaks.Reset();
+            _assists.Reset();
         },
         Backdrop = color => _ui.SetBackdrop(color),
         MenuReady = IsMainMenuLoaded,
@@ -275,6 +293,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
     {
         _ui.ResetAll();
         _streaks.Reset();
+        _assists.Reset();
         ReconProbe.Reset();
 
         StartAudioLoad(invalidate: true);
@@ -284,6 +303,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
     {
         _ui.ResetAll();
         _streaks.Reset();
+        _assists.Reset();
         ReconProbe.Reset();
     }
 
@@ -362,6 +382,9 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 continue;
             }
 
+            // 0.6 c：记下「我最近打过谁」，别人打死该目标时结算助攻
+            _assists.NoteHit(hit.TargetKey, UiClock.Now, hit.TotalDamage, hit.Headshot);
+
             Vector2 anchor = Vector2.zero;
             if (atHitPoint)
             {
@@ -384,6 +407,13 @@ internal sealed class AyaBehaviour : MonoBehaviour
         {
             var kill = _kills[i];
 
+            // 0.6 c：不是我打死的 → 到助攻表里结算；不会进入击杀卡片 / 得分 / 连杀
+            if (!kill.KillerIsLocalPlayer)
+            {
+                HandleAssistCandidate(kill);
+                continue;
+            }
+
             // 阈值每次重读配置：ConfigurationManager 里改完立即生效（连杀状态不重建）
             var analysis = _streaks.Register(UiClock.Now, kill.ToFact(), Plugin.Cfg.BuildStreakSettings());
 
@@ -403,6 +433,39 @@ internal sealed class AyaBehaviour : MonoBehaviour
             // 0.6 d：双杀 / 三杀 / 四杀及以上用可选连杀音效；文件缺失时回退普通击杀音效
             if (analysis.MultiCount >= 2) _sound.PlayMultiKill(analysis.MultiCount, kill.Headshot);
             else _sound.PlayKill(kill.Headshot);
+        }
+    }
+
+    /// <summary>
+    /// 0.6 c：一条「别人打死的」击杀记录 → 查助攻表。只有我在窗口内打过该目标才会出提示；
+    /// 查不到就什么也不做（bot 互相打的记录止步于此）。
+    /// </summary>
+    private void HandleAssistCandidate(in KillRecord kill)
+    {
+        var cfg = Plugin.Cfg;
+        if (!cfg.AssistEnabled.Value) return;
+
+        if (!_assists.TryTakeAssist(kill.VictimProfileId, UiClock.Now, cfg.AssistWindowSeconds.Value,
+                out float damage, out bool headshot))
+        {
+            return;
+        }
+
+        var record = new AssistRecord(
+            kill.VictimName,
+            kill.Role,
+            kill.BotType,
+            kill.IsPmc,
+            kill.VictimIsBoss,
+            kill.VictimLevel,
+            damage,
+            headshot);
+        _ui.AssistCards.Show(record);
+
+        if (cfg.DebugEnabled.Value)
+        {
+            Plugin.Logger.LogInfo(
+                $"[assist] {kill.VictimName}（{kill.BotType}）伤害累计={damage:0.#} 爆头={headshot}");
         }
     }
 

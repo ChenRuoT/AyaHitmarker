@@ -27,6 +27,7 @@ internal static class Program
         AudioClipHealthFacts.Run();
         ConfigPresentationFacts.Run();
         HitDirectionFacts.Run();
+        AssistFacts.Run();
 
         return Assert.Summary();
     }

@@ -50,6 +50,9 @@ internal sealed class DebugHarness
         /// <summary>受击方向（0.6 e）：方位角度（0 = 正前，+ = 右，180 = 背后）/ 伤害 / 是否护甲吸收。</summary>
         internal Action<float, float, bool> Taken = (_, _, _) => { };
 
+        /// <summary>助攻（0.6 c）：测试击杀表序号 / 我累计造成的伤害。</summary>
+        internal Action<int, float> Assist = (_, _) => { };
+
         internal Action<int> Kill = _ => { };
         internal Action<int> Death = _ => { };
         internal Action<string> Audio = _ => { };
@@ -258,6 +261,14 @@ internal sealed class DebugHarness
             case "kill":
                 _hooks.Kill(ParseInt(arg1, 1));
                 break;
+
+            case "assist":
+            {
+                // assist <测试击杀表序号> [伤害]
+                // assist 1 120   → 用第 1 条测试击杀的受害者名字 / 阵营，伤害量 120
+                _hooks.Assist(ParseInt(arg1, 1), ParseFloat(t.Length > 2 ? t[2] : string.Empty, 100f));
+                break;
+            }
 
             case "audio":
                 _hooks.Audio(arg1);

@@ -92,9 +92,9 @@
 > 新增 `KillCardBannerView`（271 行）/ `KillCardSkullRowView`（312）/ `KillCardTagRowView`（218）/ `KillCardBadgeView`（167），
 > 以及共用的 `KillCardAnim`（本帧动画参数）与 `KillCardPalette`（配色 / 描边缩放）。行为保持不变（纯提取，没有改版式 / 动效参数）。
 
-> **进度（2026-10-20/21）**：**a ✅ / b ✅ / d ✅ / e ✅ 已实现**（0.6.0 开发中，离线测试 315 → 497 项；
+> **进度（2026-10-20/22）**：**a ✅ / b ✅ / c ✅ / d ✅ / e ✅ 已实现**（0.6.0 开发中，离线测试 315 → 520 项；
 > b 保留了「一行向右」作为默认样式，新样式是设置项）。
-> **c（助攻）未做**；`KillFeedLayer` 拆分 ✅ 已完成（见上），c 可以直接开工。
+> `KillFeedLayer` 拆分 ✅ 已完成（见上）。
 > **实机验收 ✅ 已完成**（DebugHarness，主菜单）：53 张截图覆盖普通 ✕ / 爆头 ✕ / 护甲样式、
 > 卡片入场·稳定·退场、2~4 杀累加卡片；`排布方式 = 累加` 另跑 15 张验证 76→152→294→370 累计、击杀变红、多目标堆叠。
 >
@@ -109,6 +109,12 @@
 > 事件线程冻结 `MasterOrigin - HitPoint`，主线程按相机换算方位角；纯逻辑 `Ui/HitDirectionMath.cs`（31 条断言），
 > 视图 `Ui/HitDirectionLayer.cs`；harness 新增 `taken <角度°> [伤害] [armor]`，已出 12 张渲染图（四方位 + 三色 + 白底 / 雪地）。
 >
+> **0.6 c 助攻 ✅（2026-10-22，方案 A）**：`Game/AssistTracker.cs` 纯逻辑在主线程记账（最后一次命中时间 / 累计伤害 / 爆头），
+> `OnPlayerDead` 里非本地击杀者的记录也送到主线程，但只查助攻表、不进击杀卡片 / 得分 / 连杀；
+> 提示是击杀卡片风格的简化卡：**上方成就横幅样式「助攻 +伤害」，下方只显示阵营 + 名字**，
+> 固定在击杀卡片下方淡入淡出（不参与卡片累加模型）。harness 新增 `assist <N> [伤害]`，
+> 已出渲染图（暗底 / 白底 / 雪地 / 与击杀卡片同屏）。
+>
 > 期间踩过一个加载 bug：0.6 新增的 11 个配置键漏了 `ConfigPanel.For` 的面板分类映射，插件在加载阶段直接
 > 抛 `ArgumentException: Missing configuration presentation` 整个失败。已补齐，并新增离线测试
 > `ConfigPresentationFacts`（静态对账 `AyaConfig` 的 Bind 与 `ConfigPanel.For`）挡住同类问题。
@@ -117,11 +123,11 @@
 |---|---|---|---|
 | a ✅ | **护甲命中区分**：`DidBodyDamage == 0 && DidArmorDamage > 0` 时命中标记加蓝色辉光、伤害数字右侧带小盾标 | 塔科夫特有、信息量大：知道自己是不是一直在打防弹板。旧项目也没做 | 已完成：`IconShapes.ArmorMarker`（白芯 + 黑描边 + 辉光，像素契约测试 24 条）作为数字右侧小盾标；`HitmarkerLayer` 白色十字 + 蓝色辉光；护甲配色、配置开关 |
 | b ✅ | **战地 6 式累加伤害数字**：同一目标的伤害在同一位置滚动累计（`32 → 67 → 99`），击杀时变红 | README §9.2 记为未做 | 已完成：`Game/DamageAccum.cs` 纯逻辑（115 条断言）+ 视图垂直堆叠；受害者 `ProfileId` 冻结进 `HitRecord`；设置项 `排布方式 = 一行向右 / 累加`，默认保留旧样式 |
-| c | **助攻**：我打过的目标在 N 秒内被别人打死，卡片上出一行「助攻 +X」 | bot 混战、将来联机都有用 | 中。`GameEvents.OnPlayerDead` 现在非我方击杀直接返回，需要放开并记账；和 b 共用受害者 ID。**开工前先拆 KillFeedLayer** |
+| c ✅ | **助攻提示**：我打过的目标在 N 秒内被别人打死，在击杀卡片下方弹出一条简化卡（成就横幅样式「助攻 +伤害」+ 阵营 + 名字） | bot 混战、将来联机都有用 | 已完成（方案 A）：`Game/AssistTracker.cs` 纯逻辑（窗口 / 累计伤害 / 一次死亡只结算一次）；`OnPlayerDead` 的非我方击杀记录送到主线程只用于助攻表；`Ui/AssistCardLayer.cs` 复用击杀卡片的横幅 / 名字 / 阵营样式；配置开关 / 窗口 / 时长 |
 | d ✅ | **多杀 / 连杀音效**：可选 `double_kill` / `triple_kill` / `multi_kill` 文件 | 现在只有 4 个槽（`AudioBank.SoundKind`）；连杀数据已经算好，只交给了卡片，没交给声音 | 已完成：`SoundKind` 扩到 7 槽、可选文件缺失静默回退普通击杀音效、配置开关 + 三个自定义路径 |
 | e ✅ | **受击方向指示**（默认开，可关） | 新旧两个项目都没有；用户明确要「屏幕中央透明椭圆盘 + 二次函数突起粒子」 | 已完成：`Ui/HitDirectionMath.cs` 纯逻辑（方位角 / 包络 / 底部密顶部疏，31 条断言）；`Ui/HitDirectionLayer.cs` 复用 `IconShapes.SoftDot` 柔光粒子 + `UiImageRow` 池；`OnBeingHit` 受害者是我时接入主线程；三色（护甲吸收白 / 普通黄 / 重伤红）+ 伤害越高突起越大；harness `taken` 出渲染图 |
 
-**下一步**：0.6 c（助攻）→ 0.6.0 进游戏验收 + 发版。
+**下一步**：0.6.0 进游戏验收（护甲样式 / 累加数字 / 受击方向 / 助攻提示）→ 发版。
 
 ---
 

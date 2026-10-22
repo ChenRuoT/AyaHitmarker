@@ -102,6 +102,9 @@ internal readonly struct KillRecord
 
     internal readonly float Distance;
 
+    /// <summary>击杀者是不是本地玩家。0.6 c：false 表示「别人打死的」—— 主线程拿它去助攻表里查。</summary>
+    internal readonly bool KillerIsLocalPlayer;
+
     internal KillRecord(
         string victimName,
         string victimKey,
@@ -119,7 +122,8 @@ internal readonly struct KillRecord
         bool melee,
         bool explosive,
         bool sniperDamage,
-        float distance)
+        float distance,
+        bool killerIsLocalPlayer)
     {
         VictimName = victimName;
         VictimKey = victimKey;
@@ -138,6 +142,7 @@ internal readonly struct KillRecord
         Explosive = explosive;
         SniperDamage = sniperDamage;
         Distance = distance;
+        KillerIsLocalPlayer = killerIsLocalPlayer;
     }
 
     /// <summary>转成判定引擎用的纯数据快照。</summary>
@@ -155,9 +160,37 @@ internal readonly struct KillRecord
         IsPmc);
 }
 
-/// <summary>一次「我方阵亡」的冻结快照，只用于复仇判定。</summary>
-internal readonly struct LocalDeathRecord
+/// <summary>
+/// 一次助攻的冻结快照（0.6 c）：我打过、但被别人打死的目标。
+/// 只带显示所需字段（名字 / 阵营 / 累计伤害 / 是否爆头），和 <see cref="KillRecord"/> 一样是跨线程值类型。
+/// </summary>
+internal readonly struct AssistRecord
 {
+    internal readonly string VictimName;
+    internal readonly WildSpawnType Role;
+    internal readonly string BotType;
+    internal readonly bool IsPmc;
+    internal readonly bool VictimIsBoss;
+    internal readonly int VictimLevel;
+    internal readonly float Damage;
+    internal readonly bool Headshot;
+
+    internal AssistRecord(string victimName, WildSpawnType role, string botType, bool isPmc,
+        bool victimIsBoss, int victimLevel, float damage, bool headshot)
+    {
+        VictimName = victimName;
+        Role = role;
+        BotType = botType;
+        IsPmc = isPmc;
+        VictimIsBoss = victimIsBoss;
+        VictimLevel = victimLevel;
+        Damage = damage;
+        Headshot = headshot;
+    }
+}
+
+/// <summary>一次「我方阵亡」的冻结快照，只用于复仇判定。</summary>
+internal readonly struct LocalDeathRecord{
     internal readonly string KillerName;
     internal readonly string KillerKey;
 

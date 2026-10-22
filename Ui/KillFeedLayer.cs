@@ -215,19 +215,7 @@ internal sealed class KillFeedLayer
         if (_name == null || _details == null) return;
 
         // ---- 阵营色 ----
-        Color factionBase = UiTheme.Parse(cfg.ColorFaction.Value, Color.white);
-        _factionColor = rec.BotType switch
-        {
-            "USEC" => UiTheme.Parse(cfg.ColorUSEC.Value, factionBase),
-            "BEAR" => UiTheme.Parse(cfg.ColorBEAR.Value, factionBase),
-            "SCAV" => UiTheme.Parse(cfg.ColorSCAV.Value, factionBase),
-            "BOSS" => UiTheme.Parse(cfg.ColorBOSS.Value, factionBase),
-            "Follower" => UiTheme.Parse(cfg.ColorFollower.Value, factionBase),
-            "Raider" => UiTheme.Parse(cfg.ColorRAIDER.Value, factionBase),
-            "Rouges" => UiTheme.Parse(cfg.ColorRouges.Value, factionBase),
-            "Sectant" => UiTheme.Parse(cfg.ColorSectant.Value, factionBase),
-            _ => factionBase,
-        };
+        _factionColor = KillCardPalette.FactionColor(cfg, rec.BotType);
 
         // ---- 军衔徽章（视图自己算图 / 等级小标宽度）----
         _badge.Prepare(cfg, rec, _factionColor);

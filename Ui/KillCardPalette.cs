@@ -17,6 +17,27 @@ internal static class KillCardPalette
     /// <summary>卡片文字的黑色描边（略透明）。</summary>
     internal static readonly Color32 TextOutlineColor = new Color32(0, 0, 0, 215);
 
+    /// <summary>成就横幅 / 助攻横条的浅钢色底（战地 6 风格）。</summary>
+    internal static readonly Color BannerFill = new Color(0.851f, 0.878f, 0.910f, 0.97f);
+
+    /// <summary>按 <c>BotType</c> 取阵营色：击杀卡片（名字 / 徽章）与助攻提示共用。</summary>
+    internal static Color FactionColor(AyaConfig cfg, string botType)
+    {
+        Color baseColor = UiTheme.Parse(cfg.ColorFaction.Value, Color.white);
+        return botType switch
+        {
+            "USEC" => UiTheme.Parse(cfg.ColorUSEC.Value, baseColor),
+            "BEAR" => UiTheme.Parse(cfg.ColorBEAR.Value, baseColor),
+            "SCAV" => UiTheme.Parse(cfg.ColorSCAV.Value, baseColor),
+            "BOSS" => UiTheme.Parse(cfg.ColorBOSS.Value, baseColor),
+            "Follower" => UiTheme.Parse(cfg.ColorFollower.Value, baseColor),
+            "Raider" => UiTheme.Parse(cfg.ColorRAIDER.Value, baseColor),
+            "Rouges" => UiTheme.Parse(cfg.ColorRouges.Value, baseColor),
+            "Sectant" => UiTheme.Parse(cfg.ColorSectant.Value, baseColor),
+            _ => baseColor,
+        };
+    }
+
     /// <summary>
     /// 文字描边宽度随字号缩放。TMP 的描边宽度是归一化的，同一个数值落在 15px 的小字上会把笔画吃掉一大半
     /// （实测 0.22 的名字 / 详情发暗发细），落在 34px 的分数上才刚好。以 24px 为基准线性缩放，并限幅。

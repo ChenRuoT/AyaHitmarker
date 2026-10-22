@@ -23,7 +23,7 @@ internal sealed class KillCardBannerView
     private const float DelayEmblem = 0.14f;
     private const int SeedBanner = 53;
 
-    private static readonly Color BannerFill = new Color(0.851f, 0.878f, 0.910f, 0.97f);
+    private static Color BannerFill => KillCardPalette.BannerFill;
 
     private UiImageRow? _box;
     private UiImageRow? _accent;
