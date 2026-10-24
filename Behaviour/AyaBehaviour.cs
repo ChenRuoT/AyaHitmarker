@@ -616,7 +616,8 @@ internal sealed class AyaBehaviour : MonoBehaviour
         var c = Plugin.Cfg;
         return string.Concat(
             c.SoundFileHit.Value, "|", c.SoundFileHitHeadshot.Value, "|",
-            c.SoundFileKill.Value, "|", c.SoundFileKillHeadshot.Value);
+            c.SoundFileKill.Value, "|", c.SoundFileKillHeadshot.Value, "|",
+            c.SoundFileDoubleKill.Value, "|", c.SoundFileTripleKill.Value, "|", c.SoundFileMultiKill.Value);
     }
 
     private static string GlowFingerprint() => Plugin.Cfg.IconGlowSize.Value.ToString("0.##");

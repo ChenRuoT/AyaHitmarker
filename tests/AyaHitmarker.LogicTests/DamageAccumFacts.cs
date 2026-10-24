@@ -7,9 +7,10 @@ namespace AyaHitmarker.LogicTests;
 /// 窗口过期或已击杀则新开一个槽插到最前；击杀把槽标红并从击杀时刻重新计时；最多 maxSlots 个槽，超出丢最旧。
 ///
 /// <b>Alpha 的击杀槽规则（模型自定，视图按它画；这里的数值把规则锁死）：</b><br/>
-/// 击杀槽<b>总时长 = Lifetime，从 KillTime 起算</b> —— 前 <c>min(Window, Lifetime)</c> 秒保持全亮，
-/// 剩下的时间线性淡出，恰好在 <c>KillTime + Lifetime</c> 归零，也就是 Tick 的清理时刻。
-/// 这样视图不会在「数字还有透明度」的时候把槽删掉；击杀瞬间也不会从头开始淡。
+/// 击杀槽和普通槽同一条时间线（先全亮 Window，再淡出 Lifetime），但<b>从 KillTime 起算</b>，
+/// 在 <c>KillTime + Window + Lifetime</c> 归零，也就是 Tick 的清理时刻。
+/// 这样视图不会在「数字还有透明度」的时候把槽删掉；红数字也总有完整的淡出段
+/// （0.6 初版的「总时长 = Lifetime」在默认 Window 2 &gt; Lifetime 0.9 时淡出段为 0，红数字直接消失）。
 /// （普通槽的总时长是 <c>Window + Lifetime</c>：最后命中之后先定住 Window，再淡出 Lifetime。）
 /// </summary>
 internal static class DamageAccumFacts
@@ -218,26 +219,28 @@ internal static class DamageAccumFacts
 
         Assert.Suite("伤害累加模型: Alpha 击杀槽（停留后淡出）");
         {
-            var m = NewModel();   // Window = 0.5, Lifetime = 1.0 → 全亮 0.5 秒，淡出 0.5 秒
+            var m = NewModel();   // Window = 0.5, Lifetime = 1.0 → 击杀后全亮 0.5 秒，淡出 1.0 秒
             m.Add(Hit("A", 32f, 10f));
             m.PromoteKill("A", 11f);   // 故意和 LastHit 拉开，验证从 KillTime 重新计时
             var s = m.Slots[0];
 
             Assert.Near(1f, Alpha(s, 11f), 1e-6, "击杀瞬间全亮");
-            Assert.Near(1f, Alpha(s, 11f + Window), 1e-6, "击杀后先保持全亮 min(Window, Lifetime) = Window");
+            Assert.Near(1f, Alpha(s, 11f + Window), 1e-6, "击杀后先保持全亮 Window");
             Assert.Near(1f, Alpha(s, 11.4f), 1e-6, "从 KillTime 计时：若按 LastHit 早该淡掉，这里仍是 1");
-            Assert.Near(0.5f, Alpha(s, 11.75f), 1e-6, "淡出中点（KillTime + 0.75）→ 0.5");
-            Assert.Near(0f, Alpha(s, 11f + Lifetime), 1e-6, "KillTime + Lifetime 归零（= Tick 清理时刻）");
-            Assert.Near(0f, Alpha(s, 11f + Lifetime + 2f), 1e-6, "之后钳到 0");
+            Assert.Near(0.5f, Alpha(s, 11f + Window + Lifetime * 0.5f), 1e-6, "淡出中点 → 0.5");
+            Assert.Near(0f, Alpha(s, 11f + Window + Lifetime), 1e-6, "KillTime + Window + Lifetime 归零（= Tick 清理时刻）");
+            Assert.Near(0f, Alpha(s, 11f + Window + Lifetime + 2f), 1e-6, "之后钳到 0");
 
-            // 窗口比寿命还长：全亮阶段被压到 Lifetime，到点直接交给 Tick 清（没有淡出段）
-            var corner = new DamageAccumModel(2f, 0.5f);
-            corner.Add(Hit("A", 10f, 0f));
-            corner.PromoteKill("A", 0.1f);
-            var c = corner.Slots[0];
-            Assert.Near(1f, DamageAccumModel.Alpha(c, 0.1f + 0.25f, 2f, 0.5f), 1e-6, "Window > Lifetime：全亮阶段 = min(...) = Lifetime");
-            Assert.Near(1f, DamageAccumModel.Alpha(c, 0.1f + 0.5f, 2f, 0.5f), 1e-6, "Lifetime 边界仍是 1（随后被 Tick 清掉）");
-            Assert.Near(0f, DamageAccumModel.Alpha(c, 0.1f + 0.51f, 2f, 0.5f), 1e-6, "过了 Lifetime 归零");
+            // 出厂默认：窗口 2 秒比淡出 0.9 秒还长 —— 红数字仍然先停 2 秒、再完整淡出 0.9 秒
+            var dflt = new DamageAccumModel(2f, 0.9f);
+            dflt.Add(Hit("A", 10f, 0f));
+            dflt.PromoteKill("A", 0.1f);
+            var c = dflt.Slots[0];
+            Assert.Near(1f, DamageAccumModel.Alpha(c, 0.1f + 1.5f, 2f, 0.9f), 1e-6, "默认参数：击杀后 1.5 秒仍全亮（初版这里已经是 0）");
+            Assert.Near(0.5f, DamageAccumModel.Alpha(c, 0.1f + 2f + 0.45f, 2f, 0.9f), 1e-5, "默认参数：有完整的 0.9 秒淡出段");
+            Assert.Near(0f, DamageAccumModel.Alpha(c, 0.1f + 2.9f, 2f, 0.9f), 1e-5, "默认参数：KillTime + 2.9 归零");
+            dflt.Tick(0.1f + 2.85f);
+            Assert.Equal(1, dflt.Slots.Count, "默认参数：淡出中途不会被 Tick 提前删掉");
         }
 
         Assert.Suite("伤害累加模型: Tick 清理与 Changed");
@@ -273,8 +276,10 @@ internal static class DamageAccumFacts
             kill.PromoteKill("A", 11f);
             kill.Tick(11.7f);
             Assert.Equal(1, kill.Slots.Count, "击杀槽按 KillTime 计：LastHit + Window + Lifetime 已过也不删");
-            kill.Tick(11f + Lifetime + 0.001f);
-            Assert.Equal(0, kill.Slots.Count, "KillTime + Lifetime 之后才清理");
+            kill.Tick(11f + Window + Lifetime);
+            Assert.Equal(1, kill.Slots.Count, "正好到 KillTime + Window + Lifetime 还不清");
+            kill.Tick(11f + Window + Lifetime + 0.001f);
+            Assert.Equal(0, kill.Slots.Count, "KillTime + Window + Lifetime 之后才清理");
 
             // 多个槽时只清过期的那个，顺序保持
             var mixed = NewModel();

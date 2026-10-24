@@ -118,12 +118,10 @@ internal sealed class DamageAccumSlot
     /// <summary>
     /// 是否该被 <see cref="DamageAccumModel.Tick"/> 清掉。
     /// 普通槽：最后命中之后 <c>Window</c>（定住）+ <c>Lifetime</c>（淡出）都过完；
-    /// 击杀槽：从击杀时刻起只算 <c>Lifetime</c>（淡出被压缩进 KillTime 之后那一段，见 <see cref="DamageAccumModel.Alpha"/>）。
+    /// 击杀槽：同样是 <c>Window + Lifetime</c>，但从击杀时刻起算（见 <see cref="DamageAccumModel.Alpha"/>）。
     /// </summary>
     internal bool Expired(float now, float window, float lifetime)
-        => Kill
-            ? now > KillTime + lifetime
-            : now > LastHit + window + lifetime;
+        => now > (Kill ? KillTime : LastHit) + window + lifetime;
 }
 
 /// <summary>
@@ -227,7 +225,7 @@ internal sealed class DamageAccumModel
     /// 每帧调一次：清掉过期槽，并清掉存活槽的 <see cref="DamageAccumSlot.Changed"/>。
     /// 要在视图消费完 Changed 之后调用（通常是一帧的最后，或下一帧的开头）。
     ///
-    /// 过期判据：普通槽 <c>now &gt; LastHit + Window + Lifetime</c>；击杀槽 <c>now &gt; KillTime + Lifetime</c>。
+    /// 过期判据：普通槽 <c>now &gt; LastHit + Window + Lifetime</c>；击杀槽 <c>now &gt; KillTime + Window + Lifetime</c>。
     /// 刚好等于到期时刻时保留（严格大于才删）—— 此时 <see cref="Alpha"/> 已经是 0，下一帧就没了。
     /// </summary>
     internal void Tick(float now)
@@ -250,10 +248,11 @@ internal sealed class DamageAccumModel
     /// <b>普通槽</b>：<c>now - LastHit &lt;= window</c> → 1；之后 <c>1 - (now - LastHit - window) / lifetime</c>
     /// 线性淡出并钳到 [0,1]（总时长 = window + lifetime）。
     ///
-    /// <b>击杀槽</b>（本模型自定的规则，测试里锁死了数值）：从 <see cref="DamageAccumSlot.KillTime"/> 重新计时，
-    /// <b>总时长 = lifetime</b> —— 前 <c>min(window, lifetime)</c> 秒保持全亮，剩下的时间线性淡出，
-    /// 恰好在 <c>KillTime + lifetime</c> 归零，也就是 <see cref="Tick"/> 的清理时刻。
-    /// 这样视图不会在「数字还有透明度」的时候把槽删掉；击杀瞬间也不会从头开始淡（红数字要多停一会儿）。
+    /// <b>击杀槽</b>：同一条时间线，但从 <see cref="DamageAccumSlot.KillTime"/> 重新计时 ——
+    /// 先全亮 <c>window</c> 秒，再用 <c>lifetime</c> 秒线性淡出，在 <c>KillTime + window + lifetime</c> 归零
+    /// （= <see cref="Tick"/> 的清理时刻）。红数字至少和普通数字停得一样久，并且总有完整的淡出段。
+    /// （0.6 初版把击杀槽的总时长压成 <c>lifetime</c>、全亮段取 <c>min(window, lifetime)</c>：
+    /// 默认窗口 2 秒 &gt; 淡出 0.9 秒时淡出段为 0，红数字 0.9 秒后直接消失、比普通数字还短。）
     /// </summary>
     internal static float Alpha(DamageAccumSlot slot, float now, float window, float lifetime)
     {
@@ -262,16 +261,7 @@ internal sealed class DamageAccumModel
         float full = MathF.Max(0f, window);
         float fade = MathF.Max(0f, lifetime);
 
-        if (slot.Kill)
-        {
-            float killAge = now - slot.KillTime;
-            float hold = MathF.Min(full, fade);   // 全亮阶段不能比总寿命还长
-            if (killAge <= hold) return 1f;
-            if (fade - hold <= 0f) return 0f;
-            return Math.Clamp(1f - (killAge - hold) / (fade - hold), 0f, 1f);
-        }
-
-        float age = now - slot.LastHit;
+        float age = now - (slot.Kill ? slot.KillTime : slot.LastHit);
         if (age <= full) return 1f;
         if (fade <= 0f) return 0f;
         return Math.Clamp(1f - (age - full) / fade, 0f, 1f);
