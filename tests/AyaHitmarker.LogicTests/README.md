@@ -5,12 +5,16 @@
 ```powershell
 cd D:\EFTdev\dev\AyaHitmarker
 dotnet run --project tests/AyaHitmarker.LogicTests
-# 全部通过 → ALL PASS (315 checks)，退出码 0
+# 全部通过 → ALL PASS (616 checks)，退出码 0
 # 有失败   → 逐条打印 expected/actual，退出码 1
 
 # 把程序化图标渲染成 PNG 联系表，肉眼检查（不用进游戏）
 dotnet run --project tests/AyaHitmarker.LogicTests -- --render-icons D:\somewhere\icons
 # → skulls.png / emblems.png / hitmarkers.png / tagbox.png（每张都合成在 深色 / 灰 / 白 / 雪地 / 草地 五种背景上）
+
+# 受击方向点阵的离线预览（和游戏同一套排布 / 时间线 / 点形状，1 画布单位 = 1 像素）
+dotnet run --project tests/AyaHitmarker.LogicTests -- --render-hitdir D:\somewhere\hitdir
+# → hitdir_directions.png / hitdir_backgrounds.png / hitdir_timeline.png / hitdir_zoom4x.png
 ```
 
 ## 为什么能脱离游戏跑
@@ -26,6 +30,8 @@ dotnet run --project tests/AyaHitmarker.LogicTests -- --render-icons D:\somewher
 | `Ui/KillCardModel.cs` | 卡片**累加模型**：窗口内连续击杀并到同一张卡（骷髅 / 分数 / 标签并集 / 横幅），退场与重新开卡的时间线 |
 | `Ui/GlitchMath.cs` | 战地式「故障」动效曲线：色块显影、数字滚动、闪烁熄灭、退场分组错峰 |
 | `Ui/UiAnim.cs` | 缓动函数 |
+| `Ui/HitDirectionMath.cs` | 受击方向：方位角换算、收尖的二次轮廓、蜂窝点阵排布（峰尖精确指向 / 不重叠 / 纵横渐变）、伤害映射、时间线 |
+| `Game/DamageAccum.cs` | 累加伤害数字模型：同目标并槽、击杀变红并从击杀时刻重新计时、透明度时间线 |
 | `Assets/IconShapes.cs` | 程序化图标的 SDF 栅格化：骷髅（含爆头裂口）、多杀徽记、命中标记（含描边 / 粗线版）、标签框九宫格 |
 
 `Ui/UiRow.cs`、`Ui/KillFeedLayer.cs`、`Assets/ProceduralIcons.cs` 之类碰 `UnityEngine`/`EFT` 的文件**不能**放进来

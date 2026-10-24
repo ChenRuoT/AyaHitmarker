@@ -56,6 +56,7 @@ internal sealed class AyaConfig
     internal ConfigEntry<KeyboardShortcut> TestHitKey { get; }
     internal ConfigEntry<KeyboardShortcut> TestKillKey { get; }
     internal ConfigEntry<KeyboardShortcut> TestDeathKey { get; }
+    internal ConfigEntry<KeyboardShortcut> TestTakenKey { get; }
     internal ConfigEntry<int> ConfigVersion { get; }
 
     // ---- 1. 命中提示 ----
@@ -83,6 +84,24 @@ internal sealed class AyaConfig
     internal ConfigEntry<float> HitDirectionHeavyDamage { get; }
     internal ConfigEntry<string> HitDirectionEllipse { get; }
     internal ConfigEntry<float> HitDirectionDuration { get; }
+    internal ConfigEntry<float> HitDirectionOpacity { get; }
+    internal ConfigEntry<float> HitDirectionDotSize { get; }
+    internal ConfigEntry<float> HitDirectionDotSpacing { get; }
+    internal ConfigEntry<float> HitDirectionWidthLow { get; }
+    internal ConfigEntry<float> HitDirectionWidthHigh { get; }
+    internal ConfigEntry<float> HitDirectionHeightLow { get; }
+    internal ConfigEntry<float> HitDirectionHeightHigh { get; }
+    internal ConfigEntry<float> HitDirectionFullDamage { get; }
+    internal ConfigEntry<float> HitDirectionArmorHeightScale { get; }
+    internal ConfigEntry<int> HitDirectionMaxDots { get; }
+    internal ConfigEntry<int> HitDirectionMaxBursts { get; }
+    internal ConfigEntry<float> HitDirectionTailRatio { get; }
+    internal ConfigEntry<float> HitDirectionRadialFade { get; }
+    internal ConfigEntry<float> HitDirectionSizeShrink { get; }
+    internal ConfigEntry<float> HitDirectionRimAlpha { get; }
+    internal ConfigEntry<float> HitDirectionRevealPortion { get; }
+    internal ConfigEntry<float> HitDirectionRetractStart { get; }
+    internal ConfigEntry<float> HitDirectionDrift { get; }
 
     // ---- 2. 伤害数字 ----
     internal ConfigEntry<bool> DamageTextEnabled { get; }
@@ -264,12 +283,16 @@ internal sealed class AyaConfig
         // ---------------------------------------------------------------- 分类顺序锚点
         // ConfigurationManager 里分类的先后 = 各分类的条目在 ConfigFile 里「首次绑定」的先后：
         // 实测（19.0.0）它既不看 Order、也不按分类名排序，所以光靠 ConfigPanel 里的 Category 前缀排不出 00 → 90。
-        // 这里按面板上希望的顺序（00 常用 → 10 → 20 → 30–33 击杀卡片 → 40 → 50 → 60 音效 → 90 调试），
+        // 这里按面板上希望的顺序（00 常用 → 10 → 11 受击方向 → 20 → 30–33 击杀卡片 → 40 → 50 → 60 音效 → 90 调试），
         // 先绑每个分类的一个代表条目；其余条目仍在各自的小节里绑定。
         // 这些条目的 section / 键 / 默认值与原来完全一致，只是挪到了这里；实测已有 cfg 的值与小节顺序都不受影响。
         UiScale = ConfigPanel.Bind(cfg, nameof(UiScale), "5. 界面", "UI 缩放", 1f,
             new ConfigDescription("整体缩放命中提示 / 伤害数字 / 击杀播报。", null, new object[] { 0.5f, 3f }));
         HitMarkerEnabled = ConfigPanel.Bind(cfg, nameof(HitMarkerEnabled), "1. 命中提示", "启用", true);
+        HitDirectionEnabled = ConfigPanel.Bind(cfg, nameof(HitDirectionEnabled), "1. 命中提示", "受击方向指示", true,
+            new ConfigDescription(
+                "受到伤害时，在屏幕中央的透明椭圆盘上、按攻击者所在方位亮起一簇规则排列的点阵（收尖的二次突起，峰尖指向攻击者）。" +
+                "护甲吸收的钝伤 = 白色，普通伤害 = 黄色，重伤 = 红色；伤害越高突起越明显。"));
         DamageTextEnabled = ConfigPanel.Bind(cfg, nameof(DamageTextEnabled), "2. 伤害数字", "启用", true);
         KillFeedEnabled = ConfigPanel.Bind(cfg, nameof(KillFeedEnabled), "3. 击杀信息", "启用", true);
         KillFeedHorizontalOffset = ConfigPanel.Bind(cfg, nameof(KillFeedHorizontalOffset), "3. 击杀信息", "水平中心偏移", 190f,
@@ -292,6 +315,7 @@ internal sealed class AyaConfig
         TestHitKey = ConfigPanel.Bind(cfg, nameof(TestHitKey), "0. 调试", "测试命中快捷键", new KeyboardShortcut(KeyCode.F8));
         TestKillKey = ConfigPanel.Bind(cfg, nameof(TestKillKey), "0. 调试", "测试击杀快捷键", new KeyboardShortcut(KeyCode.F9));
         TestDeathKey = ConfigPanel.Bind(cfg, nameof(TestDeathKey), "0. 调试", "测试阵亡快捷键", new KeyboardShortcut(KeyCode.F10));
+        TestTakenKey = ConfigPanel.Bind(cfg, nameof(TestTakenKey), "0. 调试", "测试受击快捷键", new KeyboardShortcut(KeyCode.P));
         ConfigVersion = ConfigPanel.Bind(cfg, nameof(ConfigVersion), "0. 调试", "配置版本(请勿修改)", 0,
             new ConfigDescription("内部使用：升级配置时据此一次性重置「默认值变了」的样式项。改了没有意义，下次启动会被覆盖。"));
 
@@ -342,11 +366,7 @@ internal sealed class AyaConfig
         ArmorHitMarkerColor = ConfigPanel.Bind(cfg, nameof(ArmorHitMarkerColor), "1. 命中提示", "护甲标记颜色", "#8FB6D9FF",
             new ConfigDescription("护甲命中时十字外围的辉光颜色；伤害数字右侧的小盾标也用它着色。"));
 
-        // ---- 0.6 e 受击方向指示 ----
-        HitDirectionEnabled = ConfigPanel.Bind(cfg, nameof(HitDirectionEnabled), "1. 命中提示", "受击方向指示", true,
-            new ConfigDescription(
-                "受到伤害时，在屏幕中央的透明椭圆盘上、按攻击者所在方位亮起一簇粒子（二次函数突起，底部密顶部疏）。" +
-                "护甲吸收的钝伤 = 白色，普通伤害 = 黄色，重伤 = 红色；伤害越高突起越明显。"));
+        // ---- 0.6 e 受击方向指示（开关在开头的分类锚点里绑定；面板分类「11. 受击方向」）----
         HitDirectionColorAbsorb = ConfigPanel.Bind(cfg, nameof(HitDirectionColorAbsorb), "1. 命中提示", "受击指示:护甲吸收颜色", "#FFFFFFFF",
             new ConfigDescription("受击指示里「只被护甲吸收的钝伤」的颜色。"));
         HitDirectionColorNormal = ConfigPanel.Bind(cfg, nameof(HitDirectionColorNormal), "1. 命中提示", "受击指示:普通伤害颜色", "#FFD24AFF",
@@ -359,6 +379,46 @@ internal sealed class AyaConfig
             new ConfigDescription("受击指示椭圆的水平/垂直半径（画布像素，「长轴在水平方向」）。格式：X,Y。"));
         HitDirectionDuration = ConfigPanel.Bind(cfg, nameof(HitDirectionDuration), "1. 命中提示", "受击指示:持续时长(秒)", 0.9f,
             new ConfigDescription("一簇受击粒子从出现到完全淡出的时间。", null, new object[] { 0.1f, 3f }));
+
+        // 点阵外观（2026-10-25：全部做成设置项，方便进游戏直接调；默认值 = 视觉重做定下的外观，所以不需要配置升级）。
+        // 改动在下一簇出现时生效（按测试受击快捷键 P 即可预览）。
+        var hd = Ui.HitDirectionStyle.Default;
+        HitDirectionOpacity = ConfigPanel.Bind(cfg, nameof(HitDirectionOpacity), "1. 命中提示", "受击指示:整体不透明度", 1f,
+            new ConfigDescription("整簇点阵的透明度乘子。觉得挡视野先把它调低。", null, new object[] { 0.05f, 1f }));
+        HitDirectionDotSize = ConfigPanel.Bind(cfg, nameof(HitDirectionDotSize), "1. 命中提示", "受击指示:点大小", Ui.HitDirectionMath.DotDisplaySize,
+            new ConfigDescription("单个点的边长（画布像素，含暗描边；实心部分约为它的 0.62 倍）。", null, new object[] { 2f, 24f }));
+        HitDirectionDotSpacing = ConfigPanel.Bind(cfg, nameof(HitDirectionDotSpacing), "1. 命中提示", "受击指示:点间距", Ui.HitDirectionMath.LatticePitch,
+            new ConfigDescription("相邻两点的中心距（画布像素）。比点大小小时点会重叠成块；点数超过「每簇最多点数」时会自动放大。", null, new object[] { 2f, 24f }));
+        HitDirectionWidthLow = ConfigPanel.Bind(cfg, nameof(HitDirectionWidthLow), "1. 命中提示", "受击指示:突起半宽(低伤害)", hd.WidthLow,
+            new ConfigDescription("伤害接近 0 时突起的半宽（画布像素）。越小越尖、越集中。", null, new object[] { 4f, 300f }));
+        HitDirectionWidthHigh = ConfigPanel.Bind(cfg, nameof(HitDirectionWidthHigh), "1. 命中提示", "受击指示:突起半宽(满强度)", hd.WidthHigh,
+            new ConfigDescription("伤害达到「满强度伤害」时突起的半宽（画布像素）。", null, new object[] { 4f, 300f }));
+        HitDirectionHeightLow = ConfigPanel.Bind(cfg, nameof(HitDirectionHeightLow), "1. 命中提示", "受击指示:突起高度(低伤害)", hd.HeightLow,
+            new ConfigDescription("伤害接近 0 时突起的高度（画布像素，从椭圆向外）。", null, new object[] { 2f, 300f }));
+        HitDirectionHeightHigh = ConfigPanel.Bind(cfg, nameof(HitDirectionHeightHigh), "1. 命中提示", "受击指示:突起高度(满强度)", hd.HeightHigh,
+            new ConfigDescription("伤害达到「满强度伤害」时突起的高度（画布像素）。", null, new object[] { 2f, 300f }));
+        HitDirectionFullDamage = ConfigPanel.Bind(cfg, nameof(HitDirectionFullDamage), "1. 命中提示", "受击指示:满强度伤害", hd.FullDamage,
+            new ConfigDescription("伤害在 0 ~ 这个值之间按比例从「低伤害」长到「满强度」，超过按满强度。", null, new object[] { 1f, 300f }));
+        HitDirectionArmorHeightScale = ConfigPanel.Bind(cfg, nameof(HitDirectionArmorHeightScale), "1. 命中提示", "受击指示:护甲吸收高度比例", hd.ArmorHeightScale,
+            new ConfigDescription("只被护甲吸收的钝伤（白色）高度再乘这个比例。", null, new object[] { 0.1f, 2f }));
+        HitDirectionMaxDots = ConfigPanel.Bind(cfg, nameof(HitDirectionMaxDots), "1. 命中提示", "受击指示:每簇最多点数", Ui.HitDirectionMath.BurstMaxCount,
+            new ConfigDescription("一簇最多多少个点；形状需要更多点时自动放大点间距，而不是截掉一侧。", null, new object[] { 10, Ui.HitDirectionMath.MaxParticles }));
+        HitDirectionMaxBursts = ConfigPanel.Bind(cfg, nameof(HitDirectionMaxBursts), "1. 命中提示", "受击指示:同时最多簇数", 6,
+            new ConfigDescription("持续挨打时同时显示的簇数上限，满了提前回收最旧的一簇。调小可以减少连续中弹时的遮挡。", null, new object[] { 1, 12 }));
+        HitDirectionTailRatio = ConfigPanel.Bind(cfg, nameof(HitDirectionTailRatio), "1. 命中提示", "受击指示:基线尾巴长度", hd.TailRatio,
+            new ConfigDescription("突起两侧那条淡出的点线延伸到半宽的几倍。1 = 没有尾巴。", null, new object[] { 1f, 4f }));
+        HitDirectionRadialFade = ConfigPanel.Bind(cfg, nameof(HitDirectionRadialFade), "1. 命中提示", "受击指示:峰尖变淡程度", hd.RadialFade,
+            new ConfigDescription("从基线到峰尖的透明度渐变：0 = 不变淡，1 = 峰尖完全透明。", null, new object[] { 0f, 1f }));
+        HitDirectionSizeShrink = ConfigPanel.Bind(cfg, nameof(HitDirectionSizeShrink), "1. 命中提示", "受击指示:峰尖缩小比例", hd.SizeShrink,
+            new ConfigDescription("从基线到峰尖点的尺寸缩小多少：0 = 一样大，0.9 = 峰尖只剩一成大小。", null, new object[] { 0f, 0.9f }));
+        HitDirectionRimAlpha = ConfigPanel.Bind(cfg, nameof(HitDirectionRimAlpha), "1. 命中提示", "受击指示:点描边不透明度", Assets.IconShapes.LatticeDotRimAlpha,
+            new ConfigDescription("每个点外圈暗描边的不透明度：雪地 / 白天背景上靠它看清点的轮廓，暗背景上几乎看不见。", null, new object[] { 0f, 1f }));
+        HitDirectionRevealPortion = ConfigPanel.Bind(cfg, nameof(HitDirectionRevealPortion), "1. 命中提示", "受击指示:长出时间占比", hd.RevealPortion,
+            new ConfigDescription("点阵从基线一行行长到峰尖用掉持续时长的多少（0.16 = 前 16%）。", null, new object[] { 0.01f, 1f }));
+        HitDirectionRetractStart = ConfigPanel.Bind(cfg, nameof(HitDirectionRetractStart), "1. 命中提示", "受击指示:开始收回时间点", hd.RetractStart,
+            new ConfigDescription("持续时长走到这个比例时开始从峰尖往回收并淡出（0.45 = 45% 处）。调小 = 消失得更早。", null, new object[] { 0f, 0.99f }));
+        HitDirectionDrift = ConfigPanel.Bind(cfg, nameof(HitDirectionDrift), "1. 命中提示", "受击指示:外漂距离", hd.DriftDistance,
+            new ConfigDescription("整簇在显示期间沿峰尖方向向外漂移的距离（画布像素）。0 = 不漂移。", null, new object[] { 0f, 80f }));
 
         // ---------------------------------------------------------------- 2. 伤害数字
         // 旧 cfg: 字号 21 / 间距 8 / 多段间距 12 / 颜色 FFFFFF / 描边白 25% 不透明 / 爆头描边 FF0000

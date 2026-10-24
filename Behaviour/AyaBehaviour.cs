@@ -157,9 +157,10 @@ internal sealed class AyaBehaviour : MonoBehaviour
         var hit = Plugin.Cfg.TestHitKey.Value;
         var kill = Plugin.Cfg.TestKillKey.Value;
         var death = Plugin.Cfg.TestDeathKey.Value;
+        var taken = Plugin.Cfg.TestTakenKey.Value;
 
         Plugin.Logger.LogInfo(
-            $"[behaviour] initialized | 测试快捷键: {hit.MainKey}=命中 {kill.MainKey}=击杀 {death.MainKey}=阵亡 " +
+            $"[behaviour] initialized | 测试快捷键: {hit.MainKey}=命中 {kill.MainKey}=击杀 {death.MainKey}=阵亡 {taken.MainKey}=受击 " +
             $"(启用={Plugin.Cfg.TestHotkeysEnabled.Value}, 需 DebugEnabled=False 也生效)");
 
         // 主动探一次键盘：旧版 Input 后端被游戏禁用时这里就能报出来，
@@ -542,6 +543,21 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 Plugin.Logger.LogInfo(
                     $"[debug] 模拟我方阵亡，凶手={killer}（下一次 F9 目标同名 → 复仇者）");
                 _streaks.NoteLocalDeath(UiClock.Now, NameKey.Normalize(killer));
+            }
+
+            var takenKey = Plugin.Cfg.TestTakenKey.Value;
+            if (takenKey.MainKey != KeyCode.None && takenKey.IsDown())
+            {
+                // P：**随机受击** —— 方位 / 伤害 / 是否只被护甲吸收全部随机，用来在游戏里边调设置边看受击方向点阵。
+                // 走 ShowDebug（直接给方位角），不经过相机换算；三色判定与真实路径一致（重伤阈值读设置）。
+                float degrees = Mathf.Round(UnityEngine.Random.Range(-180f, 180f));
+                bool armorOnly = UnityEngine.Random.value < 0.30f;
+                float damage = Mathf.Round(armorOnly
+                    ? UnityEngine.Random.Range(10f, 80f)
+                    : UnityEngine.Random.Range(10f, 120f));
+                Plugin.Logger.LogInfo(
+                    $"[debug] 测试受击（随机）：方位={degrees:0}° 伤害={damage:0} 护甲吸收={armorOnly}");
+                _ui.HitDirection.ShowDebug(degrees * Mathf.Deg2Rad, damage, armorOnly);
             }
         }
         catch (Exception ex)

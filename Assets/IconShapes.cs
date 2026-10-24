@@ -726,31 +726,53 @@ internal static class IconShapes
 
     // ------------------------------------------------------------------ 受击方向指示的柔光粒子（0.6 e）
 
+    /// <summary>点阵粒子实心部分的半径（归一化到 0~1）。之外到 1 是描边 + 柔边。</summary>
+    internal const float LatticeDotCore = 0.62f;
+
+    /// <summary>点阵粒子暗描边的最大不透明度（只在亮背景上起作用，暗背景上看不见）。</summary>
+    internal const float LatticeDotRimAlpha = 0.51f;
+
     /// <summary>
-    /// 柔光圆点粒子：白色圆点，中心不透明、向边缘按二次方衰减到完全透明（不留硬边）。
-    /// 运行时用 <c>Image.color</c> 乘成白 / 黄 / 红三档颜色，和图标一样只烘一张。
+    /// 点阵粒子在归一化半径 <paramref name="r"/>（0 = 圆心，1 = 外缘）处的 (白芯覆盖, 暗描边覆盖)。
+    /// 位图生成与离线预览共用这一个函数，保证预览看到的就是游戏里的形状。
     /// </summary>
-    internal static IconBitmap SoftDot(int sizePx)
+    internal static (float core, float rim) LatticeDotCoverage(float r, float rimAlpha = LatticeDotRimAlpha)
+    {
+        if (r >= 1f) return (0f, 0f);
+        // 白芯：r ≤ core 实心，之后 0.08 宽的抗锯齿边
+        float core = Math.Clamp((LatticeDotCore + 0.04f - r) / 0.08f, 0f, 1f);
+        // 暗描边：从白芯外缘到 1 平滑消失
+        float t = Math.Clamp((1f - r) / (1f - LatticeDotCore), 0f, 1f);
+        float rim = Math.Clamp(rimAlpha, 0f, 1f) * t * t * (3f - 2f * t);
+        return (core, rim);
+    }
+
+    /// <summary>
+    /// 受击方向点阵的粒子（0.6 e 视觉重做）：边缘清晰的白色实心圆点 + 一圈很淡的暗描边。
+    /// 0.6 e 初版用的是柔光圆点（中心亮、边缘二次衰减），缩到 4~5 像素、排得很密时会糊成一片，所以换成实心点。
+    /// 白芯乘 <c>Image.color</c> 着色，暗描边是黑色（不随着色变化），雪地 / 白天背景上也能看出点的轮廓。
+    /// </summary>
+    internal static IconBitmap LatticeDot(int sizePx, float rimAlpha = LatticeDotRimAlpha)
     {
         int w = Math.Max(8, sizePx);
-        int h = w;
         float half = w * 0.5f;
 
-        var canvas = new Canvas(w, h);
-        var cov = new float[w * h];
-        for (int y = 0; y < h; y++)
+        var canvas = new Canvas(w, w);
+        var rim = new float[w * w];
+        var core = new float[w * w];
+        for (int y = 0; y < w; y++)
         {
             for (int x = 0; x < w; x++)
             {
                 float dx = (x + 0.5f - half) / half;
                 float dy = (y + 0.5f - half) / half;
-                float r2 = dx * dx + dy * dy;
-                if (r2 >= 1f) continue;
-                float t = 1f - r2;         // 二次衰减
-                cov[y * w + x] = t * t;    // 边缘更柔
+                var (c, k) = LatticeDotCoverage(MathF.Sqrt(dx * dx + dy * dy), rimAlpha);
+                core[y * w + x] = c;
+                rim[y * w + x] = k;
             }
         }
-        canvas.Over(cov, 1f, 1f, 1f, 1f);
+        canvas.Over(rim, 0f, 0f, 0f, 1f);
+        canvas.Over(core, 1f, 1f, 1f, 1f);
         return canvas.ToBitmap(bleedWhite: true);
     }
 

@@ -340,31 +340,29 @@ internal static class IconShapeFacts
                 "与 HitMarker 同参数下字节不完全相同（两种图形）");
         }
 
-        // ---- 0.6 e 受击方向指示的柔光粒子 ----
-        Assert.Suite("图标：受击方向柔光粒子");
+        // ---- 0.6 e 受击方向点阵的粒子 ----
+        Assert.Suite("图标：受击方向点阵粒子");
 
         const int D = 64;
-        IconBitmap dot = IconShapes.SoftDot(D);
-        Assert.Equal(D, dot.Width, "SoftDot 宽度 = 请求尺寸");
-        Assert.Equal(D, dot.Height, "SoftDot 高度 = 请求尺寸");
-        Assert.True(Px(dot, D / 2, D / 2).a >= 250, "中心接近不透明");
+        IconBitmap dot = IconShapes.LatticeDot(D);
+        Assert.Equal(D, dot.Width, "LatticeDot 宽度 = 请求尺寸");
+        Assert.Equal(D, dot.Height, "LatticeDot 高度 = 请求尺寸");
+        var mid = Px(dot, D / 2, D / 2);
+        Assert.True(mid.a == 255 && mid.r == 255 && mid.g == 255 && mid.b == 255, "圆心是不透明的纯白（白芯，留给 Image.color 着色）");
+        var coreEdge = Px(dot, D / 2 + (int)(D * 0.5f * (IconShapes.LatticeDotCore - 0.1f)), D / 2);
+        Assert.True(coreEdge.a == 255 && coreEdge.r == 255, "白芯半径以内都是实心白（边缘清晰，不是柔光）");
+        var rimPx = Px(dot, D / 2 + (int)(D * 0.5f * 0.78f), D / 2);
+        Assert.True(rimPx.a > 60 && rimPx.r < 40, "白芯外有一圈暗描边（亮背景上也能看出点的轮廓）");
         Assert.Equal(0, Px(dot, 0, 0).a, "左上角透明（圆外留白）");
         Assert.Equal(0, Px(dot, D - 1, D - 1).a, "右下角透明");
+        Assert.Equal(255, Px(dot, 0, 0).r, "透明角落 RGB 填白（mipmap 缩小时不发灰）");
 
-        int lastAlpha = 256;
-        bool monotonic = true;
-        for (int x = D / 2; x < D; x++)
-        {
-            int a = Px(dot, x, D / 2).a;
-            if (a > lastAlpha) { monotonic = false; break; }
-            lastAlpha = a;
-        }
-        Assert.True(monotonic, "沿半径向外 alpha 单调不增（中心亮、边缘柔）");
-        Assert.Greater(Px(dot, D / 2, D / 2).a, Px(dot, D - 2, D / 2).a, "中心比边缘亮");
-
-        var dotCorner = Px(dot, 0, 0);
-        Assert.Equal(255, dotCorner.r, "透明角落 RGB 填白（mipmap 缩小时不发灰）");
-        Assert.True(SameBytes(dot, IconShapes.SoftDot(D)), "两次调用逐字节一致（确定性）");
-        Assert.Equal(8, IconShapes.SoftDot(1).Width, "尺寸下限 8");
+        bool symmetric = true;
+        for (int y = 0; y < D && symmetric; y++)
+            for (int x = 0; x < D / 2; x++)
+                if (Px(dot, x, y).a != Px(dot, D - 1 - x, y).a) { symmetric = false; break; }
+        Assert.True(symmetric, "左右对称");
+        Assert.True(SameBytes(dot, IconShapes.LatticeDot(D)), "两次调用逐字节一致（确定性）");
+        Assert.Equal(8, IconShapes.LatticeDot(1).Width, "尺寸下限 8");
     }
 }

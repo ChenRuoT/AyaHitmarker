@@ -185,14 +185,18 @@ internal static class ProceduralIcons
 
     // ------------------------------------------------------------------ 受击方向指示的柔光粒子（0.6 e）
 
-    /// <summary>柔光圆点粒子（白色，中心不透明、边缘二次衰减）。粒子用的 SoftDot 直接乘 Image.color 着色。</summary>
-    internal static Sprite? SoftDot(float displayPx)
+    /// <summary>
+    /// 受击方向点阵的粒子：清晰的白色实心圆点 + 暗描边，乘 <c>Image.color</c> 着色。
+    /// 描边不透明度按 0.05 分桶进缓存键 —— 设置页里拖滑条时最多多烘 20 张小贴图，卸载时随缓存一起销毁。
+    /// </summary>
+    internal static Sprite? LatticeDot(float displayPx, float rimAlpha = IconShapes.LatticeDotRimAlpha)
     {
-        int size = Quantize(Mathf.Max(8f, displayPx) * UiScale() * 2f, 48, 256);
-        string key = $"dot:{size}";
+        int size = Quantize(Mathf.Max(4f, displayPx) * UiScale() * 2f, 48, 256);
+        int rimBucket = Mathf.RoundToInt(Mathf.Clamp01(rimAlpha) * 20f);
+        string key = $"latdot:{size}:{rimBucket}";
         if (TryGetCached(key, out var cached)) return cached?.Sprite;
 
-        var bmp = IconShapes.SoftDot(size);
+        var bmp = IconShapes.LatticeDot(size, rimBucket / 20f);
         BakedIcon? result = Build(bmp, 1f, mipmaps: true);
         Cache[key] = result;
         return result?.Sprite;

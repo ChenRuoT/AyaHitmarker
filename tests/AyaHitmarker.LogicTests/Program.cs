@@ -14,6 +14,14 @@ internal static class Program
             return 0;
         }
 
+        // dotnet run --project tests/AyaHitmarker.LogicTests -- --render-hitdir <目录>
+        // 受击方向点阵的离线预览（见 HitDirectionPreview.cs）
+        if (args.Length >= 2 && args[0] == "--render-hitdir")
+        {
+            HitDirectionPreview.Render(args[1]);
+            return 0;
+        }
+
         Console.WriteLine("AyaHitmarker offline logic tests");
         Console.WriteLine("(compiles the pure-logic files directly — no Unity, no game assemblies)");
 

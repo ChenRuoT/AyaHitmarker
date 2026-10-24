@@ -1,4 +1,4 @@
-# 0.6e 受击方向指示渲染图（主菜单即可，12 张）
+# 0.6e 受击方向指示渲染图（主菜单即可，14 张；前 12 张与视觉重做前同名，可直接逐张对比）
 # taken <角度°> [伤害] [armor]：0 = 正前（椭圆上端）、90 = 右、180 = 背后、270 = 左
 waitmenu 90
 log === 0.6e hitdir start ===
@@ -41,6 +41,29 @@ bg snow
 taken 135 25 armor
 step 0.1
 shot dir_snow
+
+# 持续挨打：8 发连续命中（簇上限 6，最旧的提前回收），看重叠与对象复用
+reset
+bg dark
+taken -30 20
+step 0.05
+taken -10 45
+step 0.05
+taken 10 30
+step 0.05
+taken 30 80
+step 0.05
+taken 150 25 armor
+step 0.05
+taken 170 30 armor
+step 0.05
+taken 200 60
+step 0.05
+taken 240 20
+step 0.1
+shot dir_stress
+step 1.2
+shot dir_stress_after
 
 bg off
 log === 0.6e hitdir done ===
