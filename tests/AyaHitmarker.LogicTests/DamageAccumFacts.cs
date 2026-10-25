@@ -18,8 +18,8 @@ internal static class DamageAccumFacts
     private const float Window = 0.5f;
     private const float Lifetime = 1.0f;
 
-    private static DamageAccumHit Hit(string key, float damage, float time, bool headshot = false, bool armorOnly = false)
-        => new DamageAccumHit(key, damage, headshot, armorOnly, time);
+    private static DamageAccumHit Hit(string key, float damage, float time, bool headshot = false, bool armorStyle = false, float armor = 0f)
+        => new DamageAccumHit(key, damage, armor, headshot, armorStyle, time);
 
     private static DamageAccumModel NewModel(int maxSlots = 8) => new DamageAccumModel(Window, Lifetime, maxSlots);
 
@@ -57,7 +57,7 @@ internal static class DamageAccumFacts
             Assert.Near(10f, s.LastHit, 1e-6, "最后命中 = 第一次命中");
             Assert.False(s.Kill, "还没击杀");
             Assert.False(s.Headshot, "普通命中不是爆头");
-            Assert.False(s.ArmorOnly, "普通命中不是护甲槽");
+            Assert.False(s.ArmorStyle, "普通命中不是护甲样式槽");
             Assert.True(s.Changed, "新建槽 Changed = true（视图要弹出新数字）");
 
             m.Add(Hit("A", 35f, 10.2f, headshot: true));
@@ -110,19 +110,19 @@ internal static class DamageAccumFacts
             Assert.Equal(1, m.Slots[1].HitCount, "旧槽命中次数没变");
         }
 
-        Assert.Suite("伤害累加模型: 爆头取或 / 护甲取与");
+        Assert.Suite("伤害累加模型: 爆头取或 / 护甲样式取与");
         {
             var m = NewModel();
-            m.Add(Hit("A", 10f, 0f, headshot: true, armorOnly: true));
-            m.Add(Hit("A", 10f, 0.1f, headshot: false, armorOnly: true));
+            m.Add(Hit("A", 10f, 0f, headshot: true, armorStyle: true));
+            m.Add(Hit("A", 10f, 0.1f, headshot: false, armorStyle: true));
             var s = m.Slots[0];
             Assert.True(s.Headshot, "先爆头后普通：Headshot 保持 true（取或）");
-            Assert.True(s.ArmorOnly, "两次都是护甲命中：ArmorOnly = true");
+            Assert.True(s.ArmorStyle, "两次都是护甲样式：ArmorStyle = true");
 
-            m.Add(Hit("A", 10f, 0.2f, armorOnly: false));
-            Assert.False(s.ArmorOnly, "有一次打到肉体 → ArmorOnly = false");
-            m.Add(Hit("A", 10f, 0.3f, armorOnly: true));
-            Assert.False(s.ArmorOnly, "之后再打护甲也回不去（取与是粘性的）");
+            m.Add(Hit("A", 10f, 0.2f, armorStyle: false));
+            Assert.False(s.ArmorStyle, "有一次不是护甲样式 → ArmorStyle = false");
+            m.Add(Hit("A", 10f, 0.3f, armorStyle: true));
+            Assert.False(s.ArmorStyle, "之后再来护甲样式也回不去（取与是粘性的）");
 
             var m2 = NewModel();
             m2.Add(Hit("B", 10f, 0f, headshot: false));
@@ -130,12 +130,49 @@ internal static class DamageAccumFacts
             Assert.True(m2.Slots[0].Headshot, "先普通后爆头：Headshot = true");
 
             var m3 = NewModel();
-            m3.Add(Hit("C", 10f, 0f, armorOnly: false));
-            Assert.False(m3.Slots[0].ArmorOnly, "第一次就打到肉体 → 不是护甲槽");
+            m3.Add(Hit("C", 10f, 0f, armorStyle: false));
+            Assert.False(m3.Slots[0].ArmorStyle, "第一次就不是护甲样式 → 不是护甲样式槽");
 
             var m4 = NewModel();
-            m4.Add(Hit("D", 10f, 0f, armorOnly: true));
-            Assert.True(m4.Slots[0].ArmorOnly, "只有护甲命中 → 护甲槽");
+            m4.Add(Hit("D", 10f, 0f, armorStyle: true));
+            Assert.True(m4.Slots[0].ArmorStyle, "只有护甲样式命中 → 护甲样式槽");
+        }
+
+        Assert.Suite("伤害累加模型: 护甲耐久伤害另起一行（0.6.1）");
+        {
+            // 数值取自 2026-10-25 实机日志：击穿 = 身体 ~52 + 耐久 ~52；挡下 = 钝伤 3.48 + 耐久 58.7
+            var m = NewModel();
+            m.Add(Hit("A", 49.63f, 0f, armor: 51.95f));
+            var s = m.Slots[0];
+            Assert.Near(49.63f, s.Damage, 1e-4, "身体伤害进主数字");
+            Assert.Near(51.95f, s.ArmorDamage, 1e-4, "护甲耐久伤害进护甲行，不混进主数字");
+            Assert.Equal(1, s.HitCount, "合并后的一发子弹只算 1 次命中");
+
+            m.Add(Hit("A", 3.48f, 0.1f, armor: 58.7f));
+            Assert.Equal(1, m.Slots.Count, "窗口内同一目标仍并一个槽");
+            Assert.Near(53.11f, s.Damage, 1e-3, "身体伤害累加");
+            Assert.Near(110.65f, s.ArmorDamage, 1e-3, "护甲耐久伤害单独累加");
+            Assert.Equal(2, s.HitCount, "两发 = 2 次命中");
+
+            var m2 = NewModel();
+            m2.Add(Hit("B", 0f, 0f, armor: 41.2f));
+            Assert.Equal(1, m2.Slots.Count, "零钝伤的挡下（身体 0、护甲 > 0）也要出槽");
+            Assert.Near(0f, m2.Slots[0].Damage, 1e-6, "主数字为 0（视图不画）");
+            Assert.Near(41.2f, m2.Slots[0].ArmorDamage, 1e-4, "护甲行有值");
+            Assert.True(m2.PromoteKill("B", 1f), "只有护甲行的槽也能结算击杀");
+
+            var m3 = NewModel();
+            m3.Add(Hit("C", 0f, 0f, armor: 0f));
+            m3.Add(Hit("C", -3f, 0.1f, armor: float.NaN));
+            m3.Add(Hit("C", float.NaN, 0.2f, armor: -1f));
+            Assert.Equal(0, m3.Slots.Count, "身体与护甲都无效（0 / 负 / NaN）→ 不入模型");
+
+            var m4 = NewModel();
+            m4.Add(Hit("D", 20f, 0f, armor: float.NaN));
+            Assert.Near(0f, m4.Slots[0].ArmorDamage, 1e-6, "无效的护甲伤害按 0 处理，不污染累计");
+            m4.Add(Hit("D", float.PositiveInfinity, 0.1f, armor: 10f));
+            Assert.Near(20f, m4.Slots[0].Damage, 1e-6, "无效的身体伤害按 0 处理");
+            Assert.Near(10f, m4.Slots[0].ArmorDamage, 1e-6, "有效的护甲伤害照常累计");
         }
 
         Assert.Suite("伤害累加模型: 忽略无效命中");
@@ -148,7 +185,7 @@ internal static class DamageAccumFacts
             Assert.Equal(0, m.Slots.Count, "零 / 负 / NaN / 无限伤害都不入模型");
 
             m.Add(Hit(string.Empty, 10f, 0f));
-            m.Add(new DamageAccumHit(null!, 10f, false, false, 0.1f));
+            m.Add(new DamageAccumHit(null!, 10f, 5f, false, false, 0.1f));
             Assert.Equal(0, m.Slots.Count, "空 / null key 直接忽略");
 
             m.Add(Hit("A", 10f, 0f));

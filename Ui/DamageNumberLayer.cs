@@ -21,8 +21,11 @@ namespace AyaHitmarker.Ui;
 /// （<c>32 → 67 → 99</c>），击杀时变红；多个目标按垂直堆叠，最新在最上。
 /// 合并/过期判定在纯逻辑 <see cref="DamageAccumModel"/> 里（可离线测），这里只做 uGUI 呈现。</para>
 ///
-/// 通用改动（战地 6 的做法）：深色描边；爆头填充色单独配置；击杀那一下变红并重新弹出；
-/// 打中护甲未穿透时用「护甲命中颜色」。
+/// 通用改动（战地 6 的做法）：深色描边；爆头填充色单独配置；击杀那一下变红并重新弹出。
+///
+/// <para><b>护甲伤害（0.6.1）</b>：一次命中带护甲耐久伤害时，它是**另起一行**画在身体伤害**上方**的（护甲配色 + 右侧小盾标），
+/// 身体伤害照常显示。被挡下且钝伤为 0 的命中没有身体数字，护甲数字就占身体数字的位置。
+/// 取值模式 = Total 时回到旧行为：一个数字显示身体 + 护甲，被挡下时整个数字用护甲样式。</para>
 ///
 /// 宽度用 <c>TMP_Text.ForceMeshUpdate()</c> + <c>preferredWidth</c> 实测，而不是按字数估算，
 /// 这样行内间距在任意字体下都对齐。所有写入都遵守 AGENTS.md §3.5（sizeDelta / fontSize 只在变化时写、
@@ -41,7 +44,12 @@ internal sealed class DamageNumberLayer
         internal float Width;
         internal float Damage;
         internal bool Headshot;
-        internal bool ArmorOnly;
+        /// <summary>这行数字用护甲配色 + 右侧小盾标（护甲行，或旧「总和」模式下被挡下的命中）。</summary>
+        internal bool ArmorStyle;
+        /// <summary>护甲耐久伤害那一行（累加样式下与身体行分属两个条目）。</summary>
+        internal bool IsArmorLine;
+        /// <summary>一行向右样式：叠在紧邻的前一个条目（同一次命中的身体数字）上方，不占行内横向空间。</summary>
+        internal bool Above;
         internal bool Kill;
         internal string TargetKey = string.Empty;
         internal int LastTextKey = int.MinValue;
@@ -105,23 +113,28 @@ internal sealed class DamageNumberLayer
     }
 
     /// <summary><paramref name="canvasAnchor"/> 是画布局部坐标（原点 = 屏幕中心）。</summary>
-    /// <param name="armorOnly">本次命中只有护甲伤害（0.6 a：用护甲配色）。</param>
+    /// <param name="damage">主数字（身体伤害；&lt; 0.5 不画）。</param>
+    /// <param name="armorDamage">护甲耐久伤害，另起一行画在主数字上方（0.6.1）；&lt; 0.5 不画。</param>
+    /// <param name="armorStyle">主数字也用护甲样式（旧「总和」模式下被挡下的命中）。</param>
     /// <param name="targetKey">目标标识（0.6 b 累加用）；空串时退回「一行向右」。</param>
-    internal void Show(Vector2 canvasAnchor, float damage, bool headshot, bool armorOnly, string targetKey)
+    internal void Show(Vector2 canvasAnchor, float damage, float armorDamage, bool headshot, bool armorStyle, string targetKey)
     {
         _anchor = canvasAnchor;
 
         if (Plugin.Cfg.DamageTextLayout.Value == DamageNumberLayout.Accumulate)
         {
             // 归组 key 理论上不会为空（ProfileId / 昵称兜底）；真为空时用一个固定 key，避免退回到不被绘制的行样式
-            ShowAccumulated(canvasAnchor, damage, headshot, armorOnly, string.IsNullOrEmpty(targetKey) ? "unknown" : targetKey);
+            ShowAccumulated(canvasAnchor, damage, armorDamage, headshot, armorStyle, string.IsNullOrEmpty(targetKey) ? "unknown" : targetKey);
             return;
         }
 
-        ShowLine(damage, headshot, armorOnly);
+        // 先插护甲行、再插身体行：列表最前 = 最新，所以身体行在前、护甲行紧随其后（布局时叠在它上方）
+        bool hasBody = damage >= 0.5f;
+        if (armorDamage >= 0.5f) ShowLine(armorDamage, false, armorLine: true, above: hasBody);
+        if (hasBody) ShowLine(damage, headshot, armorLine: false, above: false, armorStyle: armorStyle);
     }
 
-    private void ShowLine(float damage, bool headshot, bool armorOnly)
+    private void ShowLine(float damage, bool headshot, bool armorLine, bool above, bool armorStyle = false)
     {
         var e = Rent();
         if (e?.Text == null || e.Rt == null || e.Go == null) return;
@@ -129,7 +142,9 @@ internal sealed class DamageNumberLayer
         string text = FormatDamage(damage);
         e.Damage = damage;
         e.Headshot = headshot;
-        e.ArmorOnly = armorOnly;
+        e.IsArmorLine = armorLine;
+        e.Above = above;
+        e.ArmorStyle = armorLine || armorStyle;
         e.Kill = false;
         e.TargetKey = string.Empty;
         e.Start = UiClock.Now;
@@ -140,8 +155,8 @@ internal sealed class DamageNumberLayer
         e.LastColor = new Color(-1f, -1f, -1f, -1f);
         e.Logged = false;
 
-        // 击杀事件先到的情况：这个数字就是最后一击
-        if (e.Start <= _killWindowUntil)
+        // 击杀事件先到的情况：这个数字就是最后一击（护甲行不变红）
+        if (!armorLine && e.Start <= _killWindowUntil)
         {
             e.Kill = true;
             e.Life = Mathf.Max(e.Life, 1.1f);
@@ -168,14 +183,14 @@ internal sealed class DamageNumberLayer
         _live.Insert(0, e);   // 最新在最前，和旧项目一致
     }
 
-    private void ShowAccumulated(Vector2 canvasAnchor, float damage, bool headshot, bool armorOnly, string targetKey)
+    private void ShowAccumulated(Vector2 canvasAnchor, float damage, float armorDamage, bool headshot, bool armorStyle, string targetKey)
     {
         var cfg = Plugin.Cfg;
         var model = EnsureModel(cfg);
         float now = UiClock.Now;
         _accumAnchor = canvasAnchor;
 
-        model.Add(new DamageAccumHit(targetKey, damage, headshot, armorOnly, now));
+        model.Add(new DamageAccumHit(targetKey, damage, armorDamage, headshot, armorStyle, now));
 
         // 击杀事件比这一击的命中数据早到时：模型里可能还没有槽，PromoteKill 会失败。
         // 这里用和一行样式一样的窄窗口补一次。
@@ -287,14 +302,20 @@ internal sealed class DamageNumberLayer
         Color armorFill = UiTheme.Parse(cfg.DamageTextArmorColor.Value, new Color(0.62f, 0.78f, 0.92f));
 
         float x = startX;
+        float prevLeft = startX;   // 上一个非叠放条目的左缘：护甲行叠在它上方
         float shieldBase = ShieldSizeFor(cfg.DamageTextSize.Value);
         for (int i = 0; i < _live.Count; i++)
         {
             var e = _live[i];
             if (e.Rt == null || e.Text == null) continue;
 
-            float shieldSize = e.ArmorOnly ? shieldBase : 0f;
-            float shieldGap = e.ArmorOnly ? ShieldGap : 0f;
+            float shieldSize = e.ArmorStyle ? shieldBase : 0f;
+            float shieldGap = e.ArmorStyle ? ShieldGap : 0f;
+
+            // 护甲行叠在紧邻的前一个条目（同一次命中的身体数字）上方：同一个左缘、抬高一行、不占横向空间
+            bool above = e.Above && i > 0 && !_live[i - 1].Above;
+            float left = above ? prevLeft : x;
+            float y = above ? baseY + lineHeight : baseY;
 
             float alpha = Mathf.Clamp01(1f - (now - e.Start) / e.Life);
             // 击杀数字前 40% 保持全亮，别一出来就开始淡
@@ -309,15 +330,15 @@ internal sealed class DamageNumberLayer
                 e.LastHeight = lineHeight;
                 e.Rt.sizeDelta = new Vector2(e.Width, lineHeight);
             }
-            e.Rt.anchoredPosition = new Vector2(x + e.Width * 0.5f, baseY);
+            e.Rt.anchoredPosition = new Vector2(left + e.Width * 0.5f, y);
 
             if (cfg.DebugEnabled.Value && !e.Logged)
             {
                 e.Logged = true;
                 Plugin.Logger.LogInfo(
-                    $"[dmg] anchor={_anchor} startX={startX:0.#} x={x:0.#} width={e.Width:0.#} " +
+                    $"[dmg] anchor={_anchor} startX={startX:0.#} x={left:0.#} width={e.Width:0.#} " +
                     $"anchored={e.Rt.anchoredPosition} screen={e.Rt.position} pivot={e.Rt.pivot} " +
-                    $"size={e.Rt.sizeDelta} scale={e.Rt.localScale} align={e.Text.alignment} armor={e.ArmorOnly}");
+                    $"size={e.Rt.sizeDelta} scale={e.Rt.localScale} align={e.Text.alignment} armorLine={e.IsArmorLine} above={above}");
             }
 
             // 击杀的数字弹得更用力
@@ -340,7 +361,7 @@ internal sealed class DamageNumberLayer
             }
 
             Color baseColor = e.Kill ? killFill
-                : e.ArmorOnly ? armorFill
+                : e.ArmorStyle ? armorFill
                 : e.Headshot ? headshotFill
                 : fill;
             Color color = UiTheme.WithAlpha(baseColor, alpha * baseColor.a);
@@ -355,11 +376,20 @@ internal sealed class DamageNumberLayer
                 e.Text.color = color;
             }
 
-            // 护甲命中：小盾标贴在数字右侧，不遮命中标记也不遮下一个数字
-            if (e.ArmorOnly) DrawShield(e, x, e.Width, baseY, shieldSize, armorFill, alpha, entryScale);
+            // 护甲行：小盾标贴在数字右侧，不遮命中标记也不遮下一个数字
+            if (e.ArmorStyle) DrawShield(e, left, e.Width, y, shieldSize, armorFill, alpha, entryScale);
             else HideShield(e);
 
-            x += e.Width + shieldGap + shieldSize + spacing;
+            // 叠放的护甲行不占横向空间（它的宽度不该把后面的数字推开）
+            // —— 但这一列的宽度要取身体数字与护甲行（数字 + 盾标）里更宽的那个，否则连发时相邻两列的护甲行会叠在一起
+            if (!above)
+            {
+                prevLeft = left;
+                float footprint = e.Width + shieldGap + shieldSize;
+                if (i + 1 < _live.Count && _live[i + 1].Above)
+                    footprint = Mathf.Max(footprint, _live[i + 1].Width + ShieldGap + shieldBase);
+                x += footprint + spacing;
+            }
         }
     }
 
@@ -400,141 +430,54 @@ internal sealed class DamageNumberLayer
         // 先给条目打 Used=false；下面按槽对账
         for (int i = 0; i < _accumEntries.Count; i++) _accumEntries[i].Used = false;
 
-        int visible = 0;
+        var style = new AccumStyle
+        {
+            Cfg = cfg,
+            Now = now,
+            Model = model,
+            StartX = startX,
+            LineHeight = lineHeight,
+            PopScale = popScale,
+            PopDuration = popDuration,
+            FontSize = fontSize,
+            OutlineWidth = outlineWidth,
+            Fill = fill,
+            HeadshotFill = headshotFill,
+            KillFill = killFill,
+            ArmorFill = armorFill,
+            NormalOutline = normalOutline,
+            HeadshotOutline = headshotOutline,
+        };
+
+        // 行布局（0.6.1）：一个槽最多两行 —— 护甲耐久行在上、身体行在下。
+        // 最新槽的身体行固定在 baseY（和命中图标对齐），护甲行往上长；更旧的槽依次往下排，
+        // 带护甲行的槽要多留一行。只有护甲行（被挡下且钝伤为 0）时，它占身体行的位置。
+        float rowH = lineHeight + rowGap;
+        float nextRowY = baseY;
+        bool first = true;
         for (int i = 0; i < slots.Count; i++)
         {
             DamageAccumSlot slot = slots[i];
-            if (!enabled || slot.Damage < 0.5f) continue;
+            bool hasBody = enabled && slot.Damage >= 0.5f;
+            bool hasArmor = enabled && slot.ArmorDamage >= 0.5f;
+            if (!hasBody && !hasArmor) continue;
 
-            var e = FindAccumEntry(slot.TargetKey);
-            if (e == null)
+            float bodyY, armorY;
+            if (hasBody && hasArmor)
             {
-                e = Rent();
-                if (e == null) continue;
-                e.TargetKey = slot.TargetKey;
-                e.LastTextKey = int.MinValue;
-                e.LastFontSize = -1f;
-                e.LastOutlineKey = int.MinValue;
-                e.PopStart = now;
-                e.Start = now;
-                _accumEntries.Add(e);
-            }
-
-            var text = e.Text;
-            var rt = e.Rt;
-            var go = e.Go;
-            if (text == null || rt == null || go == null) continue;
-            if (!go.activeSelf) go.SetActive(true);
-
-            e.Used = true;
-            e.Damage = slot.Damage;
-            e.Headshot = slot.Headshot;
-            e.ArmorOnly = slot.ArmorOnly;
-            e.Kill = slot.Kill;
-
-            int textKey = Mathf.Max(0, Mathf.RoundToInt(slot.Damage));
-            bool textChanged = textKey != e.LastTextKey;
-            if (textChanged)
-            {
-                e.LastTextKey = textKey;
-                text.text = FormatDamageByKey(textKey);
-            }
-
-            // 数字变过一次就弹一次（击杀也要重新弹）
-            if (textChanged || slot.Changed)
-            {
-                e.PopStart = now;
-                e.Start = now;
-            }
-
-            if (Mathf.Abs(e.LastFontSize - fontSize) > 0.01f)
-            {
-                e.LastFontSize = fontSize;
-                text.fontSize = fontSize;
-            }
-
-            int outlineKey = slot.Headshot ? 1 : 0;
-            if (e.LastOutlineKey != outlineKey)
-            {
-                e.LastOutlineKey = outlineKey;
-                text.outlineWidth = outlineWidth;
-                text.outlineColor = slot.Headshot ? headshotOutline : normalOutline;
-            }
-
-            if (textChanged || float.IsNaN(e.LastWidth))
-            {
-                text.ForceMeshUpdate();
-                e.Width = text.preferredWidth > 1f
-                    ? text.preferredWidth
-                    : text.text.Length * fontSize * 0.6f;
-            }
-
-            float y = baseY - visible * (lineHeight + rowGap);
-            visible++;
-
-            if (float.IsNaN(e.LastWidth) || float.IsNaN(e.LastHeight)
-                || Mathf.Abs(e.LastWidth - e.Width) > 0.01f || Mathf.Abs(e.LastHeight - lineHeight) > 0.01f)
-            {
-                e.LastWidth = e.Width;
-                e.LastHeight = lineHeight;
-                rt.sizeDelta = new Vector2(e.Width, lineHeight);
-            }
-            rt.anchoredPosition = new Vector2(startX + e.Width * 0.5f, y);
-
-            // 击杀的数字弹得更用力
-            float entryPop = slot.Kill ? Mathf.Max(popScale, 1.45f) : popScale;
-            if (entryPop > 1.0001f)
-            {
-                float popT = UiAnim.OutBack(UiAnim.Clamp01((now - e.PopStart) / popDuration));
-                float scale = entryPop + (1f - entryPop) * popT;
-                if (float.IsNaN(e.LastScale) || Mathf.Abs(e.LastScale - scale) > 0.002f)
-                {
-                    e.LastScale = scale;
-                    rt.localScale = new Vector3(scale, scale, 1f);
-                }
-            }
-            else if (float.IsNaN(e.LastScale))
-            {
-                e.LastScale = 1f;
-                rt.localScale = Vector3.one;
-            }
-
-            float alpha = DamageAccumModel.Alpha(slot, now, model.Window, model.Lifetime);
-            Color baseColor = slot.Kill ? killFill
-                : slot.ArmorOnly ? armorFill
-                : slot.Headshot ? headshotFill
-                : fill;
-            Color color = UiTheme.WithAlpha(baseColor, alpha * baseColor.a);
-            if (e.LastAlpha < 0f
-                || Mathf.Abs(alpha - e.LastAlpha) > 0.01f
-                || Mathf.Abs(color.r - e.LastColor.r) > 0.004f
-                || Mathf.Abs(color.g - e.LastColor.g) > 0.004f
-                || Mathf.Abs(color.b - e.LastColor.b) > 0.004f)
-            {
-                e.LastAlpha = alpha;
-                e.LastColor = color;
-                text.color = color;
-            }
-
-            // 护甲槽：小盾标贴在累计数字右侧
-            if (slot.ArmorOnly)
-            {
-                float scaleNow = float.IsNaN(e.LastScale) ? 1f : e.LastScale;
-                DrawShield(e, startX, e.Width, y, ShieldSizeFor(fontSize), armorFill, alpha, scaleNow);
+                if (first) { bodyY = nextRowY; armorY = bodyY + rowH; }
+                else { armorY = nextRowY; bodyY = armorY - rowH; }
+                nextRowY = bodyY - rowH;
             }
             else
             {
-                HideShield(e);
+                bodyY = armorY = nextRowY;
+                nextRowY -= rowH;
             }
+            first = false;
 
-            if (cfg.DebugEnabled.Value && !e.Logged)
-            {
-                e.Logged = true;
-                Plugin.Logger.LogInfo(
-                    $"[dmg] 累加 key={slot.TargetKey} total={slot.Damage:0.#} hits={slot.HitCount} " +
-                    $"kill={slot.Kill} head={slot.Headshot} armor={slot.ArmorOnly} " +
-                    $"anchored={rt.anchoredPosition} size={rt.sizeDelta}");
-            }
+            if (hasBody) DrawAccumLine(in style, slot, false, slot.Damage, bodyY);
+            if (hasArmor) DrawAccumLine(in style, slot, true, slot.ArmorDamage, armorY);
         }
 
         // 没对上槽的条目 → 隐藏回收（槽被 Tick 清掉后就会走到这里）
@@ -552,12 +495,165 @@ internal sealed class DamageNumberLayer
         model.Tick(now);
     }
 
-    private Entry? FindAccumEntry(string key)
+    /// <summary>累加样式一帧内共用的参数，避免 DrawAccumLine 的参数列表失控。</summary>
+    private struct AccumStyle
+    {
+        internal AyaConfig Cfg;
+        internal float Now;
+        internal DamageAccumModel Model;
+        internal float StartX;
+        internal float LineHeight;
+        internal float PopScale;
+        internal float PopDuration;
+        internal float FontSize;
+        internal float OutlineWidth;
+        internal Color Fill, HeadshotFill, KillFill, ArmorFill, NormalOutline, HeadshotOutline;
+    }
+
+    /// <summary>画槽里的一行（身体行或护甲行）：按 (key, 行种类) 找条目、没有就租一个，写入走脏检查。</summary>
+    private void DrawAccumLine(in AccumStyle st, DamageAccumSlot slot, bool armorLine, float value, float y)
+    {
+        var e = FindAccumEntry(slot.TargetKey, armorLine);
+        if (e == null)
+        {
+            e = Rent();
+            if (e == null) return;
+            e.TargetKey = slot.TargetKey;
+            e.IsArmorLine = armorLine;
+            e.LastTextKey = int.MinValue;
+            e.LastFontSize = -1f;
+            e.LastOutlineKey = int.MinValue;
+            e.PopStart = st.Now;
+            e.Start = st.Now;
+            _accumEntries.Add(e);
+        }
+
+        var text = e.Text;
+        var rt = e.Rt;
+        var go = e.Go;
+        if (text == null || rt == null || go == null) return;
+        if (!go.activeSelf) go.SetActive(true);
+
+        // 护甲行永远是护甲样式（带盾标，不跟着击杀变红 / 爆头变色）；身体行只有旧「总和」模式才可能是护甲样式
+        bool kill = !armorLine && slot.Kill;
+        bool headshot = !armorLine && slot.Headshot;
+        bool armorStyle = armorLine || slot.ArmorStyle;
+
+        e.Used = true;
+        e.Damage = value;
+        e.Headshot = headshot;
+        e.ArmorStyle = armorStyle;
+        e.Kill = kill;
+
+        int textKey = Mathf.Max(0, Mathf.RoundToInt(value));
+        bool textChanged = textKey != e.LastTextKey;
+        if (textChanged)
+        {
+            e.LastTextKey = textKey;
+            text.text = FormatDamageByKey(textKey);
+        }
+
+        // 数字变过一次就弹一次（击杀也要重新弹）
+        if (textChanged || slot.Changed)
+        {
+            e.PopStart = st.Now;
+            e.Start = st.Now;
+        }
+
+        if (Mathf.Abs(e.LastFontSize - st.FontSize) > 0.01f)
+        {
+            e.LastFontSize = st.FontSize;
+            text.fontSize = st.FontSize;
+        }
+
+        int outlineKey = headshot ? 1 : 0;
+        if (e.LastOutlineKey != outlineKey)
+        {
+            e.LastOutlineKey = outlineKey;
+            text.outlineWidth = st.OutlineWidth;
+            text.outlineColor = headshot ? st.HeadshotOutline : st.NormalOutline;
+        }
+
+        if (textChanged || float.IsNaN(e.LastWidth))
+        {
+            text.ForceMeshUpdate();
+            e.Width = text.preferredWidth > 1f
+                ? text.preferredWidth
+                : text.text.Length * st.FontSize * 0.6f;
+        }
+
+        if (float.IsNaN(e.LastWidth) || float.IsNaN(e.LastHeight)
+            || Mathf.Abs(e.LastWidth - e.Width) > 0.01f || Mathf.Abs(e.LastHeight - st.LineHeight) > 0.01f)
+        {
+            e.LastWidth = e.Width;
+            e.LastHeight = st.LineHeight;
+            rt.sizeDelta = new Vector2(e.Width, st.LineHeight);
+        }
+        rt.anchoredPosition = new Vector2(st.StartX + e.Width * 0.5f, y);
+
+        // 击杀的数字弹得更用力
+        float entryPop = kill ? Mathf.Max(st.PopScale, 1.45f) : st.PopScale;
+        if (entryPop > 1.0001f)
+        {
+            float popT = UiAnim.OutBack(UiAnim.Clamp01((st.Now - e.PopStart) / st.PopDuration));
+            float scale = entryPop + (1f - entryPop) * popT;
+            if (float.IsNaN(e.LastScale) || Mathf.Abs(e.LastScale - scale) > 0.002f)
+            {
+                e.LastScale = scale;
+                rt.localScale = new Vector3(scale, scale, 1f);
+            }
+        }
+        else if (float.IsNaN(e.LastScale))
+        {
+            e.LastScale = 1f;
+            rt.localScale = Vector3.one;
+        }
+
+        float alpha = DamageAccumModel.Alpha(slot, st.Now, st.Model.Window, st.Model.Lifetime);
+        Color baseColor = kill ? st.KillFill
+            : armorStyle ? st.ArmorFill
+            : headshot ? st.HeadshotFill
+            : st.Fill;
+        Color color = UiTheme.WithAlpha(baseColor, alpha * baseColor.a);
+        if (e.LastAlpha < 0f
+            || Mathf.Abs(alpha - e.LastAlpha) > 0.01f
+            || Mathf.Abs(color.r - e.LastColor.r) > 0.004f
+            || Mathf.Abs(color.g - e.LastColor.g) > 0.004f
+            || Mathf.Abs(color.b - e.LastColor.b) > 0.004f)
+        {
+            e.LastAlpha = alpha;
+            e.LastColor = color;
+            text.color = color;
+        }
+
+        // 护甲样式：小盾标贴在数字右侧
+        if (armorStyle)
+        {
+            float scaleNow = float.IsNaN(e.LastScale) ? 1f : e.LastScale;
+            DrawShield(e, st.StartX, e.Width, y, ShieldSizeFor(st.FontSize), st.ArmorFill, alpha, scaleNow);
+        }
+        else
+        {
+            HideShield(e);
+        }
+
+        if (st.Cfg.DebugEnabled.Value && !e.Logged)
+        {
+            e.Logged = true;
+            string lineName = armorLine ? "armor" : "body";
+            Plugin.Logger.LogInfo(
+                $"[dmg] 累加 key={slot.TargetKey} line={lineName} value={value:0.#} hits={slot.HitCount} " +
+                $"kill={slot.Kill} head={slot.Headshot} anchored={rt.anchoredPosition} size={rt.sizeDelta}");
+        }
+    }
+
+    private Entry? FindAccumEntry(string key, bool armorLine)
     {
         for (int i = 0; i < _accumEntries.Count; i++)
         {
-            if (!_accumEntries[i].Used && string.Equals(_accumEntries[i].TargetKey, key, StringComparison.Ordinal))
-                return _accumEntries[i];
+            var c = _accumEntries[i];
+            if (!c.Used && c.IsArmorLine == armorLine && string.Equals(c.TargetKey, key, StringComparison.Ordinal))
+                return c;
         }
         return null;
     }
@@ -674,6 +770,9 @@ internal sealed class DamageNumberLayer
             e.LastShieldSize = float.NaN;
             e.Logged = false;
             e.TargetKey = string.Empty;
+            e.IsArmorLine = false;
+            e.Above = false;
+            e.ArmorStyle = false;
             e.Used = false;
             return e;
         }

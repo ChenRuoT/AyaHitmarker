@@ -10,15 +10,21 @@ namespace AyaHitmarker.Game;
 /// <c>Player</c> / <c>DamageInfo</c> 这些 interop 代理（原生对象销毁后就是 use-after-free）。
 /// 所以只在这里存值类型和已转好的字符串。
 /// </summary>
-internal readonly struct HitRecord
+internal readonly struct HitRecord : IArmorSample
 {
     internal readonly float BodyDamage;
     internal readonly float ArmorDamage;
     internal readonly bool Headshot;
     internal readonly bool VictimIsLocalPlayer;
 
-    /// <summary>本次命中只有护甲伤害、没有肉体伤害（打中防弹板）。0.6 a 的护甲标记 / 护甲配色用。</summary>
-    internal readonly bool ArmorOnly;
+    /// <summary>
+    /// 护甲与这发子弹的关系（0.6.1）。事件线程上总是 <see cref="ArmorOutcome.None"/> ——
+    /// 判定要看「有没有后续事件」，由主线程的 <see cref="PlateStageMerger{T}"/> 经 <see cref="Resolve"/> 填上。
+    /// </summary>
+    internal readonly ArmorOutcome Armor;
+
+    /// <summary>子弹被护甲挡下（蓝色辉光 / 护甲数字 / 受击方向白色点阵）。</summary>
+    internal bool ArmorBlocked => Armor == ArmorOutcome.Blocked;
 
     /// <summary>
     /// 目标标识（0.6 b 累加伤害用）：优先 <c>Player.ProfileId</c>，拿不到时退回归一化昵称。
@@ -39,23 +45,34 @@ internal readonly struct HitRecord
         float armorDamage,
         bool headshot,
         bool victimIsLocalPlayer,
-        bool armorOnly,
         string targetKey,
         Vector3 hitPoint,
-        Vector3 incomingDirection)
+        Vector3 incomingDirection,
+        ArmorOutcome armor = ArmorOutcome.None)
     {
         BodyDamage = bodyDamage;
         ArmorDamage = armorDamage;
         Headshot = headshot;
         VictimIsLocalPlayer = victimIsLocalPlayer;
-        ArmorOnly = armorOnly;
+        Armor = armor;
         TargetKey = targetKey;
         HitPoint = hitPoint;
         IncomingDirection = incomingDirection;
     }
 
-    internal float TotalDamage => BodyDamage + ArmorDamage;
+    string IArmorSample.TargetKey => TargetKey;
+    bool IArmorSample.VictimIsLocalPlayer => VictimIsLocalPlayer;
+    float IArmorSample.BodyDamage => BodyDamage;
+    float IArmorSample.ArmorDamage => ArmorDamage;
 
+    /// <summary>用合并器的结果换掉伤害与护甲结局，其余字段（命中点 / 方向 / 爆头 …）保持不变。</summary>
+    internal HitRecord Resolve(float body, float armor, ArmorOutcome outcome)
+        => new HitRecord(body, armor, Headshot, VictimIsLocalPlayer, TargetKey, HitPoint, IncomingDirection, outcome);
+
+    /// <summary>
+    /// 伤害数字的取值：<c>BodyOnly</c> = 身体伤害（护甲耐久伤害另起一行，见 <c>DamageNumberLayer</c>）；
+    /// <c>Total</c> = 旧行为，一个数字显示身体 + 护甲。
+    /// </summary>
     internal float DisplayDamage(DamageNumberMode mode)
         => mode == DamageNumberMode.BodyOnly ? BodyDamage : BodyDamage + ArmorDamage;
 }

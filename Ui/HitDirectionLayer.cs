@@ -105,9 +105,11 @@ internal sealed class HitDirectionLayer
         if (!TryGetCameraBasis(out Vector3 forward, out Vector3 right)) return;
         if (!HitDirectionMath.TryAngle(incoming.x, incoming.z, forward.x, forward.z, right.x, right.z, out float angle)) return;
 
-        float damage = hit.ArmorOnly ? hit.ArmorDamage : hit.BodyDamage;
-        bool heavy = !hit.ArmorOnly && damage >= Mathf.Max(1f, Plugin.Cfg.HitDirectionHeavyDamage.Value);
-        Spawn(angle, damage, hit.ArmorOnly, heavy);
+        // 挡下：用护甲耐久伤害当大小（钝伤只有几点，几乎看不见）；击穿：身体伤害照常，护甲那一段不参与
+        bool blocked = hit.ArmorBlocked;
+        float damage = blocked ? hit.ArmorDamage : hit.BodyDamage;
+        bool heavy = !blocked && damage >= Mathf.Max(1f, Plugin.Cfg.HitDirectionHeavyDamage.Value);
+        Spawn(angle, damage, blocked, heavy);
     }
 
     /// <summary>调试 / 验收入口：直接给定方位角（弧度）与伤害，跳过相机换算。</summary>

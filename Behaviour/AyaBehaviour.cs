@@ -22,6 +22,10 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private DebugHarness? _harness;
     private readonly SoundPlayer _sound = new SoundPlayer();
     private readonly List<HitRecord> _hits = new List<HitRecord>(32);
+
+    // 0.6.1：一发击穿护甲的子弹会产生「板阶段 + 身体」两个事件，在这里合并；等不到后续的板阶段按挡下放行
+    private readonly PlateStageMerger<HitRecord> _plateMerger = new PlateStageMerger<HitRecord>();
+    private readonly List<ResolvedHit<HitRecord>> _resolvedHits = new List<ResolvedHit<HitRecord>>(32);
     private readonly List<KillRecord> _kills = new List<KillRecord>(16);
     private readonly List<LocalDeathRecord> _deaths = new List<LocalDeathRecord>(4);
 
@@ -173,16 +177,25 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     private DebugHarness.Hooks MakeHarnessHooks() => new DebugHarness.Hooks
     {
-        Hit = (headshot, armorOnly, targetIndex) =>
+        Hit = (headshot, variant, targetIndex) =>
         {
             var target = TestKills.At(targetIndex);
-            _ui.Hitmarker.Show(Vector2.zero, headshot, armorOnly);
-            _ui.DamageNumbers.Show(
-                Vector2.zero,
-                armorOnly ? 41.2f : headshot ? 142f : 76f,
-                headshot,
-                armorOnly,
-                target.VictimProfileId);
+            // 数值取自 2026-10-25 实机日志的典型形态（挡下：钝伤 3.48 + 耐久 58.7；击穿：身体 ~52 + 耐久 ~52）
+            switch (variant)
+            {
+                case DebugHarness.HitVariant.Blocked:
+                    ShowHitFeedback(Vector2.zero, 3.5f, 41.2f, headshot, ArmorOutcome.Blocked, target.VictimProfileId);
+                    break;
+                case DebugHarness.HitVariant.BlockedNoBlunt:
+                    ShowHitFeedback(Vector2.zero, 0f, 41.2f, headshot, ArmorOutcome.Blocked, target.VictimProfileId);
+                    break;
+                case DebugHarness.HitVariant.Penetrated:
+                    ShowHitFeedback(Vector2.zero, 52f, 41.2f, headshot, ArmorOutcome.Penetrated, target.VictimProfileId);
+                    break;
+                default:
+                    ShowHitFeedback(Vector2.zero, headshot ? 142f : 76f, 0f, headshot, ArmorOutcome.None, target.VictimProfileId);
+                    break;
+            }
         },
         Kill = index => FireTestKill(TestKills.At(index), playSound: false),
         Taken = (degrees, damage, armorOnly) =>
@@ -214,6 +227,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             _ui.ResetAll();
             _streaks.Reset();
             _assists.Reset();
+            _plateMerger.Reset();
         },
         Backdrop = color => _ui.SetBackdrop(color),
         MenuReady = IsMainMenuLoaded,
@@ -295,6 +309,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         _ui.ResetAll();
         _streaks.Reset();
         _assists.Reset();
+        _plateMerger.Reset();
         ReconProbe.Reset();
 
         StartAudioLoad(invalidate: true);
@@ -305,6 +320,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         _ui.ResetAll();
         _streaks.Reset();
         _assists.Reset();
+        _plateMerger.Reset();
         ReconProbe.Reset();
     }
 
@@ -346,6 +362,29 @@ internal sealed class AyaBehaviour : MonoBehaviour
         _audioEnumerator = null;
     }
 
+    /// <summary>
+    /// 一次命中的画面反馈（命中标记 + 伤害数字），真实命中 / F8 / 调试脚本共用。
+    /// 蓝色辉光只给「被挡下」；击穿时标记保持普通，护甲耐久伤害作为一行数字放在身体伤害上方。
+    /// </summary>
+    private void ShowHitFeedback(Vector2 anchor, float body, float armor, bool headshot, ArmorOutcome outcome, string targetKey)
+    {
+        var cfg = Plugin.Cfg;
+        bool blocked = outcome == ArmorOutcome.Blocked;
+
+        _ui.Hitmarker.Show(anchor, headshot, blocked);
+
+        if (cfg.DamageTextMode.Value == DamageNumberMode.Total)
+        {
+            // 旧行为：一个数字 = 身体 + 护甲；挡下时整个数字用护甲样式
+            _ui.DamageNumbers.Show(anchor, body + armor, 0f, headshot, blocked, targetKey);
+        }
+        else
+        {
+            float armorLine = cfg.ArmorHitMarkerEnabled.Value ? armor : 0f;
+            _ui.DamageNumbers.Show(anchor, body, armorLine, headshot, false, targetKey);
+        }
+    }
+
     private void DrainFeedback()
     {
         _hits.Clear();
@@ -353,7 +392,11 @@ internal sealed class AyaBehaviour : MonoBehaviour
         _deaths.Clear();
         FeedbackBus.Drain(_hits, _kills, _deaths);
 
-        if (_hits.Count == 0 && _kills.Count == 0 && _deaths.Count == 0) return;
+        // 板阶段合并：每帧都要调（批次为空也调），等不到后续事件的板阶段靠它按挡下放行
+        _resolvedHits.Clear();
+        _plateMerger.Process(_hits, _resolvedHits);
+
+        if (_resolvedHits.Count == 0 && _kills.Count == 0 && _deaths.Count == 0) return;
 
         var cfg = Plugin.Cfg;
         bool atHitPoint = cfg.HitMarkerAtHitPoint.Value;
@@ -372,9 +415,17 @@ internal sealed class AyaBehaviour : MonoBehaviour
             }
         }
 
-        for (int i = 0; i < _hits.Count; i++)
+        for (int i = 0; i < _resolvedHits.Count; i++)
         {
-            var hit = _hits[i];
+            var resolved = _resolvedHits[i];
+            var hit = resolved.Primary.Resolve(resolved.Body, resolved.Armor, resolved.Outcome);
+
+            if (cfg.DebugEnabled.Value && resolved.Outcome != ArmorOutcome.None)
+            {
+                Plugin.Logger.LogInfo(
+                    $"[hit] 护甲判定: {resolved.Outcome} body={resolved.Body:0.##} armor={resolved.Armor:0.##} " +
+                    $"key={hit.TargetKey} self={hit.VictimIsLocalPlayer}");
+            }
 
             // 自己被打：0.6 e 的受击方向指示走这条路径（不再像 v1 那样直接丢弃）
             if (hit.VictimIsLocalPlayer)
@@ -384,7 +435,8 @@ internal sealed class AyaBehaviour : MonoBehaviour
             }
 
             // 0.6 c：记下「我最近打过谁」，别人打死该目标时结算助攻
-            _assists.NoteHit(hit.TargetKey, UiClock.Now, hit.TotalDamage, hit.Headshot);
+            // 只记身体伤害：护甲耐久伤害不是打在人身上的（旧版把 body+armor 都算进去，一发穿甲子弹会被记成 ~100）
+            _assists.NoteHit(hit.TargetKey, UiClock.Now, hit.BodyDamage, hit.Headshot);
 
             Vector2 anchor = Vector2.zero;
             if (atHitPoint)
@@ -393,13 +445,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 if (projected.HasValue) anchor = projected.Value;
             }
 
-            _ui.Hitmarker.Show(anchor, hit.Headshot, hit.ArmorOnly);
-            _ui.DamageNumbers.Show(
-                anchor,
-                hit.DisplayDamage(cfg.DamageTextMode.Value),
-                hit.Headshot,
-                hit.ArmorOnly,
-                hit.TargetKey);
+            ShowHitFeedback(anchor, hit.BodyDamage, hit.ArmorDamage, hit.Headshot, hit.Armor, hit.TargetKey);
             _sound.PlayHit(hit.Headshot);
         }
 
@@ -510,16 +556,23 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 // F8：**随机命中** —— 伤害数值 / 是否打中护甲 / 是否爆头全部随机。
                 // （旧版用 Shift+F8 模拟护甲命中，但游戏里 Shift 的组合键读不到；改成单键随机后每次按都能看到不同分支。）
                 bool headshot = UnityEngine.Random.value < 0.30f;
-                bool armorHit = UnityEngine.Random.value < 0.35f;
-                float damage = Mathf.Round(armorHit
-                    ? UnityEngine.Random.Range(8f, 90f)
-                    : UnityEngine.Random.Range(20f, 160f));
+                // 35% 护甲命中，其中 45% 挡下带钝伤 / 20% 零钝伤挡下 / 35% 击穿（和实机日志里的比例大致相当）
+                var outcome = ArmorOutcome.None;
+                float body = Mathf.Round(UnityEngine.Random.Range(20f, 160f));
+                float armor = 0f;
+                if (UnityEngine.Random.value < 0.35f)
+                {
+                    armor = Mathf.Round(UnityEngine.Random.Range(28f, 60f));
+                    float roll = UnityEngine.Random.value;
+                    if (roll < 0.45f) { outcome = ArmorOutcome.Blocked; body = Mathf.Round(UnityEngine.Random.Range(1f, 8f)); }
+                    else if (roll < 0.65f) { outcome = ArmorOutcome.Blocked; body = 0f; }
+                    else { outcome = ArmorOutcome.Penetrated; body = Mathf.Round(UnityEngine.Random.Range(28f, 60f)); }
+                }
 
                 var target = TestKills.Peek();
                 Plugin.Logger.LogInfo(
-                    $"[debug] 测试命中（随机）：伤害={damage:0} 爆头={headshot} 护甲={armorHit} 目标={target.VictimName}");
-                _ui.Hitmarker.Show(Vector2.zero, headshot, armorHit);
-                _ui.DamageNumbers.Show(Vector2.zero, damage, headshot, armorHit, target.VictimProfileId);
+                    $"[debug] 测试命中（随机）：身体={body:0} 护甲={armor:0} 爆头={headshot} 结局={outcome} 目标={target.VictimName}");
+                ShowHitFeedback(Vector2.zero, body, armor, headshot, outcome, target.VictimProfileId);
                 _sound.PlayHit(headshot);
             }
 

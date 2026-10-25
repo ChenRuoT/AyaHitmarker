@@ -1,0 +1,110 @@
+# 0.6.1 护甲命中：挡下（带钝伤 / 零钝伤）与击穿的画面（主菜单即可，18 张）
+# 挡下 = 蓝色辉光 + 护甲数字（上）+ 钝伤数字（下）；击穿 = 普通标记 + 护甲数字（上）+ 身体数字（下）
+waitmenu 90
+log === 0.6.1 armor start ===
+clock manual
+bg dark
+step 1
+
+# ---- 一行向右 ----
+layout line
+reset
+hit armor 1
+step 0.15
+shot line_blocked
+
+reset
+step 0.5
+hit plate 1
+step 0.15
+shot line_plate
+
+reset
+step 0.5
+hit pen 1
+step 0.15
+shot line_pen
+
+reset
+step 0.5
+hit 1
+step 0.15
+shot line_plain
+
+# 连续三发（击穿 → 挡下 → 普通）：叠放的护甲行不能把后面的数字推开
+reset
+step 0.5
+hit pen 1
+step 0.12
+hit armor 1
+step 0.12
+hit 1
+step 0.15
+shot line_three
+
+reset
+bg white
+step 0.5
+hit pen 1
+step 0.15
+shot line_pen_white
+
+reset
+bg snow
+step 0.5
+hit armor 1
+step 0.15
+shot line_blocked_snow
+
+# ---- 累加 ----
+layout accumulate
+bg dark
+reset
+step 0.5
+hit pen 1
+step 0.25
+shot acc_pen
+
+hit armor 1
+step 0.25
+shot acc_pen_blocked
+
+# 第二个目标：带护甲行的槽要多留一行
+hit pen 2
+step 0.25
+shot acc_two_targets
+
+hit plate 3
+step 0.25
+shot acc_three_targets
+
+reset
+step 0.5
+hit plate 1
+step 0.25
+shot acc_plate_only
+
+reset
+step 0.5
+hit 1
+step 0.2
+hit pen 2
+step 0.25
+shot acc_plain_then_pen
+
+reset
+bg white
+step 0.5
+hit pen 1
+step 0.25
+hit armor 2
+step 0.25
+shot acc_two_white
+
+step 2.5
+shot acc_faded
+
+layout line
+bg off
+log === 0.6.1 armor done ===
+quit

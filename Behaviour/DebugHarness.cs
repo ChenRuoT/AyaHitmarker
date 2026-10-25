@@ -16,7 +16,10 @@ namespace AyaHitmarker.Behaviour;
 /// bg dark                # 画布后面垫一块纯色（dark|mid|white|snow|grass|#RRGGBB|off）
 /// kill 2                 # 造脚本表里第 2 条击杀（走真实的连杀判定 / 卡片 / 音效）
 /// hit [head]             # 造一次命中（head = 爆头）
-/// hit armor [N]          # 造一次只打中护甲的命中（0.6 a：盾形标记 + 护甲配色）；N = 脚本表目标序号（与 kill N 配对，累加样式下对得上同一个槽）
+/// hit armor [N]          # 造一次被护甲挡下、带少量钝伤的命中（身体 3.5 + 护甲 41.2：蓝色辉光 + 钝伤数字，护甲数字在上方）；N = 脚本表目标序号（与 kill N 配对，累加样式下对得上同一个槽）
+/// layout line|accumulate # 切换伤害数字排布（会写进 cfg：脚本结尾切回原值）
+/// hit plate [N]          # 零钝伤的挡下（只有护甲 41.2：蓝色辉光，只有护甲数字）
+/// hit pen [N]            # 击穿护甲（身体 52 + 护甲 41.2：普通标记，护甲数字在身体数字上方）
 /// death 3                # 模拟「被脚本表第 3 条的那个人打死」（之后杀他 = 复仇者）
 /// waitmenu [秒]          # 本进程首次运行时等主菜单场景（MenuUIScene）出现，之后各代直接返回
 /// step 0.0333            # 手动时钟前进 0.0333 秒
@@ -42,10 +45,22 @@ namespace AyaHitmarker.Behaviour;
 /// </summary>
 internal sealed class DebugHarness
 {
+    /// <summary>调试命中的护甲变体（F8 随机命中与 <c>hit</c> 指令共用）。</summary>
+    internal enum HitVariant
+    {
+        Plain,
+        /// <summary>被挡下，带少量钝伤（实测最常见的挡下形态）。</summary>
+        Blocked,
+        /// <summary>被挡下，钝伤为 0（只有板阶段事件、没有后续）。</summary>
+        BlockedNoBlunt,
+        /// <summary>击穿护甲：身体伤害 + 护甲耐久伤害。</summary>
+        Penetrated,
+    }
+
     internal sealed class Hooks
     {
-        /// <summary>命中：headshot / armorOnly（0.6 a 护甲盾）/ 目标序号（与 <c>kill</c> 共用，累加样式下用来对上同一个目标）。</summary>
-        internal Action<bool, bool, int> Hit = (_, _, _) => { };
+        /// <summary>命中：headshot / 护甲命中变体 / 目标序号（与 <c>kill</c> 共用，累加样式下用来对上同一个目标）。</summary>
+        internal Action<bool, HitVariant, int> Hit = (_, _, _) => { };
 
         /// <summary>受击方向（0.6 e）：方位角度（0 = 正前，+ = 右，180 = 背后）/ 伤害 / 是否护甲吸收。</summary>
         internal Action<float, float, bool> Taken = (_, _, _) => { };
@@ -232,16 +247,28 @@ internal sealed class DebugHarness
                 _hooks.Backdrop(ParseBackdrop(arg1));
                 break;
 
+            case "layout":
+                // layout line | accumulate：切换伤害数字排布（会写进 cfg，脚本结尾记得切回去）
+                Plugin.Cfg.DamageTextLayout.Value = arg1.StartsWith("acc", StringComparison.OrdinalIgnoreCase)
+                    ? DamageNumberLayout.Accumulate
+                    : DamageNumberLayout.LineRight;
+                break;
+
             case "hit":
             {
                 // hit                → 普通命中（目标 1）
                 // hit head           → 爆头
-                // hit armor          → 只打中护甲（0.6 a 的盾形标记）
+                // hit armor          → 被护甲挡下（带少量钝伤）
+                // hit plate          → 零钝伤的挡下（只有护甲伤害）
+                // hit pen            → 击穿护甲（身体伤害 + 护甲伤害）
                 // hit head 3 / hit armor 3 / hit 3 → 指定测试击杀表里的目标序号（和 kill N 配对，累加样式下会对上同一个槽）
                 bool head = arg1.Equals("head", StringComparison.OrdinalIgnoreCase);
-                bool armor = arg1.Equals("armor", StringComparison.OrdinalIgnoreCase);
-                int target = head || armor ? ParseInt(t.Length > 2 ? t[2] : string.Empty, 1) : ParseInt(arg1, 1);
-                _hooks.Hit(head, armor, target);
+                HitVariant variant = arg1.Equals("armor", StringComparison.OrdinalIgnoreCase) ? HitVariant.Blocked
+                    : arg1.Equals("plate", StringComparison.OrdinalIgnoreCase) ? HitVariant.BlockedNoBlunt
+                    : arg1.Equals("pen", StringComparison.OrdinalIgnoreCase) ? HitVariant.Penetrated
+                    : HitVariant.Plain;
+                int target = head || variant != HitVariant.Plain ? ParseInt(t.Length > 2 ? t[2] : string.Empty, 1) : ParseInt(arg1, 1);
+                _hooks.Hit(head, variant, target);
                 break;
             }
 

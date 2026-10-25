@@ -240,26 +240,30 @@ internal static class GameEvents
             if (!aggressorIsLocal && !victimIsLocal) return;
 
             // 攻击者方位 = 弹道来源 - 命中点（取不到时用 -Direction）。只存世界向量，主线程再换算成屏幕角度。
-            bool armorOnly = body <= 0.01f && armor > 0.01f;
             Vector3 incoming = info.MasterOrigin - info.HitPoint;
             if (incoming.sqrMagnitude < 0.01f) incoming = -info.Direction;
 
+            // 护甲结局（挡下 / 击穿）要看有没有后续事件，事件线程上判不了 —— 主线程的 PlateStageMerger 填
             var record = new HitRecord(
                 body,
                 armor,
                 IsHeadCollider(info.BodyPartColliderType),
                 victimIsLocal,
-                armorOnly,
                 SafeTargetKey(victim),
                 info.HitPoint,
                 incoming);
 
             if (Plugin.Cfg.DebugEnabled.Value)
             {
+                // plate = 板阶段（body≈0 且 armor>0）；raw = 护甲处理后的剩余伤害；
+                // blunt / blockedBy / deflectedBy 是游戏自己的标记，用来对照 ArmorHitRules 的判据（0.6.1 起 penetrated 恒为 True，已证无用）
                 Plugin.Logger.LogInfo(
                     $"[hit] victim={SafeNickname(victim)} key={record.TargetKey} body={record.BodyDamage:0.##} " +
-                    $"armor={record.ArmorDamage:0.##} total={record.TotalDamage:0.##} head={record.Headshot} " +
-                    $"armorOnly={record.ArmorOnly} collider={info.BodyPartColliderType} point={info.HitPoint} self={victimIsLocal}");
+                    $"armor={record.ArmorDamage:0.##} head={record.Headshot} " +
+                    $"plate={ArmorHitRules.IsPlateStage(body, armor)} raw={info.Damage:0.##} " +
+                    $"penetrated={info.Penetrated} blunt={info.Blunt} blockedBy={info.BlockedBy.HasValue} " +
+                    $"deflectedBy={info.DeflectedBy.HasValue} pen={info.PenetrationPower:0.##} ammoArmorDmg={info.ArmorDamage:0.##} " +
+                    $"type={info.DamageType} collider={info.BodyPartColliderType} point={info.HitPoint} self={victimIsLocal}");
             }
 
             FeedbackBus.EnqueueHit(record);

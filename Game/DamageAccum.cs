@@ -15,24 +15,31 @@ internal readonly struct DamageAccumHit
     /// <summary>目标身份（ProfileId）。null / 空串表示无法归组，模型会直接忽略这次命中。</summary>
     internal readonly string TargetKey;
 
-    /// <summary>本次命中造成的伤害。&lt;= 0 / NaN / 无限值的命中没有显示价值，模型忽略。</summary>
+    /// <summary>本次命中的身体伤害（主数字）。&lt;= 0 / NaN / 无限值按 0 处理。</summary>
     internal readonly float Damage;
+
+    /// <summary>
+    /// 本次命中的护甲耐久伤害（0.6.1：主数字上方另起一行显示；不需要这一行的调用方传 0）。
+    /// 身体伤害与护甲伤害都没有显示价值（都 &lt;= 0）的命中，模型忽略。
+    /// </summary>
+    internal readonly float ArmorDamage;
 
     /// <summary>本次是不是爆头。槽里只要有过一次爆头，整槽都按爆头配色显示。</summary>
     internal readonly bool Headshot;
 
-    /// <summary>本次是不是「只打中护甲」（没有穿透到肉体）。槽里每次都是护甲命中才算护甲槽。</summary>
-    internal readonly bool ArmorOnly;
+    /// <summary>主数字是否用护甲样式（旧「取值 = 总和」模式下，被挡下的命中整个数字都是护甲配色 + 盾标）。槽里每次都是才算。</summary>
+    internal readonly bool ArmorStyle;
 
     /// <summary>命中的 UI 时钟时刻（<c>UiClock.Now</c>）。模型自己不读时间，全部由调用方传入。</summary>
     internal readonly float Time;
 
-    internal DamageAccumHit(string targetKey, float damage, bool headshot, bool armorOnly, float time)
+    internal DamageAccumHit(string targetKey, float damage, float armorDamage, bool headshot, bool armorStyle, float time)
     {
         TargetKey = targetKey;
         Damage = damage;
+        ArmorDamage = armorDamage;
         Headshot = headshot;
-        ArmorOnly = armorOnly;
+        ArmorStyle = armorStyle;
         Time = time;
     }
 }
@@ -48,13 +55,14 @@ internal readonly struct DamageAccumHit
 /// </summary>
 internal sealed class DamageAccumSlot
 {
-    internal DamageAccumSlot(string targetKey, float damage, bool headshot, bool armorOnly, float time)
+    internal DamageAccumSlot(string targetKey, float damage, float armorDamage, bool headshot, bool armorStyle, float time)
     {
         TargetKey = targetKey;
         Damage = damage;
+        ArmorDamage = armorDamage;
         HitCount = 1;
         Headshot = headshot;
-        ArmorOnly = armorOnly;
+        ArmorStyle = armorStyle;
         Born = time;
         LastHit = time;
         Changed = true;   // 新槽出生就要让视图显影 / 弹出
@@ -63,8 +71,11 @@ internal sealed class DamageAccumSlot
     /// <summary>目标身份（ProfileId），槽的分组键。</summary>
     internal string TargetKey { get; }
 
-    /// <summary>窗口内累计的伤害总和。</summary>
+    /// <summary>窗口内累计的身体伤害总和（主数字）。</summary>
     internal float Damage { get; private set; }
+
+    /// <summary>窗口内累计的护甲耐久伤害总和（主数字上方那一行）。</summary>
+    internal float ArmorDamage { get; private set; }
 
     /// <summary>累计了几次命中。</summary>
     internal int HitCount { get; private set; }
@@ -72,8 +83,8 @@ internal sealed class DamageAccumSlot
     /// <summary>窗口内只要有过一次爆头就为 true（数字用爆头配色）。</summary>
     internal bool Headshot { get; private set; }
 
-    /// <summary>只有槽里<b>每一次</b>命中都是护甲命中时才为 true（显示护甲盾的判据）。</summary>
-    internal bool ArmorOnly { get; private set; }
+    /// <summary>只有槽里<b>每一次</b>命中都要求护甲样式时才为 true（旧「总和」模式下整个数字用护甲配色 + 盾标）。</summary>
+    internal bool ArmorStyle { get; private set; }
 
     /// <summary>是否已被 <see cref="DamageAccumModel.PromoteKill"/> 结算成击杀（变红、不再累计）。</summary>
     internal bool Kill { get; private set; }
@@ -95,12 +106,13 @@ internal sealed class DamageAccumSlot
     internal bool Changed { get; private set; }
 
     /// <summary>窗口内再命中一次：累计伤害 / 次数，刷新最后命中时刻。</summary>
-    internal void Accumulate(float damage, bool headshot, bool armorOnly, float time)
+    internal void Accumulate(float damage, float armorDamage, bool headshot, bool armorStyle, float time)
     {
         Damage += damage;
+        ArmorDamage += armorDamage;
         HitCount++;
         Headshot |= headshot;
-        ArmorOnly &= armorOnly;   // 一次打到肉体就永久失去「纯护甲」身份
+        ArmorStyle &= armorStyle;   // 一次不是护甲样式就永久失去护甲样式
         LastHit = time;
         Changed = true;
     }
@@ -128,7 +140,7 @@ internal sealed class DamageAccumSlot
 /// 战地 6 式**累加伤害数字**的模型（纯逻辑，可离线测，不引用 Unity / EFT）。
 ///
 /// 规则：同一目标（<see cref="DamageAccumHit.TargetKey"/> 相同）在窗口内连续命中，只维护**一个**槽：
-/// 伤害累计、命中次数累加、爆头取或、护甲取与（每一次都只打护甲才算护甲槽）。
+/// 身体伤害与护甲伤害分别累计、命中次数累加、爆头取或、护甲样式取与。
 /// 窗口过期或那个槽已经击杀结算 → **新槽插到最前**（<see cref="Slots"/> 最前 = 最新）。
 ///
 /// 击杀：<see cref="PromoteKill"/> 把对应槽标红（<see cref="DamageAccumSlot.Kill"/>），
@@ -165,12 +177,16 @@ internal sealed class DamageAccumModel
 
     /// <summary>
     /// 吃进一次命中。同一目标、未击杀、且距上次命中不超过 <see cref="Window"/> → 累加；
-    /// 否则新建一个槽插到最前。空 key、&lt;= 0 / NaN / 无限的伤害直接忽略。
+    /// 否则新建一个槽插到最前。空 key、身体与护甲伤害都没有显示价值（&lt;= 0 / NaN / 无限）的命中直接忽略。
     /// </summary>
     internal void Add(in DamageAccumHit hit)
     {
-        // 空 key 没法归组；非正伤害没有显示价值（!(x > 0) 顺带挡住 NaN —— NaN > 0 为 false）
-        if (string.IsNullOrEmpty(hit.TargetKey) || !(hit.Damage > 0f) || !float.IsFinite(hit.Damage)) return;
+        // 非正 / NaN / 无限的伤害按 0 处理（!(x > 0) 顺带挡住 NaN —— NaN > 0 为 false）
+        float damage = hit.Damage > 0f && float.IsFinite(hit.Damage) ? hit.Damage : 0f;
+        float armor = hit.ArmorDamage > 0f && float.IsFinite(hit.ArmorDamage) ? hit.ArmorDamage : 0f;
+
+        // 空 key 没法归组；两种伤害都没有就没有显示价值
+        if (string.IsNullOrEmpty(hit.TargetKey) || (damage <= 0f && armor <= 0f)) return;
 
         float now = hit.Time;
         for (int i = 0; i < _slots.Count; i++)
@@ -184,7 +200,7 @@ internal sealed class DamageAccumModel
             // 窗口内（含边界）→ 并进这个槽
             if (now - slot.LastHit <= Window)
             {
-                slot.Accumulate(hit.Damage, hit.Headshot, hit.ArmorOnly, now);
+                slot.Accumulate(damage, armor, hit.Headshot, hit.ArmorStyle, now);
                 return;
             }
 
@@ -193,7 +209,7 @@ internal sealed class DamageAccumModel
             break;
         }
 
-        var fresh = new DamageAccumSlot(hit.TargetKey, hit.Damage, hit.Headshot, hit.ArmorOnly, now);
+        var fresh = new DamageAccumSlot(hit.TargetKey, damage, armor, hit.Headshot, hit.ArmorStyle, now);
         _slots.Insert(0, fresh);
 
         // 上限：丢最旧的（列表尾部）。手写 while/RemoveAt，不用 LINQ（避免每帧分配）

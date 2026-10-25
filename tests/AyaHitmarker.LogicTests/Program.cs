@@ -36,6 +36,7 @@ internal static class Program
         ConfigPresentationFacts.Run();
         HitDirectionFacts.Run();
         AssistFacts.Run();
+        ArmorHitMergerFacts.Run();
 
         return Assert.Summary();
     }
