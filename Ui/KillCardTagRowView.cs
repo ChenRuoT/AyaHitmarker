@@ -23,10 +23,11 @@ internal sealed class KillCardTagRowView
     private const float DelayTag = 0f;   // 标签是 BF6 里最先出现的元素
     private const int SeedTag = 41;
 
-    private static readonly Color TagWhite = new Color(0.95f, 0.96f, 0.98f, 1f);
-    private static readonly Color TagCoral = new Color(1f, 0.478f, 0.431f, 1f);
-    private static readonly Color TagAmber = new Color(1f, 0.784f, 0.341f, 1f);
-    private static readonly Color TagSteel = new Color(0.686f, 0.769f, 0.839f, 1f);
+    // 0.7.0 起读配置（默认值与这里的常量一致）；标签每杀 Prepare 一次，所以这里只在出生时取一次。
+    private static Color TagWhite => UiTheme.Parse(Plugin.Cfg.ColorTagKill.Value, new Color(0.95f, 0.96f, 0.98f, 1f));
+    private static Color TagCoral => UiTheme.Parse(Plugin.Cfg.ColorTagHeadshot.Value, new Color(1f, 0.478f, 0.431f, 1f));
+    private static Color TagAmber => UiTheme.Parse(Plugin.Cfg.ColorTagSpecial.Value, new Color(1f, 0.784f, 0.341f, 1f));
+    private static Color TagSteel => UiTheme.Parse(Plugin.Cfg.ColorTagDistance.Value, new Color(0.686f, 0.769f, 0.839f, 1f));
 
     private struct TagView
     {
@@ -190,11 +191,11 @@ internal sealed class KillCardTagRowView
 
     private static string TagLabel(CardTagKind kind) => kind switch
     {
-        CardTagKind.Headshot => "爆头",
-        CardTagKind.Melee => "近战",
-        CardTagKind.Explosive => "爆炸",
-        CardTagKind.Sniper => "狙击",
-        _ => "击杀",
+        CardTagKind.Headshot => Loc.Pick("爆头", "Headshot"),
+        CardTagKind.Melee => Loc.Pick("近战", "Melee"),
+        CardTagKind.Explosive => Loc.Pick("爆炸", "Explosive"),
+        CardTagKind.Sniper => Loc.Pick("狙击", "Sniper"),
+        _ => Loc.Pick("击杀", "Kill"),
     };
 
     private static Color TagColor(CardTagKind kind) => kind switch

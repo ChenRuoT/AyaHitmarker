@@ -23,6 +23,16 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private readonly SoundPlayer _sound = new SoundPlayer();
     private readonly List<HitRecord> _hits = new List<HitRecord>(32);
 
+    // 0.7.0 预设：面板里选中 → 置 pending → 下一个 Update 套用（不在 ConfigurationManager 的 OnGUI 回调里批量改配置）
+    private string? _pendingPreset;
+    private Dictionary<string, string>? _presetSnapshot;   // 调试脚本的 `preset` 指令用，跑完 `preset restore` 还原
+
+    // 0.7.0 战局小结：本局累计 + 显示时机状态机（见 Game/RaidStats.cs）
+    private readonly RaidStats _stats = new RaidStats();
+    private readonly SummaryScheduler _summary = new SummaryScheduler();
+    private float _nextMenuPoll;
+    private bool _menuLoaded;
+
     // 0.6.1：一发击穿护甲的子弹会产生「板阶段 + 身体」两个事件，在这里合并；等不到后续的板阶段按挡下放行
     private readonly PlateStageMerger<HitRecord> _plateMerger = new PlateStageMerger<HitRecord>();
     private readonly List<ResolvedHit<HitRecord>> _resolvedHits = new List<ResolvedHit<HitRecord>>(32);
@@ -62,15 +72,19 @@ internal sealed class AyaBehaviour : MonoBehaviour
             // UI 时钟必须最先推进：下面的 Show / Tick 都读它
             UiClock.Advance();
 
-            // 事件源存活检查：GlobalEventDispatcher 每个 raid 一个新实例
+            // 事件源存活检查：GlobalEventDispatcher 跨局不变，战局边界以主玩家出现 / 消失为准（见 GameEvents.PollNow）
             GameEvents.Poll();
 
+            UpdateLanguage();
+
             _ui.ApplyScaleIfChanged();
+            ApplyPendingPreset();
             ReloadIfConfigurationChanged();
             HandleAudioReloadRequest();
             HandleHotkeys();
 
             DrainFeedback();
+            TickSummary();
             _ui.Tick();
             UiClock.EndFrame();
             _harness?.Tick();   // 在 UI 画完之后：此刻截图拿到的就是当前时钟下的画面
@@ -91,6 +105,112 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     private float _lastUpdateErrorTime = -999f;
 
+    // ------------------------------------------------------------------ 0.7.0 预设
+
+    /// <summary>设置面板里选了一套预设。只记下来，下一个 Update 再套用（此刻可能正在 ConfigurationManager 的 OnGUI 里）。</summary>
+    private void OnPresetSelected(object? sender, EventArgs e)
+    {
+        string value = Plugin.Cfg.StylePreset.Value;
+        if (!string.IsNullOrEmpty(value) && !string.Equals(value, Presets.None, StringComparison.Ordinal))
+            _pendingPreset = value;
+    }
+
+    private void ApplyPendingPreset()
+    {
+        if (_pendingPreset == null) return;
+        string id = _pendingPreset;
+        _pendingPreset = null;
+        ApplyPreset(id);
+    }
+
+    /// <summary>套用一套预设并让选择器回到 None。调试脚本的 <c>preset</c> 指令也走这里。</summary>
+    private void ApplyPreset(string id)
+    {
+        var preset = Presets.Find(id);
+        if (preset == null)
+        {
+            Plugin.Logger.LogWarning($"[preset] 没有叫 '{id}' 的预设（可选: {string.Join(" / ", Presets.SelectorValues())}）");
+            Plugin.Cfg.StylePreset.Value = Presets.None;
+            return;
+        }
+
+        try
+        {
+            PresetApplier.Apply(preset, Plugin.Instance.Config);
+        }
+        catch (Exception ex)
+        {
+            Plugin.Logger.LogError($"[preset] 应用 {id} 失败: {ex}");
+        }
+
+        // 选择器回到 None：这一步会再触发一次 SettingChanged，OnPresetSelected 看到 None 就忽略
+        Plugin.Cfg.StylePreset.Value = Presets.None;
+    }
+
+    // ------------------------------------------------------------------ 0.7.0 界面语言
+
+    private const float LangPollInterval = 1f;
+    private float _nextLangPoll;
+    private string? _lastLangSetting;
+    private string? _lastGameCulture;
+    private bool _cultureReadWarned;
+    private Lang _panelLang = Lang.Zh;   // 设置面板文字当前是哪种语言（Plugin.Load 里按设置的强制值先应用过一次）
+
+    /// <summary>调试脚本的 <c>lang</c> 指令强制了语言：此时不再跟随设置 / 游戏语言。</summary>
+    private bool _langForced;
+
+    /// <summary>
+    /// 约 1Hz 重新解析界面语言：设置（自动 / 中文 / English）+ 游戏当前语言（<c>LocalizationManager.Instance.Culture</c>）。
+    /// 必须在主线程读 Culture（AGENTS.md §3.4）；结果写进 <see cref="Loc.Current"/>，事件线程只读这个静态值。
+    /// 轮询而不是只读一次：<c>LocalizationManager.Instance</c> 在插件加载时多半还是空，玩家也可能中途在游戏里换语言。
+    /// </summary>
+    private void UpdateLanguage()
+    {
+        float now = Time.unscaledTime;
+        if (now < _nextLangPoll) return;
+        _nextLangPoll = now + LangPollInterval;
+        if (_langForced) return;
+
+        string setting = Plugin.Cfg.Language.Value;
+        string? culture = ReadGameCulture();
+        var lang = Loc.Resolve(setting, culture);
+
+        bool changed = lang != Loc.Current
+                       || !string.Equals(setting, _lastLangSetting, StringComparison.Ordinal)
+                       || !string.Equals(culture, _lastGameCulture, StringComparison.Ordinal);
+        Loc.Current = lang;
+        if (lang != _panelLang)
+        {
+            _panelLang = lang;
+            ConfigPanel.ApplyLanguage(lang);
+        }
+        _lastLangSetting = setting;
+        _lastGameCulture = culture;
+
+        if (changed)
+        {
+            // Culture 的实际取值格式（ch 还是 zh-CN）还没在真实环境里确认，这行日志就是为了确认它
+            Plugin.Logger.LogInfo($"[lang] 设置={setting} 游戏语言(Culture)={culture ?? "(取不到)"} → {lang}");
+        }
+    }
+
+    private string? ReadGameCulture()
+    {
+        try
+        {
+            return EFT.LocalizationManager.Instance?.Culture;
+        }
+        catch (Exception ex)
+        {
+            if (!_cultureReadWarned)
+            {
+                _cultureReadWarned = true;
+                Plugin.Logger.LogWarning($"[lang] 读取游戏语言失败（按“取不到”处理）: {ex.Message}");
+            }
+            return null;
+        }
+    }
+
     private void OnDestroy()
     {
         // 每一项独立 try/catch：任何一项失败都不能拦住后面的清理。
@@ -101,6 +221,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             GameEvents.RaidStarted -= OnRaidStarted;
             GameEvents.RaidEnded -= OnRaidEnded;
         });
+        Cleanup("presets", () => Plugin.Cfg.StylePreset.SettingChanged -= OnPresetSelected);
         Cleanup("audio-load", StopAudioLoad);
         Cleanup("audio-host", () => _sound.Shutdown());
         Cleanup("audio-bank", () => AudioBank.Invalidate(resetRetries: true));
@@ -157,6 +278,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         _lastGlowFingerprint = GlowFingerprint();
 
         Step("audio", () => StartAudioLoad());
+        Step("presets", () => Plugin.Cfg.StylePreset.SettingChanged += OnPresetSelected);
 
         var hit = Plugin.Cfg.TestHitKey.Value;
         var kill = Plugin.Cfg.TestKillKey.Value;
@@ -201,11 +323,13 @@ internal sealed class AyaBehaviour : MonoBehaviour
         Taken = (degrees, damage, armorOnly) =>
         {
             // 0.6 e：调试/验收入口，直接按给定方位角生成粒子（真实路径走 Camera 换算）
+            _stats.NoteTaken(armorOnly ? 0f : damage);
             _ui.HitDirection.ShowDebug(degrees * Mathf.Deg2Rad, damage, armorOnly);
         },
         Assist = (index, damage) =>
         {
             // 0.6 c：调试/验收入口，按测试击杀表的受害者数据生成一条助攻提示
+            _stats.NoteAssist();
             var rec = TestKills.At(index);
             _ui.AssistCards.Show(new AssistRecord(
                 rec.VictimName,
@@ -221,6 +345,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         {
             string killer = TestKills.At(index).VictimName;
             _streaks.NoteLocalDeath(UiClock.Now, NameKey.Normalize(killer));
+            _stats.NoteDeath();
         },
         Reset = () =>
         {
@@ -228,9 +353,53 @@ internal sealed class AyaBehaviour : MonoBehaviour
             _streaks.Reset();
             _assists.Reset();
             _plateMerger.Reset();
+            _stats.Reset();
+            _summary.Reset();
+        },
+        Summary = command =>
+        {
+            switch (command.ToLowerInvariant())
+            {
+                case "":
+                case "show": _ui.RaidSummaryCard.Show(_stats.Snapshot()); break;   // 立即显示当前累计
+                case "end": ScheduleSummary(); break;                                     // 走真实的「战局结束 → 等菜单 → 延迟」路径
+                case "hide": _ui.RaidSummaryCard.Reset(); break;
+                default: throw new ArgumentException($"未知小结指令: {command}（show|end|hide）");
+            }
         },
         Backdrop = color => _ui.SetBackdrop(color),
         MenuReady = IsMainMenuLoaded,
+        Preset = command =>
+        {
+            // preset <Id>      套用一套预设（会写 cfg）；第一次套用前自动记下当前值
+            // preset restore   把并集里的键还原成第一次套用前的值（验收脚本结尾必须调用，否则开发机的 cfg 被改了）
+            if (string.Equals(command, "restore", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_presetSnapshot == null)
+                {
+                    Plugin.Logger.LogInfo("[harness] preset restore：没有可还原的快照（还没套用过预设）");
+                    return;
+                }
+                int n = PresetApplier.Restore(_presetSnapshot, Plugin.Instance.Config);
+                _presetSnapshot = null;
+                Plugin.Logger.LogInfo($"[harness] preset restore：已还原 {n} 个设置");
+                return;
+            }
+
+            _presetSnapshot ??= PresetApplier.Snapshot();
+            ApplyPreset(command);
+        },
+        SetLang = mode =>
+        {
+            switch (mode.ToLowerInvariant())
+            {
+                case "zh": _langForced = true; Loc.Current = Lang.Zh; break;
+                case "en": _langForced = true; Loc.Current = Lang.En; break;
+                case "auto": _langForced = false; _nextLangPoll = 0f; break;
+                default: throw new ArgumentException($"未知语言: {mode}（zh|en|auto）");
+            }
+            Plugin.Logger.LogInfo($"[harness] lang {mode} → {Loc.Current}");
+        },
         Audio = command =>
         {
             switch (command.ToLowerInvariant())
@@ -306,6 +475,8 @@ internal sealed class AyaBehaviour : MonoBehaviour
     /// </summary>
     private void OnRaidStarted()
     {
+        _stats.Reset();
+        _summary.OnRaidStarted();
         _ui.ResetAll();
         _streaks.Reset();
         _assists.Reset();
@@ -317,11 +488,76 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     private void OnRaidEnded()
     {
+        // 小结快照必须在各种 Reset 之前拍；而 GameEvents.Poll 在 DrainFeedback 之前跑，
+        // 同一帧队列里的尾部事件（最后一发命中 / 阵亡）还没被消费，先排空再拍，否则小结会少掉本局最后几个事件。
+        try { DrainFeedback(); }
+        catch (Exception ex) { Plugin.Logger.LogWarning($"[summary] 战局结束时排空事件队列失败（小结可能少算最后几个事件）: {ex.Message}"); }
+        ScheduleSummary();
+        _stats.Reset();
+
         _ui.ResetAll();
         _streaks.Reset();
         _assists.Reset();
         _plateMerger.Reset();
         ReconProbe.Reset();
+    }
+
+    /// <summary>
+    /// 战局结束：冻结本局统计并交给调度器排队（有活动才排）。真正显示在 <see cref="TickSummary"/>：等菜单场景出现后再延迟几秒。
+    /// 一律打日志（不受诊断开关控制）：这条时序是 0.7.0 里唯一没在真实战局验证过的部分，需要证据。
+    /// </summary>
+    private void ScheduleSummary()
+    {
+        var snapshot = _stats.Snapshot();
+        bool enabled = Plugin.Cfg.RaidSummaryEnabled.Value;
+        if (enabled) _summary.OnRaidEnded(Time.unscaledTime, snapshot);
+
+        Plugin.Logger.LogInfo(
+            $"[summary] 战局结束 t={Time.unscaledTime:0.0}: kills={snapshot.Kills} 爆头击杀={snapshot.HeadshotKills} " +
+            $"伤害={snapshot.BodyDamage:0} 受击={snapshot.HitsTaken} 助攻={snapshot.Assists} 阵亡={snapshot.Deaths} " +
+            $"有活动={snapshot.HasActivity} → " +
+            (!enabled ? "已在设置里关闭，不排队" : snapshot.HasActivity ? "排队等主菜单" : "无活动（藏身处 / 空局），忽略"));
+    }
+
+    /// <summary>
+    /// 每帧推进小结调度。只有在排队时才去查主菜单场景（限频 4Hz）。
+    /// 状态变化与显示时刻都打日志，第一次真实战局靠这几行确认时序。
+    /// </summary>
+    private void TickSummary()
+    {
+        if (!_summary.IsWaiting) return;
+
+        var cfg = Plugin.Cfg;
+        if (!cfg.RaidSummaryEnabled.Value)
+        {
+            _summary.Reset();
+            return;
+        }
+
+        float now = Time.unscaledTime;
+        bool wasMenuLoaded = _menuLoaded;
+        if (now >= _nextMenuPoll)
+        {
+            _nextMenuPoll = now + 0.25f;
+            _menuLoaded = IsMainMenuLoaded();
+            if (_menuLoaded != wasMenuLoaded)
+                Plugin.Logger.LogInfo($"[summary] t={now:0.0} 主菜单场景 {(_menuLoaded ? "出现" : "缺席")}（state={_summary.State}）");
+        }
+
+        var before = _summary.State;
+        var action = _summary.Tick(now, GameEvents.InRaid, _menuLoaded, cfg.RaidSummaryDelay.Value);
+        if (_summary.State != before)
+            Plugin.Logger.LogInfo($"[summary] t={now:0.0} 状态 {before} → {_summary.State}");
+
+        if (action == SummaryAction.Show)
+        {
+            var summary = _summary.Take();
+            if (summary != null)
+            {
+                Plugin.Logger.LogInfo($"[summary] t={now:0.0} 显示小结");
+                _ui.RaidSummaryCard.Show(summary);
+            }
+        }
     }
 
     private void StartAudioLoad(bool invalidate = false)
@@ -369,6 +605,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private void ShowHitFeedback(Vector2 anchor, float body, float armor, bool headshot, ArmorOutcome outcome, string targetKey)
     {
         var cfg = Plugin.Cfg;
+        _stats.NoteHit(body, armor);
         bool blocked = outcome == ArmorOutcome.Blocked;
 
         _ui.Hitmarker.Show(anchor, headshot, blocked);
@@ -408,6 +645,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             for (int i = 0; i < _deaths.Count; i++)
             {
                 _streaks.NoteLocalDeath(now, _deaths[i].KillerKey);
+                _stats.NoteDeath();
                 if (cfg.DebugEnabled.Value)
                 {
                     Plugin.Logger.LogInfo($"[kill] 我方阵亡，凶手={_deaths[i].KillerName}（供复仇判定）");
@@ -418,7 +656,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         for (int i = 0; i < _resolvedHits.Count; i++)
         {
             var resolved = _resolvedHits[i];
-            var hit = resolved.Primary.Resolve(resolved.Body, resolved.Armor, resolved.Outcome);
+            var hit = resolved.Primary.Resolve(resolved.Body, resolved.Armor, resolved.Outcome, resolved.Headshot);
 
             if (cfg.DebugEnabled.Value && resolved.Outcome != ArmorOutcome.None)
             {
@@ -430,6 +668,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             // 自己被打：0.6 e 的受击方向指示走这条路径（不再像 v1 那样直接丢弃）
             if (hit.VictimIsLocalPlayer)
             {
+                _stats.NoteTaken(hit.BodyDamage);
                 _ui.HitDirection.Show(hit);
                 continue;
             }
@@ -471,6 +710,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
                     $"raidKills={analysis.RaidKills} ribbon={analysis.Ribbon.Title}({analysis.Ribbon.Kind}/{analysis.Ribbon.Tier})");
             }
 
+            _stats.NoteKill(analysis, kill.Headshot, kill.Distance);
             _ui.KillFeed.Show(kill, analysis);
 
             // 击杀确认：命中标记升级成红色扩散版，最新的伤害数字变红（命中事件在上面的循环里已经处理过了）
@@ -490,13 +730,16 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private void HandleAssistCandidate(in KillRecord kill)
     {
         var cfg = Plugin.Cfg;
-        if (!cfg.AssistEnabled.Value) return;
 
+        // 助攻统计（战局小结）与「要不要弹提示」是两回事：关掉助攻提示不该让小结少算助攻
         if (!_assists.TryTakeAssist(kill.VictimProfileId, UiClock.Now, cfg.AssistWindowSeconds.Value,
                 out float damage, out bool headshot))
         {
             return;
         }
+
+        _stats.NoteAssist();
+        if (!cfg.AssistEnabled.Value) return;
 
         var record = new AssistRecord(
             kill.VictimName,
@@ -524,6 +767,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             $"[debug] 判定: score={analysis.Score} streak={analysis.Streak} multi={analysis.MultiCount} " +
             $"ribbon={analysis.Ribbon.Title}");
 
+        _stats.NoteKill(analysis, rec.Headshot, rec.Distance);
         _ui.KillFeed.Show(rec, analysis);
         _ui.Hitmarker.PromoteToKill();
         _ui.DamageNumbers.PromoteToKill(rec.VictimProfileId);
@@ -704,7 +948,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             $"raidState={GameEvents.DebugState} " +
             $"droppedHits={FeedbackBus.DroppedHits} droppedKills={FeedbackBus.DroppedKills} " +
             $"font={(UiTheme.Font != null ? "ok" : "MISSING")} rankIcons={IconBank.RankIconStatus} " +
-            $"streak={_streaks.CurrentStreak} raidKills={_streaks.RaidKills} " +
+            $"streak={_streaks.CurrentStreak} raidKills={_streaks.RaidKills} lang={Loc.Current}({_lastGameCulture ?? "?"}) " +
             $"reconHits={ReconProbe.RawHitEvents} reconKills={ReconProbe.RawKillEvents} " +
             $"audioLoading={AudioBank.IsLoading} audio[{AudioBank.DebugStatus()}] " +
             $"hit={AudioBank.SourceOf(SoundKind.Hit)}");

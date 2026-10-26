@@ -23,23 +23,31 @@ internal interface IArmorSample
     bool VictimIsLocalPlayer { get; }
     float BodyDamage { get; }
     float ArmorDamage { get; }
+    bool Headshot { get; }
 }
 
 /// <summary>合并器的输出：保留下来的那条原始记录 + 合并后的伤害 + 护甲结局。</summary>
 internal readonly struct ResolvedHit<T> where T : struct, IArmorSample
 {
-    /// <summary>位置 / 方向 / 爆头等其余字段取自这条记录（有后续事件时是后续事件，即击穿后落在身体上的那一下）。</summary>
+    /// <summary>位置 / 方向等其余字段取自这条记录（有后续事件时是后续事件，即击穿后落在身体上的那一下）。</summary>
     internal readonly T Primary;
     internal readonly float Body;
     internal readonly float Armor;
     internal readonly ArmorOutcome Outcome;
 
-    internal ResolvedHit(T primary, float body, float armor, ArmorOutcome outcome)
+    /// <summary>
+    /// 合并后的爆头标志：板阶段与后续事件**任一个**打在头上就算。头盔挡板在头部碰撞体上，
+    /// 击穿后的第二个事件不保证还带着同一个碰撞体信息，只看后者会把“打穿头盔”的爆头漏掉。
+    /// </summary>
+    internal readonly bool Headshot;
+
+    internal ResolvedHit(T primary, float body, float armor, ArmorOutcome outcome, bool headshot)
     {
         Primary = primary;
         Body = body;
         Armor = armor;
         Outcome = outcome;
+        Headshot = headshot;
     }
 }
 
@@ -127,9 +135,10 @@ internal sealed class PlateStageMerger<T> where T : struct, IArmorSample
             int match = FindPending(h);
             if (match >= 0)
             {
-                float plateArmor = _pending[match].Sample.ArmorDamage;
+                T plate = _pending[match].Sample;
                 _pending.RemoveAt(match);
-                output.Add(new ResolvedHit<T>(h, body, plateArmor + armor, ArmorOutcome.Penetrated));
+                output.Add(new ResolvedHit<T>(h, body, plate.ArmorDamage + armor, ArmorOutcome.Penetrated,
+                    h.Headshot || plate.Headshot));
                 continue;
             }
 
@@ -137,7 +146,7 @@ internal sealed class PlateStageMerger<T> where T : struct, IArmorSample
                 armor <= ArmorHitRules.Epsilon ? ArmorOutcome.None
                 : ArmorHitRules.IsBlockedWithBlunt(body, armor) ? ArmorOutcome.Blocked
                 : ArmorOutcome.Penetrated;   // 只穿过软甲：单个事件里身体伤害远大于耐久伤害
-            output.Add(new ResolvedHit<T>(h, body, armor, outcome));
+            output.Add(new ResolvedHit<T>(h, body, armor, outcome, h.Headshot));
         }
 
         // 等满一个 Update 还没配上 → 零钝伤的挡下
@@ -147,7 +156,7 @@ internal sealed class PlateStageMerger<T> where T : struct, IArmorSample
             {
                 T s = _pending[i].Sample;
                 _pending.RemoveAt(i);
-                output.Add(new ResolvedHit<T>(s, 0f, s.ArmorDamage, ArmorOutcome.Blocked));
+                output.Add(new ResolvedHit<T>(s, 0f, s.ArmorDamage, ArmorOutcome.Blocked, s.Headshot));
             }
             else
             {

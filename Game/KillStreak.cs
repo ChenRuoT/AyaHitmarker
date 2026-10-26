@@ -188,15 +188,20 @@ internal readonly struct KillStreakSettings
 internal readonly struct StreakTier
 {
     internal readonly int Count;
-    internal readonly string Title;
+    internal readonly string TitleZh;
+    internal readonly string TitleEn;
     internal readonly KillAchievementTier Tier;
 
-    internal StreakTier(int count, string title, KillAchievementTier tier)
+    internal StreakTier(int count, string titleZh, string titleEn, KillAchievementTier tier)
     {
         Count = count;
-        Title = title;
+        TitleZh = titleZh;
+        TitleEn = titleEn;
         Tier = tier;
     }
+
+    /// <summary>按当前界面语言取称号（天梯是静态表，所以每次读都重新挑，切语言立即生效）。</summary>
+    internal string Title => Loc.Pick(TitleZh, TitleEn);
 }
 
 /// <summary>
@@ -215,12 +220,12 @@ internal sealed class KillStreakTracker
     /// <summary>连杀天梯：达到该连杀数时给出该称号。顺序必须按 Count 升序。</summary>
     private static readonly StreakTier[] Ladder =
     {
-        new StreakTier(3, "猎手", KillAchievementTier.Good),
-        new StreakTier(5, "狂战士", KillAchievementTier.Great),
-        new StreakTier(7, "势不可挡", KillAchievementTier.Great),
-        new StreakTier(10, "主宰", KillAchievementTier.Epic),
-        new StreakTier(15, "无双", KillAchievementTier.Epic),
-        new StreakTier(20, "战神", KillAchievementTier.Epic),
+        new StreakTier(3, "猎手", "Hunter", KillAchievementTier.Good),
+        new StreakTier(5, "狂战士", "Berserker", KillAchievementTier.Great),
+        new StreakTier(7, "势不可挡", "Unstoppable", KillAchievementTier.Great),
+        new StreakTier(10, "主宰", "Dominator", KillAchievementTier.Epic),
+        new StreakTier(15, "无双", "Peerless", KillAchievementTier.Epic),
+        new StreakTier(20, "战神", "Godlike", KillAchievementTier.Epic),
     };
 
     private readonly List<LocalDeath> _localDeaths = new List<LocalDeath>(4);
@@ -402,7 +407,7 @@ internal sealed class KillStreakTracker
         // 1. 复仇者 —— 优先级最高，它承载「刚刚就是这个人打死我」的叙事
         if (revenge)
         {
-            return new KillAchievement("复仇者", Describe(in fact), KillAchievementKind.Revenge, KillAchievementTier.Epic);
+            return new KillAchievement(Loc.Pick("复仇者", "Avenger"), Describe(in fact), KillAchievementKind.Revenge, KillAchievementTier.Epic);
         }
 
         // 2. 多杀（战地的 DOUBLE / TRIPLE KILL）
@@ -410,16 +415,19 @@ internal sealed class KillStreakTracker
         {
             string title = multiCount switch
             {
-                2 => "双杀",
-                3 => "三杀",
-                4 => "四杀",
-                5 => "五杀",
-                _ => "多杀 x" + multiCount,
+                2 => Loc.Pick("双杀", "Double Kill"),
+                3 => Loc.Pick("三杀", "Triple Kill"),
+                4 => Loc.Pick("四杀", "Quad Kill"),
+                5 => Loc.Pick("五杀", "Penta Kill"),
+                _ => Loc.Pick("多杀 x", "Multi Kill x") + multiCount,
             };
             var tier = multiCount >= 4 ? KillAchievementTier.Epic
                      : multiCount == 3 ? KillAchievementTier.Great
                      : KillAchievementTier.Good;
-            return new KillAchievement(title, $"间隔 {settings.MultiKillWindow:0.#} 秒内第 {multiCount} 杀", KillAchievementKind.MultiKill, tier);
+            string multiDetail = Loc.IsEnglish
+                ? $"Kill #{multiCount} within {settings.MultiKillWindow:0.#}s"
+                : $"间隔 {settings.MultiKillWindow:0.#} 秒内第 {multiCount} 杀";
+            return new KillAchievement(title, multiDetail, KillAchievementKind.MultiKill, tier);
         }
 
         int tierIdx = TierIndex(streak);
@@ -429,62 +437,68 @@ internal sealed class KillStreakTracker
         // 3. 掠夺者（BF6 Marauder）—— 刚好踩到天梯新档时让位给「狂战士」这类称号
         if (marauder && !freshTier)
         {
-            return new KillAchievement("掠夺者", $"第 4 杀后 {settings.MarauderWindow:0.#} 秒内再杀", KillAchievementKind.Marauder, KillAchievementTier.Great);
+            string marauderDetail = Loc.IsEnglish
+                ? $"Another kill within {settings.MarauderWindow:0.#}s of the 4th"
+                : $"第 4 杀后 {settings.MarauderWindow:0.#} 秒内再杀";
+            return new KillAchievement(Loc.Pick("掠夺者", "Marauder"), marauderDetail, KillAchievementKind.Marauder, KillAchievementTier.Great);
         }
 
         // 4. 连杀天梯（猎手 / 狂战士 / 势不可挡 …）
         if (freshTier || aboveTopTier)
         {
             var t = Ladder[tierIdx];
-            return new KillAchievement(t.Title, $"连杀 x{streak}", KillAchievementKind.Streak, t.Tier);
+            return new KillAchievement(t.Title, Loc.IsEnglish ? $"Streak x{streak}" : $"连杀 x{streak}", KillAchievementKind.Streak, t.Tier);
         }
 
         // 5. 枪手（BF6 Gunner）—— 短时间内换武器再杀
         if (gunner)
         {
-            return new KillAchievement("枪手", $"{settings.GunnerWindow:0.#} 秒内换了武器", KillAchievementKind.Gunner, KillAchievementTier.Great);
+            string gunnerDetail = Loc.IsEnglish
+                ? $"Switched weapon within {settings.GunnerWindow:0.#}s"
+                : $"{settings.GunnerWindow:0.#} 秒内换了武器";
+            return new KillAchievement(Loc.Pick("枪手", "Gunner"), gunnerDetail, KillAchievementKind.Gunner, KillAchievementTier.Great);
         }
 
         // 6. 具体情况：首领 > 神射手 > 远程 > 近战 > 爆破 > 精锐 PMC > 先锋 > 爆头
         if (fact.VictimIsBoss)
         {
-            return new KillAchievement("首领猎杀者", Describe(in fact), KillAchievementKind.BossSlayer, KillAchievementTier.Epic);
+            return new KillAchievement(Loc.Pick("首领猎杀者", "Boss Slayer"), Describe(in fact), KillAchievementKind.BossSlayer, KillAchievementTier.Epic);
         }
 
         if (fact.Headshot && fact.Distance >= settings.MarksmanDistance)
         {
-            return new KillAchievement("神射手", Describe(in fact), KillAchievementKind.Marksman, KillAchievementTier.Epic);
+            return new KillAchievement(Loc.Pick("神射手", "Marksman"), Describe(in fact), KillAchievementKind.Marksman, KillAchievementTier.Epic);
         }
 
         if (fact.Distance >= settings.LongShotDistance
             || (fact.SniperDamage && fact.Distance >= settings.LongShotDistance))
         {
-            return new KillAchievement("远程击杀", Describe(in fact), KillAchievementKind.LongShot, KillAchievementTier.Great);
+            return new KillAchievement(Loc.Pick("远程击杀", "Long Shot"), Describe(in fact), KillAchievementKind.LongShot, KillAchievementTier.Great);
         }
 
         if (fact.Melee)
         {
-            return new KillAchievement("冷兵器", Describe(in fact), KillAchievementKind.Melee, KillAchievementTier.Great);
+            return new KillAchievement(Loc.Pick("冷兵器", "Melee Kill"), Describe(in fact), KillAchievementKind.Melee, KillAchievementTier.Great);
         }
 
         if (fact.Explosive)
         {
-            return new KillAchievement("爆破专家", Describe(in fact), KillAchievementKind.Explosive, KillAchievementTier.Great);
+            return new KillAchievement(Loc.Pick("爆破专家", "Demolition Expert"), Describe(in fact), KillAchievementKind.Explosive, KillAchievementTier.Great);
         }
 
         if (fact.VictimIsPmc && fact.VictimLevel >= settings.EliteLevel)
         {
-            return new KillAchievement("精锐猎杀", Describe(in fact), KillAchievementKind.EliteKill, KillAchievementTier.Good);
+            return new KillAchievement(Loc.Pick("精锐猎杀", "Elite Kill"), Describe(in fact), KillAchievementKind.EliteKill, KillAchievementTier.Good);
         }
 
         if (raidKills == 1)
         {
-            return new KillAchievement("先锋", "本局首杀", KillAchievementKind.FirstBlood, KillAchievementTier.Good);
+            return new KillAchievement(Loc.Pick("先锋", "Vanguard"), Loc.Pick("本局首杀", "First kill"), KillAchievementKind.FirstBlood, KillAchievementTier.Good);
         }
 
         if (fact.Headshot)
         {
-            return new KillAchievement("爆头", Describe(in fact), KillAchievementKind.Headshot, KillAchievementTier.Normal);
+            return new KillAchievement(Loc.Pick("爆头", "Headshot"), Describe(in fact), KillAchievementKind.Headshot, KillAchievementTier.Normal);
         }
 
         return KillAchievement.None;

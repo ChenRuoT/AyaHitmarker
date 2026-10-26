@@ -1,0 +1,71 @@
+# 0.7 英文屏幕文字（主菜单即可，单次 13 张）
+# lang zh|en|auto：强制界面语言（不写 cfg）。屏幕文字从下一次击杀起切换。
+# 对照组：同一批击杀先出中文再出英文，逐张比对横幅 / 标签 / 部位 / 方式是否都翻了、有没有被截断。
+waitmenu 90
+log === 0.7 lang start ===
+clock manual
+bg dark
+step 1
+
+# --- 中文基线 ---
+lang zh
+reset
+kill 1
+step 0.8
+shot zh_kill1
+reset
+kill 4
+step 0.8
+shot zh_melee
+
+# --- 英文：普通 / 爆头 / 神射手 / 近战 / 首领爆炸 ---
+lang en
+reset
+kill 1
+step 0.8
+shot en_kill1
+reset
+kill 2
+step 0.8
+shot en_headshot
+reset
+kill 3
+step 0.8
+shot en_marksman
+reset
+kill 4
+step 0.8
+shot en_melee
+reset
+kill 5
+step 0.8
+shot en_boss
+
+# --- 英文：连杀（Double / Triple / 天梯）---
+reset
+kill 1
+step 0.3
+kill 2
+step 0.3
+kill 3
+step 0.8
+shot en_triple
+
+# --- 英文：复仇者 + 助攻 ---
+reset
+death 6
+kill 6
+step 0.8
+shot en_avenger
+assist 5 150
+step 0.4
+shot en_assist
+
+# --- 字形：英文模式下屏上字符不该缺字形（游戏当前语言是中文时的基线；英文游戏下需另跑一次）---
+glyphs Double Kill Triple Quad Penta Vanguard Avenger Marauder Gunner Headshot Melee Explosive Sniper Assist Raid Summary Longest Streak ×
+shot en_glyph_context
+
+lang auto
+bg off
+log === 0.7 lang done ===
+quit

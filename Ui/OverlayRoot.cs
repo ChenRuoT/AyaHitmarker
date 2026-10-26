@@ -29,6 +29,7 @@ internal sealed class OverlayRoot
     internal HitDirectionLayer HitDirection { get; } = new HitDirectionLayer();
     internal KillFeedLayer KillFeed { get; } = new KillFeedLayer();
     internal AssistCardLayer AssistCards { get; } = new AssistCardLayer();
+    internal RaidSummaryLayer RaidSummaryCard { get; } = new RaidSummaryLayer();
 
     internal bool IsReady => _root != null;
 
@@ -65,6 +66,7 @@ internal sealed class OverlayRoot
             HitDirection.Attach(_rect);
             KillFeed.Attach(_rect);
             AssistCards.Attach(_rect);
+            RaidSummaryCard.Attach(_rect);   // 最后创建 = 画在最上面
         }
 
         // 预热程序化图标（主线程同步烘焙，别留到第一次命中 / 多杀时才烘）
@@ -74,6 +76,7 @@ internal sealed class OverlayRoot
         HitDirection.Warmup();
         KillFeed.Warmup();
         AssistCards.Warmup();
+        RaidSummaryCard.Warmup();
         Plugin.Logger.LogInfo($"[icons] 程序化图标预热完成（{sw.ElapsedMilliseconds} ms）");
 
         LogCanvasGeometry();
@@ -192,6 +195,7 @@ internal sealed class OverlayRoot
         HitDirection.Reset();
         KillFeed.Reset();
         AssistCards.Reset();
+        RaidSummaryCard.Reset();
     }
 
     /// <summary>
@@ -246,5 +250,6 @@ internal sealed class OverlayRoot
         HitDirection.Tick();
         KillFeed.Tick();
         AssistCards.Tick();
+        RaidSummaryCard.Tick();
     }
 }

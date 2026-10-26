@@ -64,10 +64,14 @@ internal readonly struct HitRecord : IArmorSample
     bool IArmorSample.VictimIsLocalPlayer => VictimIsLocalPlayer;
     float IArmorSample.BodyDamage => BodyDamage;
     float IArmorSample.ArmorDamage => ArmorDamage;
+    bool IArmorSample.Headshot => Headshot;
 
-    /// <summary>用合并器的结果换掉伤害与护甲结局，其余字段（命中点 / 方向 / 爆头 …）保持不变。</summary>
-    internal HitRecord Resolve(float body, float armor, ArmorOutcome outcome)
-        => new HitRecord(body, armor, Headshot, VictimIsLocalPlayer, TargetKey, HitPoint, IncomingDirection, outcome);
+    /// <summary>
+    /// 用合并器的结果换掉伤害、护甲结局和爆头标志（板阶段与后续事件任一个打在头上就算），
+    /// 其余字段（命中点 / 方向 …）保持不变。
+    /// </summary>
+    internal HitRecord Resolve(float body, float armor, ArmorOutcome outcome, bool headshot)
+        => new HitRecord(body, armor, headshot, VictimIsLocalPlayer, TargetKey, HitPoint, IncomingDirection, outcome);
 
     /// <summary>
     /// 伤害数字的取值：<c>BodyOnly</c> = 身体伤害（护甲耐久伤害另起一行，见 <c>DamageNumberLayer</c>）；

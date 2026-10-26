@@ -68,6 +68,11 @@ public sealed class Plugin : BasePlugin
         Logger = base.Log;
         Cfg = new AyaConfig(Config);
 
+        // 界面语言：先按设置里的强制值生效（自动档要等游戏的 LocalizationManager 就绪，AyaBehaviour 约 1Hz 重新解析）。
+        // 设置面板的文字也要在这里先应用一次，否则强制 English 的用户第一次打开面板看到的还是中文。
+        Game.Loc.Current = Game.Loc.Resolve(Cfg.Language.Value, null);
+        ConfigPanel.ApplyLanguage(Game.Loc.Current);
+
         try
         {
             PluginDirectory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? string.Empty;

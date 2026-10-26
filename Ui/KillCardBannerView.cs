@@ -17,7 +17,9 @@ internal sealed class KillCardBannerView
 {
     private const float EmblemGap = 6f;
     private const float AccentWidth = 4f;
-    private const int MaxBannerDetailChars = 7;
+    // 横幅里只放距离 / 「连杀 x5」/「本局首杀」这种短详情；解释性的长句（「第 4 杀后 8 秒内再杀」）会被丢掉。
+    // 英文同样的短详情更长（"Streak x10" = 10、"First kill" = 10），所以上限放宽到 10。
+    private static int MaxBannerDetailChars => Loc.Pick(7, 10);
 
     private const float DelayBanner = 0.10f;
     private const float DelayEmblem = 0.14f;

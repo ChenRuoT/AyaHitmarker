@@ -18,13 +18,15 @@ internal static class ArmorHitMergerFacts
         public bool VictimIsLocalPlayer { get; }
         public float BodyDamage { get; }
         public float ArmorDamage { get; }
+        public bool Headshot { get; }
 
-        internal Sample(string key, float body, float armor, bool self = false)
+        internal Sample(string key, float body, float armor, bool self = false, bool head = false)
         {
             TargetKey = key;
             VictimIsLocalPlayer = self;
             BodyDamage = body;
             ArmorDamage = armor;
+            Headshot = head;
         }
     }
 
@@ -97,6 +99,37 @@ internal static class ArmorHitMergerFacts
             Assert.Near(40f, o4[0].Armor, 1e-6, "护甲伤害保留");
             Assert.Equal(0, m4.PendingCount, "放行后清空");
             Assert.Equal(0, Run1(m4).Count, "不会重复放行");
+        }
+
+        Assert.Suite("板阶段合并: 爆头标志取两段的或");
+        {
+            // 打穿头盔：板阶段落在头部碰撞体上，后续事件不保证还带着同样的碰撞体信息
+            var m = new PlateStageMerger<Sample>();
+            var o = Run1(m, new Sample("H", 0f, 48f, head: true), new Sample("H", 35f, 0f, head: false));
+            Assert.True(o[0].Headshot, "板阶段是爆头、后续事件不是 → 合并后仍是爆头");
+
+            var m2 = new PlateStageMerger<Sample>();
+            var o2 = Run1(m2, new Sample("H", 0f, 48f, head: false), new Sample("H", 35f, 0f, head: true));
+            Assert.True(o2[0].Headshot, "后续事件是爆头 → 爆头");
+
+            var m3 = new PlateStageMerger<Sample>();
+            var o3 = Run1(m3, new Sample("H", 0f, 48f), new Sample("H", 35f, 0f));
+            Assert.False(o3[0].Headshot, "两段都不是爆头 → 不是爆头");
+
+            // 单个事件、零钝伤挡下（等满一帧放行）都原样带着自己的标志
+            var m4 = new PlateStageMerger<Sample>();
+            Assert.True(Run1(m4, new Sample("S", 30f, 0f, head: true))[0].Headshot, "无护甲的单个爆头事件");
+            Assert.False(Run1(m4, new Sample("S", 30f, 0f))[0].Headshot, "无护甲的非爆头事件");
+            Run1(m4, new Sample("B", 0f, 40f, head: true));
+            var released = Run1(m4);
+            Assert.True(released[0].Headshot, "零钝伤挡下放行时保留爆头标志");
+
+            // 别的目标的爆头不能串到我这个目标上
+            var m5 = new PlateStageMerger<Sample>();
+            var o5 = Run1(m5, new Sample("A", 0f, 50f, head: true), new Sample("B", 40f, 0f), new Sample("A", 30f, 0f));
+            Assert.Equal(2, o5.Count, "A 的板阶段被 A 的后续事件接上，B 单独出");
+            Assert.False(o5[0].Headshot, "B 的事件不带 A 的爆头");
+            Assert.True(o5[1].Headshot, "A 合并后保留板阶段的爆头");
         }
 
         Assert.Suite("板阶段合并: 单个事件的分类");

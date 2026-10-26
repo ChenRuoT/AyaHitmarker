@@ -243,11 +243,14 @@ internal static class GameEvents
             Vector3 incoming = info.MasterOrigin - info.HitPoint;
             if (incoming.sqrMagnitude < 0.01f) incoming = -info.Direction;
 
+            // 爆头：不能看 info.BodyPartColliderType（子弹命中时恒为 None，见 HeadshotRules），读被打中的碰撞体
+            var headSource = ReadHeadSource(info, aggressorIsLocal, out int partId, out int partColliderId, out int infoColliderId);
+
             // 护甲结局（挡下 / 击穿）要看有没有后续事件，事件线程上判不了 —— 主线程的 PlateStageMerger 填
             var record = new HitRecord(
                 body,
                 armor,
-                IsHeadCollider(info.BodyPartColliderType),
+                headSource != HeadSource.None,
                 victimIsLocal,
                 SafeTargetKey(victim),
                 info.HitPoint,
@@ -259,7 +262,8 @@ internal static class GameEvents
                 // blunt / blockedBy / deflectedBy 是游戏自己的标记，用来对照 ArmorHitRules 的判据（0.6.1 起 penetrated 恒为 True，已证无用）
                 Plugin.Logger.LogInfo(
                     $"[hit] victim={SafeNickname(victim)} key={record.TargetKey} body={record.BodyDamage:0.##} " +
-                    $"armor={record.ArmorDamage:0.##} head={record.Headshot} " +
+                    $"armor={record.ArmorDamage:0.##} head={record.Headshot} headSrc={headSource} " +
+                    $"part={partId} partCol={partColliderId} infoCol={infoColliderId} " +
                     $"plate={ArmorHitRules.IsPlateStage(body, armor)} raw={info.Damage:0.##} " +
                     $"penetrated={info.Penetrated} blunt={info.Blunt} blockedBy={info.BlockedBy.HasValue} " +
                     $"deflectedBy={info.DeflectedBy.HasValue} pen={info.PenetrationPower:0.##} ammoArmorDmg={info.ArmorDamage:0.##} " +
@@ -274,26 +278,73 @@ internal static class GameEvents
         }
     }
 
+    // 本机玩家打出的子弹命中里，读到了 / 没读到被击中部位的次数（只在事件线程上改，诊断用，不需要原子）
+    private static int _partReadable;
+    private static int _partMissing;
+    private static bool _partMissingWarned;
+    private static bool _partFailureWarned;
+
+    /// <summary>本机子弹命中累计这么多次、且一次都没读到过被击中部位，就告警一次（说明 HittedBallisticCollider 路线不通）。</summary>
+    private const int PartMissingWarnThreshold = 30;
+
     /// <summary>
-    /// <c>GlobalEventDispatcher.OnBeingHit</c> 不带 <c>EBodyPart</c>，只有 <c>DamageInfo</c>，
-    /// 所以爆头靠 <c>BodyPartColliderType</c> 判定。
-    /// 头部相关的 collider 共 8 个：HeadCommon / ParietalHead / BackHead / Ears / Eyes / Jaw / NeckFront / NeckBack。
+    /// <c>GlobalEventDispatcher.OnBeingHit</c> 不带 <c>EBodyPart</c>，只有 <c>DamageInfo</c>。
+    /// 它自己的 <c>BodyPartColliderType</c> 在子弹命中时恒为 None（<c>BodyPartCollider.ApplyHit</c> 之后才写，事件更早），
+    /// 所以改读 <c>HittedBallisticCollider</c>：<c>Shot</c> 建 <c>DamageInfo</c> 时带进来的、被打中的碰撞体，
+    /// 身体命中时它就是 <c>BodyPartCollider</c>，字段 <c>BodyPartType</c> 与击杀事件里的 <c>EBodyPart</c> 是同一个枚举。
+    /// 只是读托管对象的字段，不调 Unity API，事件线程上安全；任何异常都当“读不到”处理。
+    /// 判定规则在纯逻辑的 <see cref="HeadshotRules"/>（可离线测）。
     /// </summary>
-    private static bool IsHeadCollider(EBodyPartColliderType t)
+    private static HeadSource ReadHeadSource(
+        DamageInfo info, bool aggressorIsLocal, out int bodyPart, out int ballisticCollider, out int infoCollider)
     {
-        switch (t)
+        infoCollider = (int)info.BodyPartColliderType;
+        bodyPart = HeadshotRules.Unavailable;
+        ballisticCollider = HeadshotRules.Unavailable;
+
+        try
         {
-            case EBodyPartColliderType.HeadCommon:
-            case EBodyPartColliderType.ParietalHead:
-            case EBodyPartColliderType.BackHead:
-            case EBodyPartColliderType.Ears:
-            case EBodyPartColliderType.Eyes:
-            case EBodyPartColliderType.Jaw:
-            case EBodyPartColliderType.NeckFront:
-            case EBodyPartColliderType.NeckBack:
-                return true;
-            default:
-                return false;
+            var part = info.HittedBallisticCollider?.TryCast<BodyPartCollider>();
+            if (part != null)
+            {
+                bodyPart = (int)part.BodyPartType;
+                ballisticCollider = (int)part.BodyPartColliderType;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!_partFailureWarned)
+            {
+                _partFailureWarned = true;
+                Plugin.Logger.LogWarning($"[hit] 读取被击中部位失败（之后静默，按“读不到”处理）: {ex.Message}");
+            }
+        }
+
+        NoteHitPartReadability(info, aggressorIsLocal, bodyPart >= 0);
+        return HeadshotRules.Classify(bodyPart, ballisticCollider, infoCollider);
+    }
+
+    /// <summary>
+    /// 自检：本机子弹命中一直读不到部位 = 这条路在这个游戏版本上不通，命中级爆头会静默失效。
+    /// 与其让它像 0.6.1 以前那样悄悄坏掉，不如读到第一次成功就当没事，攒够 N 次全失败就告警一次。
+    /// </summary>
+    private static void NoteHitPartReadability(DamageInfo info, bool aggressorIsLocal, bool readable)
+    {
+        if (!aggressorIsLocal || (info.DamageType & EDamageType.Bullet) == 0) return;
+
+        if (readable)
+        {
+            _partReadable++;
+            return;
+        }
+
+        _partMissing++;
+        if (_partReadable == 0 && _partMissing >= PartMissingWarnThreshold && !_partMissingWarned)
+        {
+            _partMissingWarned = true;
+            Plugin.Logger.LogWarning(
+                $"[hit] 本机已打出 {_partMissing} 次子弹命中，全部读不到被击中部位（HittedBallisticCollider 为空或不是 BodyPartCollider）——" +
+                "命中级爆头不会生效；击杀级爆头不受影响。请打开诊断日志，看 [hit] 行的 part= / partCol= 字段。");
         }
     }
 

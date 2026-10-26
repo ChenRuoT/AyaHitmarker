@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using AyaHitmarker.Game;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -11,6 +12,8 @@ namespace AyaHitmarker;
 internal sealed class ConfigurationManagerAttributes
 {
     public string? Category;
+    public string? DispName;       // 0.7.0：非 null 时覆盖面板上的显示名（英文界面用）；null = 显示 cfg 键名（中文）
+    public string? Description;    // 0.7.0：非 null 时覆盖说明文字；null = 用 ConfigDescription 里的中文说明
     public int? Order;
     public bool? IsAdvanced;
     public bool? Browsable;
@@ -21,6 +24,53 @@ internal sealed class ConfigurationManagerAttributes
 
 internal static class ConfigPanel
 {
+    /// <summary>
+    /// 0.7.0：属性名（<c>nameof(AyaConfig.X)</c>）→ 配置项。预设套用时按名字找条目，
+    /// 不用对 190 个属性做反射。<c>AyaConfig</c> 构造函数开头清空（热重载每代是新的 ConfigFile）。
+    /// </summary>
+    internal static readonly Dictionary<string, ConfigEntryBase> Entries = new Dictionary<string, ConfigEntryBase>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 0.7.0 英文面板：每个条目的可变展示元数据。<c>ConfigurationManagerAttributes</c> 是 ConfigDescription 的 tag，
+    /// 面板每次打开时重读它的字段，所以运行时改 <c>DispName / Description / Category</c> 就能切换语言（重新打开面板后生效）。
+    /// </summary>
+    private sealed class Meta
+    {
+        internal ConfigurationManagerAttributes Attr = null!;
+        internal string ZhCategory = string.Empty;
+        internal string Section = string.Empty;
+        internal bool IsColor;
+        internal bool HasNumericRange;
+    }
+
+    private static readonly Dictionary<string, Meta> Metas = new Dictionary<string, Meta>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 切换设置面板文字的语言。中文 = 清空覆盖字段（显示 cfg 键名与 Bind 时写下的中文说明，也就是 0.6 的样子）；
+    /// 英文 = 用 <see cref="ConfigTextEn"/> 覆盖显示名 / 说明 / 分类。cfg 文件本身一个字都不变。
+    /// </summary>
+    internal static void ClearMeta() => Metas.Clear();
+
+    internal static void ApplyLanguage(Lang lang)
+    {
+        foreach (var (name, meta) in Metas)
+        {
+            var attr = meta.Attr;
+            if (lang == Lang.En)
+            {
+                attr.DispName = ConfigTextEn.Name(name);
+                attr.Description = ConfigTextEn.Compose(name, meta.Section, meta.IsColor, meta.HasNumericRange);
+                attr.Category = ConfigTextEn.Category(meta.ZhCategory);
+            }
+            else
+            {
+                attr.DispName = null;
+                attr.Description = null;
+                attr.Category = meta.ZhCategory;
+            }
+        }
+    }
+
     private readonly record struct Presentation(string Category, int Order, bool Advanced);
     private static Presentation For(string name) => name switch
     {
@@ -76,6 +126,12 @@ internal static class ConfigPanel
         "HitDirectionColorNormal" => new("11. 受击方向", 977, false),
         "HitDirectionColorHeavy" => new("11. 受击方向", 976, false),
         "HitDirectionHeavyDamage" => new("11. 受击方向", 975, false),
+        "RaidSummaryEnabled" => new("12. 战局小结", 999, false),
+        "RaidSummaryDuration" => new("12. 战局小结", 998, false),
+        "RaidSummaryDelay" => new("12. 战局小结", -1, true),
+        "RaidSummaryOffsetX" => new("12. 战局小结", -2, true),
+        "RaidSummaryOffsetY" => new("12. 战局小结", -3, true),
+        "RaidSummaryFontSize" => new("12. 战局小结", -4, true),
         "DamageTextEnabled" => new("20. 伤害数字", 999, false),
         "DamageTextMode" => new("20. 伤害数字", 998, false),
         "DamageTextSize" => new("20. 伤害数字", 997, false),
@@ -143,6 +199,7 @@ internal static class ConfigPanel
         "ShowKillDetails" => new("30. 击杀卡片 · 内容", 987, false),
         "ShowKillMethod" => new("30. 击杀卡片 · 内容", 986, false),
         "ShowBossName" => new("30. 击杀卡片 · 内容", 985, false),
+        "NameTransliterate" => new("30. 击杀卡片 · 内容", 983, false),
         "AssistEnabled" => new("30. 击杀卡片 · 内容", 984, false),
         "AssistWindowSeconds" => new("30. 击杀卡片 · 内容", -30, true),
         "AssistNoticeDuration" => new("30. 击杀卡片 · 内容", -31, true),
@@ -161,6 +218,13 @@ internal static class ConfigPanel
         "ColorRAIDER" => new("32. 击杀卡片 · 配色", -17, true),
         "ColorRouges" => new("32. 击杀卡片 · 配色", -18, true),
         "ColorSectant" => new("32. 击杀卡片 · 配色", -19, true),
+        "ColorCardNormal" => new("32. 击杀卡片 · 配色", -20, true),
+        "ColorCardHeadshot" => new("32. 击杀卡片 · 配色", -21, true),
+        "ColorBannerFill" => new("32. 击杀卡片 · 配色", -22, true),
+        "ColorTagKill" => new("32. 击杀卡片 · 配色", -23, true),
+        "ColorTagHeadshot" => new("32. 击杀卡片 · 配色", -24, true),
+        "ColorTagSpecial" => new("32. 击杀卡片 · 配色", -25, true),
+        "ColorTagDistance" => new("32. 击杀卡片 · 配色", -26, true),
         "EnableRingEffect" => new("40. 击杀图标特效", 999, false),
         "RingHeadshotEnabled" => new("40. 击杀图标特效", 998, false),
         "RingEffectDelay" => new("40. 击杀图标特效", -3, true),
@@ -211,6 +275,8 @@ internal static class ConfigPanel
         "SoundSpatialMode" => new("90. 调试与排障", -7, true),
         "SoundBypassEffects" => new("90. 调试与排障", -8, true),
         "SoundIgnoreListenerPause" => new("90. 调试与排障", -9, true),
+        "Language" => new("00. 常用与整体界面", 1000, false),
+        "StylePreset" => new("00. 常用与整体界面", 1001, false),
         "UiScale" => new("00. 常用与整体界面", 999, false),
         "UiSortingOrder" => new("00. 常用与整体界面", -2, true),
         "UiFontName" => new("00. 常用与整体界面", 997, false),
@@ -259,8 +325,19 @@ internal static class ConfigPanel
         if (section == "3. 击杀信息") hint += " 样式调整在下一次击杀时完整生效。";
         if (name.StartsWith("SoundFile", StringComparison.Ordinal))
             hint += " 更换路径后在下一局开始时重新加载，或重启游戏。";
-        if (range != null) hint += " 超出范围的输入会自动限制在允许范围内。";
-        return cfg.Bind(section, key, defaultValue, new ConfigDescription(hint, range, attributes));
+        // 候选值列表（语言）没有“范围”可言，这句只对数值范围有意义
+        if (range is AcceptableValueRange<float> or AcceptableValueRange<int>) hint += " 超出范围的输入会自动限制在允许范围内。";
+        var entry = cfg.Bind(section, key, defaultValue, new ConfigDescription(hint, range, attributes));
+        Entries[name] = entry;
+        Metas[name] = new Meta
+        {
+            Attr = attributes,
+            ZhCategory = presentation.Category,
+            Section = section,
+            IsColor = defaultValue is string colorDefault && colorDefault.StartsWith("#", StringComparison.Ordinal),
+            HasNumericRange = range is AcceptableValueRange<float> or AcceptableValueRange<int>,
+        };
+        return entry;
     }
 
     private static string Hint(string name, string key) => name switch
@@ -332,7 +409,7 @@ internal static class ConfigPanel
                 entry.BoxedValue = hex;
                 input = (hex, hex);
             }
-            if (!TryColor(input.Text, out _)) GUILayout.Label("未保存：需6/8位HEX");
+            if (!TryColor(input.Text, out _)) GUILayout.Label(Loc.Pick("未保存：需6/8位HEX", "Not saved: needs 6 or 8 hex digits"));
             ColorInputs[entry] = input;
         }
         finally { GUILayout.EndHorizontal(); }
@@ -363,7 +440,7 @@ internal static class ConfigPanel
                     entry.BoxedValue = input.Saved;
                 }
             }
-            if (!FiniteNumber(input.X) || !FiniteNumber(input.Y)) GUILayout.Label("未保存：请输入数字");
+            if (!FiniteNumber(input.X) || !FiniteNumber(input.Y)) GUILayout.Label(Loc.Pick("未保存：请输入数字", "Not saved: enter numbers"));
             OffsetInputs[entry] = input;
         }
         finally { GUILayout.EndHorizontal(); }

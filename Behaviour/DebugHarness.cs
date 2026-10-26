@@ -33,6 +33,9 @@ namespace AyaHitmarker.Behaviour;
 /// audio status           # 输出加载状态
 /// audio hit              # 播放音效（hit|head|kill|killhead），UI 截图指令仍保持静音
 /// reset                  # 重置 UI 与连杀状态
+/// preset <Id>|restore   # 套用一套预设（None|Default|Legacy|Minimal|HighContrast|Tactical|…）；会写 cfg，第一次套用前记下当前值，脚本结尾必须 `preset restore`
+/// summary [show|end|hide] # 战局小结：show（默认）= 立即显示当前累计；end = 走真实的「战局结束 → 等主菜单 → 延迟」调度路径；hide = 收起
+/// lang zh|en|auto        # 强制界面语言（不写 cfg；auto = 恢复跟随设置 / 游戏语言）。屏幕文字从下一次击杀起切换
 /// glyphs 击杀爆头         # 检查这些字符在当前 UI 字体（含回退链）里有没有字形，缺的会渲染成方块
 /// watch                  # 脚本最后一条：不退出，持续监听 &lt;shots&gt;/cmd.txt，读到就把里面的指令追加执行并删掉文件（遥控模式）
 /// log 文字               # 往日志里写一行（脚本里做标记用）
@@ -71,6 +74,15 @@ internal sealed class DebugHarness
         internal Action<int> Kill = _ => { };
         internal Action<int> Death = _ => { };
         internal Action<string> Audio = _ => { };
+
+        /// <summary>预设（0.7.0）：预设 id 或 restore。</summary>
+        internal Action<string> Preset = _ => { };
+
+        /// <summary>战局小结（0.7.0）：show / end / hide。</summary>
+        internal Action<string> Summary = _ => { };
+
+        /// <summary>强制界面语言（0.7.0）：zh / en / auto。</summary>
+        internal Action<string> SetLang = _ => { };
         internal Action Reset = () => { };
         internal Action<Color?> Backdrop = _ => { };
 
@@ -307,6 +319,18 @@ internal sealed class DebugHarness
 
             case "reset":
                 _hooks.Reset();
+                break;
+
+            case "lang":
+                _hooks.SetLang(arg1);
+                break;
+
+            case "summary":
+                _hooks.Summary(arg1);
+                break;
+
+            case "preset":
+                _hooks.Preset(arg1);
                 break;
 
             case "shot":

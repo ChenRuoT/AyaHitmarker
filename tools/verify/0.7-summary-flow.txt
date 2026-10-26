@@ -1,0 +1,26 @@
+# 0.7 战局小结的调度路径（主菜单即可，约 55 秒真实时间，2 张截图）
+# `summary end` 走真实的 ScheduleSummary → SummaryScheduler → TickSummary：
+# 主菜单场景一直在（从没「缺席」过），所以走的是「战局结束超过 40 秒 → 兜底放行 → 再等 3 秒延迟 → 显示」那条分支。
+# 看日志里的 [summary] 行：Pending → Armed → 显示小结，时间点应分别约在 t0 / t0+40 / t0+43。
+# 用自动时钟（调度器读真实时间，淡入也要真实时间走）。
+waitmenu 90
+log === 0.7 summary flow start ===
+clock auto
+bg dark
+reset
+kill 1
+step 0.1
+hit head 1
+wait 5
+summary end
+log summary end 已触发，等待兜底放行（约 40 秒）
+wait 20
+shot flow_pending
+wait 20
+wait 6
+shot flow_shown
+wait 6
+shot flow_after
+bg off
+log === 0.7 summary flow done ===
+quit

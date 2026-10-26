@@ -1,0 +1,66 @@
+# 0.7 预设验收 B：旧项目 8 套配色，单次 9 张（第 1 张是默认对照）
+# 这 8 套只改环形特效 / 辉光 / 骷髅大小 / 名字·阵营·详情·得分颜色，所以一张击杀卡片（环形特效走到一半）就能看出差别。
+waitmenu 90
+log === 0.7 presets B start ===
+clock manual
+bg dark
+step 1
+
+preset Default
+reset
+kill 3
+step 0.25
+shot pb_00_default
+
+preset Tactical
+reset
+kill 3
+step 0.25
+shot pb_01_tactical
+
+preset Operator
+reset
+kill 3
+step 0.25
+shot pb_02_operator
+
+preset Bloodbath
+reset
+kill 3
+step 0.25
+shot pb_03_bloodbath
+
+preset Headhunter
+reset
+kill 3
+step 0.25
+shot pb_04_headhunter
+
+preset Slick
+reset
+kill 3
+step 0.25
+shot pb_05_slick
+
+preset NightOps
+reset
+kill 3
+step 0.25
+shot pb_06_nightops
+
+preset Inferno
+reset
+kill 3
+step 0.25
+shot pb_07_inferno
+
+preset Plague
+reset
+kill 3
+step 0.25
+shot pb_08_plague
+
+preset restore
+bg off
+log === 0.7 presets B done ===
+quit

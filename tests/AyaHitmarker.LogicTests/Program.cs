@@ -37,6 +37,13 @@ internal static class Program
         HitDirectionFacts.Run();
         AssistFacts.Run();
         ArmorHitMergerFacts.Run();
+        HeadshotFacts.Run();
+        LocFacts.Run();
+        NameTranslitFacts.Run();
+        ColorVisionFacts.Run();
+        RaidStatsFacts.Run();
+        PresetFacts.Run();
+        ConfigTextFacts.Run();
 
         return Assert.Summary();
     }

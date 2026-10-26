@@ -1,0 +1,46 @@
+# 0.7 连杀缎带实机渲染（主菜单即可，单次 5 张）
+# 真实战局里很难见到「连杀」缎带：连杀 = 相邻两杀间隔 ≤ 10s（`连杀时间窗口`），但间隔 ≤ 2.5s 会被算成「多杀」，
+# 而多杀的优先级高于连杀天梯。所以要触发「猎手 / 狂战士」，必须是 2.5s < 间隔 ≤ 10s 的三连 / 五连。
+# 这里每 3 秒一杀（脚本时钟精确控制）：第 2 杀 = 枪手（换武器），第 3 杀 = 猎手（连杀 3），第 5 杀 = 狂战士（连杀 5），
+# 第 6 杀 = 掠夺者（第 4 杀后 8 秒内再杀）。卡片停留 4.2s > 3s，所以这些杀会累加在同一张卡上。
+waitmenu 90
+log === 0.7 streak start ===
+clock manual
+bg dark
+step 1
+reset
+
+kill 1
+step 3
+kill 2
+step 0.9
+shot st2_gunner
+step 2.1
+kill 3
+step 0.9
+shot st3_hunter
+step 2.1
+kill 4
+step 3
+kill 5
+step 0.9
+shot st5_berserker
+step 2.1
+kill 6
+step 0.9
+shot st6_marauder
+
+# 对照：连续快速按（间隔 < 2.5s）= 多杀，多杀压过连杀天梯，不会出猎手 / 狂战士
+reset
+step 1
+kill 1
+step 1
+kill 2
+step 1
+kill 3
+step 0.9
+shot multi3_not_hunter
+
+bg off
+log === 0.7 streak done ===
+quit

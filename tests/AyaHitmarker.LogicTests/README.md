@@ -5,7 +5,7 @@
 ```powershell
 cd D:\EFTdev\dev\AyaHitmarker
 dotnet run --project tests/AyaHitmarker.LogicTests
-# 全部通过 → ALL PASS (616 checks)，退出码 0
+# 全部通过 → ALL PASS (1185 checks)，退出码 0
 # 有失败   → 逐条打印 expected/actual，退出码 1
 
 # 把程序化图标渲染成 PNG 联系表，肉眼检查（不用进游戏）
@@ -25,7 +25,14 @@ dotnet run --project tests/AyaHitmarker.LogicTests -- --render-hitdir D:\somewhe
 |---|---|
 | `Game/KillStreak.cs` | 连杀 / 成就判定引擎 + 得分公式 |
 | `Game/NameKey.cs` | 昵称归一化（复仇者判定靠它把「同一个人」对上） |
-| `Game/BodyPartNames.cs` | 命中部位 → 中文名 |
+| `Game/BodyPartNames.cs` | 命中部位 → 显示名（中 / 英） |
+| `Game/HeadshotRules.cs` | 命中级爆头判定：被打中的部位 / 碰撞体编号 / `DamageInfo` 自带字段的优先级（数值取自 dump.cs） |
+| `Game/Loc.cs` | 界面语言：设置 + 游戏语言 → 实际语言、`Pick` |
+| `Game/NameTranslit.cs` | 西里尔昵称 → 拉丁字母（仅显示） |
+| `Game/ColorVision.cs` | 色觉缺陷模拟（Machado 2009）+ CIELAB ΔE76，给高对比预设的对比度断言用 |
+| `Game/RaidStats.cs` | 战局小结：累计口径 / 快照 / 文案行 / `SummaryScheduler` 显示时机状态机 |
+| `Game/Presets.cs` | 预设目录（12 套）：`PresetFacts` 用静态解析逐键对账 |
+| `Game/ConfigTextEn.cs` | 设置面板英文文案：`ConfigTextFacts` 对账每个键都有英文、没有 CJK、交叉引用有效 |
 | `Ui/KillCardLayout.cs` | 击杀卡片的行位置数学（行序、行间距、缺席的行不占位、内容左缘、军衔徽章位置） |
 | `Ui/KillCardModel.cs` | 卡片**累加模型**：窗口内连续击杀并到同一张卡（骷髅 / 分数 / 标签并集 / 横幅），退场与重新开卡的时间线 |
 | `Ui/GlitchMath.cs` | 战地式「故障」动效曲线：色块显影、数字滚动、闪烁熄灭、退场分组错峰 |
@@ -33,6 +40,9 @@ dotnet run --project tests/AyaHitmarker.LogicTests -- --render-hitdir D:\somewhe
 | `Ui/HitDirectionMath.cs` | 受击方向：方位角换算、收尖的二次轮廓、蜂窝点阵排布（峰尖精确指向 / 不重叠 / 纵横渐变）、伤害映射、时间线 |
 | `Game/DamageAccum.cs` | 累加伤害数字模型：同目标并槽、击杀变红并从击杀时刻重新计时、透明度时间线 |
 | `Assets/IconShapes.cs` | 程序化图标的 SDF 栅格化：骷髅（含爆头裂口）、多杀徽记、命中标记（含描边 / 粗线版）、标签框九宫格 |
+
+`ConfigSourceModel.cs`（测试工程自己的）静态解析 `AyaConfig.cs` / `ConfigPanel.cs`：键名、类型、字面量默认值、范围、面板分类。
+`AyaConfig` 依赖 BepInEx 不能离线引用，预设 / 英文面板这类「和全部配置键对账」的契约只能走这条路。
 
 `Ui/UiRow.cs`、`Ui/KillFeedLayer.cs`、`Assets/ProceduralIcons.cs` 之类碰 `UnityEngine`/`EFT` 的文件**不能**放进来
 （`ProceduralIcons` 只是把 `IconShapes` 的位图包成 Texture2D，形状本身都在可测的 `IconShapes` 里）。

@@ -3,7 +3,7 @@ using System;
 namespace AyaHitmarker.Game;
 
 /// <summary>
-/// <c>EBodyPart</c> → 中文显示名。
+/// <c>EBodyPart</c> → 显示名（中 / 英随界面语言，见 <see cref="Loc"/>）。
 ///
 /// **为什么不用游戏的本地化 API**：<c>LocalizationExtensions.Localized</c> 有一堆泛型重载，
 /// <c>Localized(part)</c> 会命中 <c>Localized&lt;TEnum&gt;(TEnum, EStringCase)</c> —— 它会用
@@ -36,22 +36,22 @@ internal static class BodyPartNames
         return s.Trim();
     }
 
-    /// <summary>成员名 → 中文。认不出返回 <c>null</c>（调用方决定怎么兜底）。</summary>
+    /// <summary>成员名 → 显示名（按当前界面语言）。认不出返回 <c>null</c>（调用方决定怎么兜底）。</summary>
     internal static string? FromMemberName(string? memberName)
     {
         if (string.IsNullOrEmpty(memberName)) return null;
 
         switch (memberName)
         {
-            case "Head": return "头部";
-            case "Chest": return "胸部";
-            case "Stomach": return "腹部";
-            case "LeftArm": return "左臂";
-            case "RightArm": return "右臂";
-            case "LeftLeg": return "左腿";
-            case "RightLeg": return "右腿";
+            case "Head": return Loc.Pick("头部", "Head");
+            case "Chest": return Loc.Pick("胸部", "Chest");
+            case "Stomach": return Loc.Pick("腹部", "Stomach");
+            case "LeftArm": return Loc.Pick("左臂", "Left Arm");
+            case "RightArm": return Loc.Pick("右臂", "Right Arm");
+            case "LeftLeg": return Loc.Pick("左腿", "Left Leg");
+            case "RightLeg": return Loc.Pick("右腿", "Right Leg");
             // AppliesDamage 用的「通用」部位（坠落 / 爆炸这类不分具体部位时用它）
-            case "Common": return "躯干";
+            case "Common": return Loc.Pick("躯干", "Torso");
             default: return null;
         }
     }
@@ -62,14 +62,14 @@ internal static class BodyPartNames
     /// </summary>
     internal static string? FromOrdinal(int ordinal) => ordinal switch
     {
-        0 => "头部",
-        1 => "胸部",
-        2 => "腹部",
-        3 => "左臂",
-        4 => "右臂",
-        5 => "左腿",
-        6 => "右腿",
-        7 => "躯干",
+        0 => Loc.Pick("头部", "Head"),
+        1 => Loc.Pick("胸部", "Chest"),
+        2 => Loc.Pick("腹部", "Stomach"),
+        3 => Loc.Pick("左臂", "Left Arm"),
+        4 => Loc.Pick("右臂", "Right Arm"),
+        5 => Loc.Pick("左腿", "Left Leg"),
+        6 => Loc.Pick("右腿", "Right Leg"),
+        7 => Loc.Pick("躯干", "Torso"),
         _ => null,
     };
 
@@ -83,6 +83,6 @@ internal static class BodyPartNames
 
         return FromMemberName(member)
             ?? FromOrdinal(ordinal)
-            ?? (member.Length > 0 ? member : "未知");
+            ?? (member.Length > 0 ? member : Loc.Pick("未知", "Unknown"));
     }
 }

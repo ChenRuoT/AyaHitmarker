@@ -20,6 +20,13 @@
     <Compile Include="../../Game/DamageAccum.cs" Link="Game/DamageAccum.cs" />
     <Compile Include="../../Game/AssistTracker.cs" Link="Game/AssistTracker.cs" />
     <Compile Include="../../Game/ArmorHitMerger.cs" Link="Game/ArmorHitMerger.cs" />
+    <Compile Include="../../Game/HeadshotRules.cs" Link="Game/HeadshotRules.cs" />
+    <Compile Include="../../Game/Loc.cs" Link="Game/Loc.cs" />
+    <Compile Include="../../Game/ColorVision.cs" Link="Game/ColorVision.cs" />
+    <Compile Include="../../Game/RaidStats.cs" Link="Game/RaidStats.cs" />
+    <Compile Include="../../Game/Presets.cs" Link="Game/Presets.cs" />
+    <Compile Include="../../Game/ConfigTextEn.cs" Link="Game/ConfigTextEn.cs" />
+    <Compile Include="../../Game/NameTranslit.cs" Link="Game/NameTranslit.cs" />
     <Compile Include="../../Ui/KillCardLayout.cs" Link="Ui/KillCardLayout.cs" />
     <Compile Include="../../Ui/KillCardModel.cs" Link="Ui/KillCardModel.cs" />
     <Compile Include="../../Ui/UiAnim.cs" Link="Ui/UiAnim.cs" />

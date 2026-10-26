@@ -188,6 +188,7 @@ internal sealed class AyaConfig
     internal ConfigEntry<bool> ShowKillDetails { get; }
     internal ConfigEntry<bool> ShowKillMethod { get; }
     internal ConfigEntry<bool> ShowBossName { get; }
+    internal ConfigEntry<bool> NameTransliterate { get; }
 
     internal ConfigEntry<int> FontSizePlayerName { get; }
     internal ConfigEntry<int> FontSizeKillDetails { get; }
@@ -205,6 +206,16 @@ internal sealed class AyaConfig
     internal ConfigEntry<string> ColorRAIDER { get; }
     internal ConfigEntry<string> ColorRouges { get; }
     internal ConfigEntry<string> ColorSectant { get; }
+
+    // 0.7.0：原来写死在 KillCardPalette / KillCardTagRowView 里的颜色。默认值与原常量一致（外观不变），
+    // 抽成配置是为了让「高对比 / 色盲友好」预设能覆盖到骷髅、横幅和标签。
+    internal ConfigEntry<string> ColorCardNormal { get; }
+    internal ConfigEntry<string> ColorCardHeadshot { get; }
+    internal ConfigEntry<string> ColorBannerFill { get; }
+    internal ConfigEntry<string> ColorTagKill { get; }
+    internal ConfigEntry<string> ColorTagHeadshot { get; }
+    internal ConfigEntry<string> ColorTagSpecial { get; }
+    internal ConfigEntry<string> ColorTagDistance { get; }
 
     // ---- 3b. 击杀图标特效 ----
     internal ConfigEntry<bool> EnableRingEffect { get; }
@@ -272,7 +283,17 @@ internal sealed class AyaConfig
     internal ConfigEntry<bool> SoundBypassEffects { get; }
     internal ConfigEntry<bool> SoundIgnoreListenerPause { get; }
 
+    // ---- 6. 战局小结（0.7.0）----
+    internal ConfigEntry<bool> RaidSummaryEnabled { get; }
+    internal ConfigEntry<float> RaidSummaryDuration { get; }
+    internal ConfigEntry<float> RaidSummaryDelay { get; }
+    internal ConfigEntry<float> RaidSummaryOffsetX { get; }
+    internal ConfigEntry<float> RaidSummaryOffsetY { get; }
+    internal ConfigEntry<int> RaidSummaryFontSize { get; }
+
     // ---- 5. 界面 ----
+    internal ConfigEntry<string> Language { get; }
+    internal ConfigEntry<string> StylePreset { get; }
     internal ConfigEntry<float> UiScale { get; }
     internal ConfigEntry<int> UiSortingOrder { get; }
     internal ConfigEntry<string> UiFontName { get; }
@@ -280,19 +301,44 @@ internal sealed class AyaConfig
 
     internal AyaConfig(ConfigFile cfg)
     {
+        ConfigPanel.Entries.Clear();
+        ConfigPanel.ClearMeta();
+
         // ---------------------------------------------------------------- 分类顺序锚点
         // ConfigurationManager 里分类的先后 = 各分类的条目在 ConfigFile 里「首次绑定」的先后：
         // 实测（19.0.0）它既不看 Order、也不按分类名排序，所以光靠 ConfigPanel 里的 Category 前缀排不出 00 → 90。
         // 这里按面板上希望的顺序（00 常用 → 10 → 11 受击方向 → 20 → 30–33 击杀卡片 → 40 → 50 → 60 音效 → 90 调试），
-        // 先绑每个分类的一个代表条目；其余条目仍在各自的小节里绑定。
+        // 先绑每个分类的一个代表条目（12 战局小结夹在 11 受击方向与 20 伤害数字之间）；其余条目仍在各自的小节里绑定。
         // 这些条目的 section / 键 / 默认值与原来完全一致，只是挪到了这里；实测已有 cfg 的值与小节顺序都不受影响。
         UiScale = ConfigPanel.Bind(cfg, nameof(UiScale), "5. 界面", "UI 缩放", 1f,
             new ConfigDescription("整体缩放命中提示 / 伤害数字 / 击杀播报。", null, new object[] { 0.5f, 3f }));
+        // 预设选择器和语言一样放在 UiScale 旁边：同属「00 常用与整体界面」，不改变分类锚点的先后。
+        // 值是稳定的英文 id（None / Default / Legacy / …）；选中后由 AyaBehaviour 在 Update 里套用，然后自动回到 None。
+        StylePreset = ConfigPanel.Bind(cfg, nameof(StylePreset), "5. 界面", "套用预设", Presets.None,
+            new ConfigDescription(
+                "一键套用一套外观预设，选中后立即生效，然后此项自动回到 None（想再套用同一套就再选一次）。" +
+                "Default = 战地 6 默认（把预设涉及的设置全部复位成默认值）；Legacy = 经典（0.3 的尺寸与配色）；Minimal = 极简；" +
+                "HighContrast = 高对比 / 色盲友好；Tactical / Operator / Bloodbath / Headhunter / Slick / NightOps / Inferno / Plague = 旧项目的 8 套配色。" +
+                "套用前会先把 cfg 备份成 com.aya.ayahitmarker.cfg.bak-preset-时间戳（保留最近 5 份）；会先复位「任一预设涉及的设置」再写入该预设的值，" +
+                "所以这些设置里你手动调过的值会被覆盖；位置偏移 / 音效 / 快捷键 / 计分规则 / 调试项永远不受影响。" +
+                "击杀卡片与受击方向从下一次击杀 / 受击起生效。",
+                new AcceptableValueList<string>(Presets.SelectorValues())));
+        // 语言放在 UiScale 旁边：同属「00 常用与整体界面」，不改变分类锚点的先后。
+        // 是字符串而不是枚举，这样面板下拉里直接显示「自动 / 中文 / English」。
+        Language = ConfigPanel.Bind(cfg, nameof(Language), "5. 界面", "语言", Loc.SettingAuto,
+            new ConfigDescription(
+                "屏幕上的横幅 / 标签 / 击杀方式，以及本设置面板的名称与说明的语言。" +
+                "自动 = 跟随游戏语言（游戏是中文就用中文，其余用 English）。设置面板的文字在重新打开面板后切换；屏幕文字从下一次击杀起切换。",
+                new AcceptableValueList<string>(Loc.SettingAuto, Loc.SettingChinese, Loc.SettingEnglish)));
         HitMarkerEnabled = ConfigPanel.Bind(cfg, nameof(HitMarkerEnabled), "1. 命中提示", "启用", true);
         HitDirectionEnabled = ConfigPanel.Bind(cfg, nameof(HitDirectionEnabled), "1. 命中提示", "受击方向指示", true,
             new ConfigDescription(
                 "受到伤害时，在屏幕中央的透明椭圆盘上、按攻击者所在方位亮起一簇规则排列的点阵（收尖的二次突起，峰尖指向攻击者）。" +
                 "护甲吸收的钝伤 = 白色，普通伤害 = 黄色，重伤 = 红色；伤害越高突起越明显。"));
+        RaidSummaryEnabled = ConfigPanel.Bind(cfg, nameof(RaidSummaryEnabled), "6. 战局小结", "启用", true,
+            new ConfigDescription(
+                "战局结束、回到主菜单后，在屏幕上显示几秒的本局统计：击杀 / 爆头击杀 / 最远一杀 / 最高连杀 / 得分 / 造成伤害 / 助攻 / 成就。" +
+                "什么都没发生的局（比如进出藏身处）不会显示。"));
         DamageTextEnabled = ConfigPanel.Bind(cfg, nameof(DamageTextEnabled), "2. 伤害数字", "启用", true);
         KillFeedEnabled = ConfigPanel.Bind(cfg, nameof(KillFeedEnabled), "3. 击杀信息", "启用", true);
         KillFeedHorizontalOffset = ConfigPanel.Bind(cfg, nameof(KillFeedHorizontalOffset), "3. 击杀信息", "水平中心偏移", 190f,
@@ -571,6 +617,10 @@ internal sealed class AyaConfig
             new ConfigDescription("显示「近战 / 爆炸 / 狙击…」这类方式标签；枪械击杀不显示（默认方式，写了只是噪音）。"));
         ShowBossName = ConfigPanel.Bind(cfg, nameof(ShowBossName), "3. 击杀信息", "显示首领名称", true,
             new ConfigDescription("首领用「Killa / Glukhar / Shturman…」代替笼统的 BOSS。"));
+        NameTransliterate = ConfigPanel.Bind(cfg, nameof(NameTransliterate), "3. 击杀信息", "昵称音译", false,
+            new ConfigDescription(
+                "把击杀卡片和助攻卡片上的西里尔字母昵称（俄语 bot 名字，如「Протасий Могила」）转成拉丁字母显示（Protasiy Mogila）。" +
+                "只影响显示；复仇判定仍用原名，不受影响。游戏字体已能显示西里尔字母，所以默认关闭。"));
 
         // 旧 cfg: 名字 18 / 详情 20
         FontSizePlayerName = ConfigPanel.Bind(cfg, nameof(FontSizePlayerName), "3. 击杀信息", "玩家名字号", 20, new ConfigDescription("", null, new object[] { 8, 48 }));
@@ -598,6 +648,22 @@ internal sealed class AyaConfig
         ColorRAIDER = ConfigPanel.Bind(cfg, nameof(ColorRAIDER), "3. 击杀信息", "颜色_RAIDER", "#FF66B2FF");
         ColorRouges = ConfigPanel.Bind(cfg, nameof(ColorRouges), "3. 击杀信息", "颜色_Rouges", "#9AA0A8FF");
         ColorSectant = ConfigPanel.Bind(cfg, nameof(ColorSectant), "3. 击杀信息", "颜色_Sectant", "#3FBF5FFF");
+
+        // 以下默认值就是 0.6.1 及以前写死的常量（冰白 / 珊瑚红 / 浅钢色 …）按 8 位量化后的十六进制，所以默认外观完全不变。
+        ColorCardNormal = ConfigPanel.Bind(cfg, nameof(ColorCardNormal), "3. 击杀信息", "骷髅颜色_普通", "#E8F0F5FF",
+            new ConfigDescription("普通击杀的骷髅，以及多杀徽记、得分闪光的颜色（战地 6 的冰白）。"));
+        ColorCardHeadshot = ConfigPanel.Bind(cfg, nameof(ColorCardHeadshot), "3. 击杀信息", "骷髅颜色_爆头", "#FF6A5EFF",
+            new ConfigDescription("爆头击杀的骷髅颜色（珊瑚红）。爆头骷髅的颅顶另有 V 形裂口，不只靠颜色区分。"));
+        ColorBannerFill = ConfigPanel.Bind(cfg, nameof(ColorBannerFill), "3. 击杀信息", "横幅底色", "#D9E0E8F7",
+            new ConfigDescription("成就横幅和助攻横条的底色（浅钢色）。横幅文字固定为深色，换底色时选浅色。"));
+        ColorTagKill = ConfigPanel.Bind(cfg, nameof(ColorTagKill), "3. 击杀信息", "标签颜色_击杀", "#F2F5FAFF",
+            new ConfigDescription("普通「击杀」标签的描边与文字颜色。"));
+        ColorTagHeadshot = ConfigPanel.Bind(cfg, nameof(ColorTagHeadshot), "3. 击杀信息", "标签颜色_爆头", "#FF7A6EFF",
+            new ConfigDescription("「爆头」标签的描边与文字颜色。"));
+        ColorTagSpecial = ConfigPanel.Bind(cfg, nameof(ColorTagSpecial), "3. 击杀信息", "标签颜色_特殊击杀", "#FFC857FF",
+            new ConfigDescription("「近战 / 爆炸 / 狙击」标签的描边与文字颜色。"));
+        ColorTagDistance = ConfigPanel.Bind(cfg, nameof(ColorTagDistance), "3. 击杀信息", "标签颜色_距离", "#AFC4D6FF",
+            new ConfigDescription("距离标签（如 87m）的描边与文字颜色。"));
 
         // ---------------------------------------------------------------- 3b. 击杀图标特效
         RingHeadshotEnabled = ConfigPanel.Bind(cfg, nameof(RingHeadshotEnabled), "3b. 击杀特效", "爆头时触发", true);
@@ -699,6 +765,21 @@ internal sealed class AyaConfig
             new ConfigDescription(
                 "Procedural（默认）= 骷髅 / 命中标记用程序化绘制，任意大小边缘干净，自带深色描边；" +
                 "CustomFiles = 沿用 Icons/ 里的 PNG（hit.png / skull.png / skull_head.png），按原样显示、不加描边。"));
+
+        // ---------------------------------------------------------------- 6. 战局小结
+        RaidSummaryDuration = ConfigPanel.Bind(cfg, nameof(RaidSummaryDuration), "6. 战局小结", "停留时长(秒)", 8f,
+            new ConfigDescription("小结显示多久（含 0.35 秒淡入和 0.6 秒淡出）。", null, new object[] { 1f, 60f }));
+        RaidSummaryDelay = ConfigPanel.Bind(cfg, nameof(RaidSummaryDelay), "6. 战局小结", "显示延迟(秒)", 3f,
+            new ConfigDescription(
+                "主菜单加载完成后再等多久才显示，让加载动画和菜单入场动画先走完。战局刚结束时游戏还在过场 / 结算界面，" +
+                "实测约 25~33 秒后菜单才可以操作，所以插件会等到菜单出现，而不是战局一结束就显示。",
+                null, new object[] { 0f, 30f }));
+        RaidSummaryOffsetX = ConfigPanel.Bind(cfg, nameof(RaidSummaryOffsetX), "6. 战局小结", "水平偏移", 0f,
+            new ConfigDescription("面板中心相对屏幕中心的水平像素数。正值向右。", null, new object[] { -2000f, 2000f }));
+        RaidSummaryOffsetY = ConfigPanel.Bind(cfg, nameof(RaidSummaryOffsetY), "6. 战局小结", "垂直偏移", 40f,
+            new ConfigDescription("面板中心相对屏幕中心的垂直像素数。正值向上。", null, new object[] { -2000f, 2000f }));
+        RaidSummaryFontSize = ConfigPanel.Bind(cfg, nameof(RaidSummaryFontSize), "6. 战局小结", "字号", 20,
+            new ConfigDescription("统计行的字号；标题比它大 4，面板尺寸随字号缩放。", null, new object[] { 10, 48 }));
 
         ApplyConfigMigration(cfg);
     }

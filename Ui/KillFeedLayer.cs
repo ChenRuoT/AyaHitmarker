@@ -221,7 +221,9 @@ internal sealed class KillFeedLayer
         _badge.Prepare(cfg, rec, _factionColor);
 
         // ---- 名字行：「阵营  名字」一行富文本 ----
-        string name = string.IsNullOrWhiteSpace(rec.VictimName) ? "Unknown" : rec.VictimName;
+        string name = string.IsNullOrWhiteSpace(rec.VictimName)
+            ? "Unknown"
+            : NameTranslit.ForDisplay(rec.VictimName, cfg.NameTransliterate.Value);
         string label = cfg.ShowBossName.Value && rec.VictimIsBoss
             ? BotTypeMapping.DisplayName(rec.Role, rec.BotType)
             : rec.BotType;

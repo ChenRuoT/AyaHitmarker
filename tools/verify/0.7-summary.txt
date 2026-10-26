@@ -1,0 +1,80 @@
+# 0.7 战局小结渲染图（主菜单即可，单次 14 张，低于 20 张上限）
+# summary [show|end|hide]：show = 立即显示当前累计；end = 走真实的「战局结束 → 等主菜单 → 延迟」调度路径
+# 数据来自测试击杀表（kill N）+ hit / assist / taken / death，和真实战局走同一套累计逻辑
+waitmenu 90
+log === 0.7 summary start ===
+clock manual
+bg dark
+step 1
+
+# --- 1. 只有一个击杀：面板应该只有「击杀」一行，没有分隔线和成就 ---
+reset
+kill 1
+step 0.2
+summary
+step 0.4
+shot sum_minimal
+summary hide
+
+# --- 2. 满配：多杀 + 爆头 + 首领 + 伤害 + 助攻 + 受击 + 阵亡，成就最多 4 行 ---
+reset
+kill 1
+step 0.1
+kill 2
+step 0.1
+kill 3
+step 0.1
+kill 5
+hit head 3
+hit pen 2
+hit armor 2
+assist 4 120
+taken 90 35
+death 1
+step 0.3
+summary
+seq sum_anim 4 0.12
+step 1
+shot sum_full
+summary hide
+
+# --- 3. 亮背景下的可读性（深色底板应该撑得住）---
+bg white
+summary
+step 0.6
+shot sum_white
+bg snow
+step 0.1
+shot sum_snow
+summary hide
+
+# --- 4. 英文 ---
+bg dark
+lang en
+reset
+kill 3
+step 0.1
+kill 4
+step 0.1
+kill 5
+hit head 3
+step 0.3
+summary
+step 0.6
+shot sum_en
+summary hide
+
+# --- 5. 淡出：时长 8s，最后 0.6s 淡出 ---
+lang zh
+summary
+step 7.6
+shot sum_fadeout_a
+step 0.3
+shot sum_fadeout_b
+step 0.5
+shot sum_gone
+
+lang auto
+bg off
+log === 0.7 summary done ===
+quit

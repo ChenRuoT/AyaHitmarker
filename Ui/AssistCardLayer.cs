@@ -61,10 +61,12 @@ internal sealed class AssistCardLayer
 
         int bannerFont = BannerFont(cfg);
         int damage = Mathf.Max(0, Mathf.RoundToInt(_record.Damage));
-        _bannerString = "助攻 +" + damage;
+        _bannerString = Loc.Pick("助攻 +", "Assist +") + damage;
         _bannerWidth = _banner.Measure(_bannerString, bannerFont, FontStyles.Bold);
 
-        string name = string.IsNullOrWhiteSpace(_record.VictimName) ? "Unknown" : _record.VictimName;
+        string name = string.IsNullOrWhiteSpace(_record.VictimName)
+            ? "Unknown"
+            : NameTranslit.ForDisplay(_record.VictimName, cfg.NameTransliterate.Value);
         string label = cfg.ShowBossName.Value && _record.VictimIsBoss
             ? BotTypeMapping.DisplayName(_record.Role, _record.BotType)
             : _record.BotType;

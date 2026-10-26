@@ -1,0 +1,78 @@
+# 0.7 预设验收 A：四套结构性预设（默认 / 经典 / 极简 / 高对比），单次 11 张
+# preset <Id>：套用预设（会写 cfg）；脚本结尾必须 `preset restore`，否则开发机上的设置被改了。
+# 每套两张：a = 命中标记 + 伤害数字 + 两簇受击方向；b = 击杀卡片（神射手：爆头骷髅 + 标签 + 成就横幅 + 环形特效中段）
+waitmenu 90
+log === 0.7 presets A start ===
+clock manual
+bg dark
+step 1
+preset Default
+reset
+
+# ---- Default：出厂外观 ----
+reset
+hit head 3
+taken 90 80
+taken 270 20 armor
+step 0.18
+shot pa_default_hit
+reset
+kill 3
+step 0.3
+shot pa_default_card
+
+# ---- Legacy：0.3 尺寸与配色 ----
+preset Legacy
+reset
+hit head 3
+taken 90 80
+taken 270 20 armor
+step 0.18
+shot pa_legacy_hit
+reset
+kill 3
+step 0.3
+shot pa_legacy_card
+
+# ---- Minimal：只剩命中标记 / 伤害数字 / 骷髅 + 得分 + 名字 ----
+preset Minimal
+reset
+hit head 3
+taken 90 80
+taken 270 20 armor
+step 0.18
+shot pa_minimal_hit
+reset
+kill 3
+step 0.3
+shot pa_minimal_card
+
+# ---- HighContrast：暗底 / 白底 / 雪地 ----
+preset HighContrast
+reset
+hit head 3
+taken 90 80
+taken 270 20 armor
+step 0.18
+shot pa_hc_hit
+reset
+kill 3
+step 0.3
+shot pa_hc_card
+bg white
+reset
+hit head 3
+taken 90 80
+taken 270 20 armor
+step 0.18
+shot pa_hc_hit_white
+bg snow
+reset
+kill 3
+step 0.3
+shot pa_hc_card_snow
+
+preset restore
+bg off
+log === 0.7 presets A done ===
+quit
