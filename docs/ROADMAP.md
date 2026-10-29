@@ -1,205 +1,134 @@
 # 路线图
 
-> 写于 2026-10-15，基线 0.5.1；2026-10-19 发布 0.5.2 / 0.5.3，2026-10-25 发布 0.6.0 / 0.6.1，2026-10-26 实现 0.7.0 并通过真实战局验收（待发布）。这是计划，不是承诺；每完成一项就在这里勾掉或改写，结论以 README 的实测记录为准。
+> 写于 2026-10-29，基线 **0.7.1**（2026-10-29）。这是计划，不是承诺。
+>
+> **这是唯一的路线图，只写还没做的事。** 一项做完：在 [README §13](../README.md) 加一行变更记录、写进 `docs/releases/<版本>.md`，
+> 然后**从这里删掉**，不在这里留「✅ 已完成」。已发布版本的进度、证据和实测结论都在 README（§4 事件源 / §6 配置 / §9 卡片设计 / §10 已知限制 / §13 变更记录）
+> 与 `docs/recon-*.md`，不要在这里重复。
+>
 > 所有条目都必须遵守 [AGENTS.md](../AGENTS.md) §3 的约束（零补丁、两个事件源、单一注入 MonoBehaviour、主线程边界、uGUI 写入纪律）。
 
 ## 现状
 
-0.6.1 已发布（2026-10-25）；**0.7.0 已实现并通过真实战局验收、待发布**（2026-10-26）：预设 / 高对比配色 / 英文界面 / 昵称音译 / 战局小结 / 命中级爆头修复。
-命中标记、伤害数字（两种排布）、战地 6 式累加击杀卡片、成就、助攻、受击方向、战局小结、音效、设置面板、配置自动升级、全自动 CI 发布。
-1185 项离线测试，DebugHarness 可脚本化逐帧截图，ScriptEngine.IL2CPP 支持热重载迭代。
+0.7.1：命中标记、伤害数字（两种排布）、战地 6 式累加击杀卡片、成就、助攻、受击方向、战局小结、12 套外观预设（含高对比 / 色盲友好）、
+中英文界面（含设置面板）、昵称音译、音效、配置自动升级、全自动 CI 发布。1239 项离线测试，DebugHarness 可脚本化逐帧截图，ScriptEngine.IL2CPP 支持热重载迭代。
 
-**规划的出发点**：两个事件源里还有大量没用上的数据。`DamageInfo` 自带 `Direction` / `MasterOrigin` / `HitNormal` /
-`Penetrated` / `BlockedBy`，`DidArmorDamage` 已在 `HitRecord` 里；`OnBeingHit` 的第二个参数就是受害者 `Player`。
-所以下面大部分新功能**不需要任何补丁**，不会碰到 §3.0 的方法体共享问题。
+0.7 的真实战局验收暴露了几件决定后续排期的事实：
 
----
+- **DebugHarness 截图并不完全确定**：0.6.1 基线第一次跑的 `card_after` 与之后两次不一致（同脚本同 DLL，像素差 1.2 万），要做截图回归必须先查清。
 
-## 0.5.2 — 收尾与首装体验（2026-10-19 已发布）
+## 已发布版本索引
 
-> 发布 **v0.5.2**（2026-10-19）。发布前补完的两项收尾（卸载清理健壮性）见本节末尾。
-
-| # | 事项 | 状态 | 结果与证据 |
+| 版本 | 日期 | 一句话 | 详情 |
 |---|---|---|---|
-| 1 | **默认设置下中文显示** | ✅ 已验证，**前提不成立，无需改默认字体** | 默认字体（游戏自带 Bender，回退链含中文）对屏上全部 114 个中文字符 **缺字形 0 个**，暗底 / 白底 18 张截图无方块。原计划「挂 YaHei 做回退」既不需要也做不到：系统字体名 → `CreateFontAsset` 对 YaHei / Arial / SimHei **全部返回 null**，`new Font(path)` 直接抛异常。实际改动：默认流程不再探测 Arial / Segoe UI（注定失败还漏对象）、失败时销毁 `Font`、启动写一行字形覆盖日志、新增 `glyphs` 指令与 `tools/verify/font-check.txt`；README FAQ / cfg 说明里「填 Microsoft YaHei」的错误建议已更正。详见 README §6「字体」 |
-| 2 | **2D 音效实机确认** | ✅ 已按「2D 不可靠」处理：默认改成 `FollowCamera3D`；`Flat2D` 本身是否出声仍待真实战局验证（可选） | 已知事实：本机 cfg 是 `空间模式 = FollowCamera3D`，所以 0.5.1「用户真实战局实测确认」是在 **3D 模式**下做的；默认的 `Flat2D` 至今没有任何战局内证据。主菜单里测不了：Meta XR Audio 在战局里接管空间音频，且菜单音乐会污染任何输出电平的读数。自动化也不合适：开一局会改动存档。**已做（你选了方案 b）**：默认改成唯一确认过的 `FollowCamera3D`，`(SoundSpatialMode, Flat2D)` 进了 `ApplyConfigMigration` 名单（`CurrentConfigVersion` 2 → 3），旧版 cfg 迁移与全新安装都已进游戏验证。想彻底关掉这条，只需某次真实战局里把空间模式切到 `Flat2D` 听一次（有没有声、什么声） |
-| 3 | **文档对齐** | ✅ | 测试数 306 → 315（README §0 / §2、tests README；AGENTS.md 本来就是 315，README §8 / §13 里的 306 是当时的历史记录，保留）；`UiTheme.Font` 注释改为实际流程；README §10 的 `VictimIsLocalPlayer` 说法更正（「我被打」在 `OnGlobalBeingHit` 里就被过滤了，要做被击提示得先放开过滤并验证 S2）；README §6 补「cfg 分组 ↔ 面板分类」对照表，并更正分组名 `4. 音效` → `4. 音频` |
-| 4 | **设置面板实机验收** | ✅ 通过，并修了一个真 bug | 用遥控模式 + 键鼠输入工具逐项验收（枚举 / 颜色 / 偏移 / 滑块 / 快捷键编辑器 / Reset / 持久化，结果见 README §14）。**发现并修复**：分类顺序不是设计的 `00 → 90`，而是绑定顺序（`90` 最前、`00` 最后）——ConfigurationManager 不看 `Order`；改成在 `AyaConfig` 构造函数最前面按期望顺序先绑每个分类的代表条目 |
-| 5 | Issue 模板 | ✅（未在 GitHub 上渲染过） | `.github/ISSUE_TEMPLATE/bug_report.yml`（插件版本 / 游戏版本 / 哪里不正常 / 现象 / 复现 / 日志 / 脱敏确认）+ `config.yml`（旧版 SPT 4.x 指向 SimpleHitMarker）。YAML 表单要推送后才能看到实际效果 |
-| 6 | 工作区清理 | ✅ | 已做：删掉空的 `y/`；`tools/verify/evidence/` 加进 `.gitignore`（README §8 本来就写明「不随源码发布」）；`.gitignore` 里本地论坛素材的两条保留；0.5.2 的全部改动已随 `e82da96` 等提交，`git status` 干净。AGENTS.md 是你有意 `.gitignore` 的本地入口，不算「脏」 |
+| 0.7.1 | 2026-10-29 | 游戏规则击杀经验 / 单调日志时间戳 / 音效恢复度量，三局经验对账零差值 | [releases/0.7.1.md](releases/0.7.1.md) |
+| 0.7.0 | 2026-10-26 | 预设 / 色盲配色 / 英文界面 / 昵称音译 / 战局小结 / 命中级爆头修复 | [releases/0.7.0.md](releases/0.7.0.md) |
+| 0.6.1 | 2026-10-25 | 修护甲命中几乎不可见（合并「板阶段 + 身体」事件，区分挡下 / 击穿） | [releases/0.6.1.md](releases/0.6.1.md) |
+| 0.6.0 | 2026-10-25 | 受击方向 / 护甲命中区分 / 累加伤害数字 / 助攻提示 / 连杀音效 | [releases/0.6.0.md](releases/0.6.0.md) |
+| 0.5.3 | 2026-10-19 | 修连续战局第 2 局起命中反馈消失（每局重绑 `OnBeingHit`，主玩家判战局边界） | [releases/0.5.3.md](releases/0.5.3.md) |
+| 0.5.2 | 2026-10-19 | 音效空间模式默认 3D、热重载迭代、字体与设置面板实机验收、分类顺序修复 | [releases/0.5.2.md](releases/0.5.2.md) |
+| 0.5.1 | 2026-10-12 | 修战局中音效数据清空后持续无声 | [releases/0.5.1.md](releases/0.5.1.md) |
+| 0.5.0 | 2026-10-12 | 设置面板分类与控件、程序化徽记、完整资源安装 ZIP、CI 自动发布 | [releases/0.5.0.md](releases/0.5.0.md) |
 
-### 0.5.2 期间新增的工具与发现（不在原计划里）
+完整变更记录（含 0.1–0.4）见 [README §13](../README.md)。
 
-- **热重载迭代**（ScriptEngine.IL2CPP）已在真实游戏里验证：14 代连续重载 0 error、多代后截图与第 1 代逐字节相同、画布不叠、Texture2D / Sprite / TMP 字体 / Font / Material 逐代增量实测为 0（修复前每代 +2 / 0 / 0 / +2 / +5）。详见 README §11。
-- **遥控模式**：`watch` 指令 + `tools/verify/send-input.ps1` + `remote.txt`，用于需要「先发输入再看画面」的交互式验证。
-- **✅ 已完成（0.5.2 发布前）**：`AyaBehaviour.OnDestroy` 的清理改为每项独立 `try`（`Cleanup(label, action)`），任一步失败只告警、不拖累画布 / 图标 / 字体 / 音频宿主的回收；并在 `OnDestroy` 末尾补一次幂等的 `GameEvents.Shutdown()`，兜住旧代次同一帧还有一次 `Update` 时 `Poll()` 重新订阅 `OnBeingHit` 的情况（`Shutdown` 自带 `_staticSubscribed` / `_lastDispatcher` 判空，可重复调用）。
+## 探查局（0.6 之前做过一次，结论）
 
----
+用打开诊断日志的版本进真实战局，回答了四个「可能做不了」的问题（探针 `Game/ReconProbe.cs`，操作说明 [recon-0.6.md](recon-0.6.md)，原始证据 [recon-findings-2026-10-19.md](recon-findings-2026-10-19.md)）：
 
-## 0.5.3 — 连续战局命中反馈修复（2026-10-19 已发布）
-
-> 发布 **v0.5.3**。探查局第一轮实测暴露的严重 bug：同一进程第 2 局起命中标记 / 命中音效整局消失（击杀反馈正常）。
-
-| 事项 | 结果与证据 |
-|---|---|
-| 根因 | `GlobalEventDispatcher` 实例在 EFT 1.2.0.0 里**跨局不变**（三连局日志里指针始终 `0x26DFE7244C0`）；游戏换局时会清掉 `OnBeingHit` 的订阅，而旧版只在启动订阅一次 → 第 2 局起收不到命中事件。旧「每局一个新实例」的判据实测推翻（README §4 / §10） |
-| 修复 | 战局边界改用 `GameWorld.MainPlayer.Profile` 出现/消失判定；**每局开局强制重绑 `OnBeingHit`**（先 `-=` 再 `+=`，幂等）。连带修正 streak / 每局击杀 / 得分 / 成就跨局累计、开局不重载音效、不清空 UI |
-| 验证 | 第二轮同一进程三连局：3 次 `raid started/ended`、逐局 `OnBeingHit 已绑定（raid started）`、第 2/3 局都有 `本局第一发 OnBeingHit`；第 2 局 99 条命中事件（此前是 0），无插件告警；315 项离线测试通过 |
+| # | 问题 | 结论 |
+|---|---|---|
+| S1 | `OnBeingHit` 里能否稳定拿到受害者 `ProfileId` | ✅ 稳定，且与击杀侧一致（第 2 局 9 个受害者逐一核对）→ 累加伤害数字 / 助攻按目标归组 |
+| S2 | 我方被打时 `OnBeingHit` 是否触发，`Direction` / `MasterOrigin` 是否可用 | ✅ 触发且方向可用 → 受击方向指示 |
+| S3 | 真实击杀经验能否读到 | ⚠️ **只能部分读**：`Kills` / `HeadShots` / `HitCount` / `CauseBodyDamage` 等战局中实时更新；**`ExpKill` / `totalSessionExp` 战局中恒为 0，死亡结算后才出现**（一局 `ExpKill=115`、`totalSessionExp=231`）；`Exp` / `ExpKillBase` / `ExpKillBodyPartBonus` / `ExpKillStreakBonus` 三局全程为 0 → **不能「读」，只能按规则自己算**（0.7.1） |
+| S4 | 游戏当前语言从哪读 | ✅ `EFT.LocalizationManager.Instance.Culture`，取值 `ch` / `en`（启动初期先是 `en`、约 1 秒后变 `ch`），见 [recon-s4-language.md](recon-s4-language.md) |
 
 ---
 
-## 探查局（0.6 之前做一次）
+## 0.7.x — 后续覆盖
 
-做一个打开诊断日志的版本，进**一局真实战局**，一次回答下面四个问题。每一项都可能得出「做不了」的结论，所以先查清再排期。
+代码、配置文案与本地验证清单已转入 [版本说明](releases/0.7.1.md)。只保留未完成工作：
 
-| # | 问题 | 怎么查 | 决定什么 |
+- 将三局已归档的真实经验输入固化为离线 fixture；正数 bot 模板、bot 爆头、同组击杀等未覆盖分支继续保留明确边界。
+- 核实 `MarkOfUnknown` 特殊 SCAV 减益的取整并补实现；当前遇到该分支隐藏经验并告警。
+- 用真实战局日志核对护甲挡下、爆头读取、小结撤离 / 藏身处路径、音效静音原因与恢复窗口，手听 `Flat2D`（用户确认三局当前模式听感正常，Flat2D 明确未测）。
+
+---
+
+## 0.8.0 — 兼容与工程（游戏一更新就有防线）
+
+### A. 版本守卫
+
+- `Game/GameBuild.cs`（纯逻辑）：解析 exe 的 `ProductVersion`（本机是 `1.2.0.0-47965-a0aa6211`）→ `(版本, build, hash)`，宽容处理缺字段 / 空串。
+- `Plugin.Load` 里读 `FileVersionInfo.GetVersionInfo(BepInEx.Paths.ExecutablePath).ProductVersion`（托管，不碰 Unity；失败只记日志）。
+- `Version.props` 新增 `VerifiedGameBuild=47965`，`GenerateReleaseVersion` target 同时生成 `ReleaseVersion.VerifiedGameBuild`。
+- build 不等于已验证值 → 启动打一条醒目的 `[version] 游戏 build=… 未在此版本验证（已验证 47965）…`；**只警告，不禁用功能**。
+- **CI 一致性校验**：`tools/release/verify-package.ps1`（或 `Get-Version.ps1`）断言 `buildrefs.lock.json` 的 `gameBuild` == `Version.props` 的 `VerifiedGameBuild`，防止「升了依赖忘了改守卫」。
+- 测试：`GameBuildFacts`（含异常格式）。
+
+### B. 游戏更新流程 + 冒烟
+
+- `docs/RELEASING.md` 新增「游戏更新流程」：重新生成 interop（启动一次游戏；游戏更新 → interop 重生成 → 类型 / 字段签名可能变 → 要重编译）→ 打包并更新私有 BuildRefs 仓库
+  （`buildrefs.lock.json` 的 `archive / gameBuild / commit / sha256` 四项一起改）→ 改 `Directory.Build.props` 的 `GameDir` 默认值（建议用本地 props 覆盖，别把绝对路径提交）与 `Version.props` 的 `VerifiedGameBuild` →
+  `dotnet build`（编译错误指向被改名的字段）→ 冒烟 → 发布。写明哪些**无法自动化**（真实战局的事件源、音效）。
+- `tools/verify/smoke.txt`（≤ 20 张）：命中 / 爆头 / 挡下 / 击穿 / 受击 / 击杀 1..3 / 复仇 / 助攻 / 小结 / `lang en|zh` / `preset Default` / `audio status` / `glyphs`。
+- `tools/verify/smoke-check.ps1`：跑完读 `LogOutput.log`，断言「`smoke done` 出现、无 AyaHitmarker 的 Error / Exception、`canvas ready font=ok`、`缺字形 0 个`」，退出码给人 / CI 看；
+  已知的 `0xC0000005`（`quit` 时 ScreenCapture 队列崩溃）在脚本完成日志存在时视为成功。
+
+### C. 补离线测试
+
+- 抽 `Game/ConfigMigration.cs`（纯逻辑）：`(当前序列化值, 旧默认, 新默认, since, from)` → `Reset / AlreadyNew / Kept / Skip`，把 `AyaConfig.SameValue`（浮点容差、颜色不分大小写）一并搬进去；`ApplyConfigMigration` 只剩「遍历名单 + 调用 + 写回」。
+  表驱动测试：版本门控、旧默认被重置、用户调过的保留、幂等。
+- 抽 `Ui/PromoteWindow.cs`（纯逻辑小结构）：`HitmarkerLayer.KillStickWindow` 与 `DamageNumberLayer.KillWindow` 共用的 0.06s「事后升级成击杀」窗口；测试窗口内 / 外 / 跨帧 / 边界。
+- 把 `PresetApplier.SameSerialized` 挪到 `Game/Presets.cs`（纯逻辑）并补测试。
+- 目标：+ 40~60 项断言；`tests/.../*.csproj` 与 AGENTS §2 清单同步。
+
+### D. 截图回归（先确定性，后回归）
+
+1. **非确定性排查**：同一脚本（`0.6-cards.txt`）冷启动 5 次、同一 DLL，逐次像素比对，复现并定位 `card_after` 那类差异（怀疑方向：脚本从 `waitmenu` 的自动时钟切到手动时钟的瞬间、首次加载后异步音频 / 字体重建占帧、与绝对时间相关的闪烁种子）。修到「同 DLL 同脚本逐像素一致」。
+2. 把手写的比对固化为 `tools/verify/pixdiff.py`（OpenCV，`python -P`）+ `tools/verify/regress.ps1`（依次跑指定脚本到指定目录，再与基线目录比对，输出差异图与汇总；基线放仓库外 `D:\shots\baseline\<版本>`，不入库）。
+3. 用法写进 AGENTS §5，并在 RELEASING.md 的发布前检查里列为「改了 UI 后可选」。
+
+### E. 性能指标
+
+- `[diag]` 增加：每 20 秒窗口内的托管分配量（`GC.GetAllocatedBytesForCurrentThread` 差值 ÷ 帧数）、`Update` 平均 / 最大耗时（`Stopwatch`，**仅 `DebugEnabled` 时**）。
+- 先量后改：每帧路径目前没发现明显热点（分配几乎都在出生时的 `Show`），只有 `KillFeedLayer.ScoreString` 在分数滚动动画期间每帧 `ToString()`。有数据再决定是否优化。
+- 在战局里 / 主菜单各记一份基线数字进 README §11。
+
+**验证**：离线测试（预计 1185+ → 1250+）；Release `-warnaserror`；`smoke.txt` + `smoke-check.ps1` 在当前 build 上全绿；`regress.ps1` 对 0.7.1 基线 0 差异；一局真实战局看 `[diag]` 的分配与耗时。
+
+---
+
+## 0.9.0 — 功能（候选，开工前再逐项确认，不在此锁定）
+
+| 候选 | 价值 | 成本 / 风险 | 设计要点 |
 |---|---|---|---|
-| S1 | `OnBeingHit` 里能否稳定拿到受害者 `ProfileId`？ | handler 里已经在读 `victim` 的昵称，多打一个 `ProfileId` | 0.6 的 b / c（「是不是同一个目标」） |
-| S2 | 我方被打时 `OnBeingHit` 是否触发？`Direction` / `MasterOrigin` 是否可用？ | 在 `IsYourPlayer` 过滤**之前**对「受害者是自己」的事件打日志 | 0.6 的 e |
-| S3 | **真实击杀经验能否读到** | `dump.cs` 里有 `CounterTag.ExpKill` / `ExpKillBase` / `ExpKillBodyPartBonus` / `ExpKillStreakBonus`。主线程在击杀前后读本局 `SessionCounters` 的差值，看客户端是否在战局中就更新 | 能读到就把「自编得分公式」换成游戏真值（README §10 第一条已知限制） |
-| S4 | 游戏当前语言从哪个 API 读 | 查 `dump.cs` 里的本地化 / 设置类型 | 0.7 英文版的「自动」档 |
+| **自定义预设（保存当前外观）** | 自己调好的受击方向 / 卡片外观能一键保存、分享、切换；0.7 的预设机制天然延伸 | 中 | `Presets` 从「全是代码」扩展为「内置 + 文件」：`BepInEx/config/AyaHitmarker/presets/*.json`（只存与默认不同的键）；`保存当前外观` 动作写出并并入并集；选择器的取值改为启动时动态生成；校验沿用 `PresetFacts` 的类型 / 范围 / 受保护键规则；英文文案补齐 |
+| **战局历史** | 每局一行 JSON 追加到 `raids.jsonl`，可累计看击杀 / 爆头 / 最远 / 伤害 / 经验趋势 | 小~中 | 复用 `RaidStats.Snapshot`（0.7.1 起含击杀经验）；文件写入放主线程小块、失败只告警；可选在小结里加「历史最佳」行 |
+| **更多语言（俄语优先）** | EFT 社区主力语言之一 | 中（约 280 条文案 + `Loc.Pick` 改 N 语言重载，缺省回退英文） | 先做屏幕文字，面板文案分批；`ConfigTextFacts` 的对账模式复用 |
+| **判定正确性清理**（0.6 遗留） | 环境 / 流血死亡不再记成助攻、阵亡后不弹助攻、受击无攻击者位置时不画错方向、助攻卡与高卡片不重叠 | 小，每条都有离线测试入口 | 多数在 `AssistTracker` / `HitDirectionLayer`；需要先从真实日志收集样本 |
 
-注意：探查代码只在事件线程上**读值并转字符串**（§3.4），`SessionCounters` 的读取放主线程。
+## 1.0 的标准
 
-> **准备状态（2026-10-19）**：诊断探针已就位（[`Game/ReconProbe.cs`](../Game/ReconProbe.cs)，只在 cfg 的
-> `0. 调试 → 启用调试日志` 打开时输出）——`[recon-hit]`（S1/S2 原始事件：`victimLocal` / `ProfileId` /
-> `Direction` / `MasterOrigin` / `HitNormal`）、`[recon-kill]`（击杀双方 ProfileId）、
-> `[recon-xp]`（主线程 1Hz 读 `SessionCounters` + `TotalSessionExperience`）、`[diag]` 增加 `reconHits` / `reconKills`。
-> **S4 已离线查清**（见 [recon-s4-language.md](recon-s4-language.md)）：没有语言枚举，读
-> `EFT.LocalizationManager.Instance.Culture`（interop 已把 internal 生成为 public），`ch` → 中文、其余 → English，
-> 只剩真实环境确认一次取值格式。用户操作步骤见 [recon-0.6.md](recon-0.6.md)，**打一局真实战局**即可收集 S1–S3。
+- 0.6 / 0.7 / 0.7.1 的功能都经过真实战局验收（0.7.1 的验收清单就是为了把这件事压到一局）。
+- 有英文版 ✅（已完成）；有版本守卫、有游戏更新流程文档（0.8）。
 
-> **第一轮实测结果（2026-10-19，同一进程三连局）**：S2 ✅ 触发且方向可用；S3 ✅ 部分可读
-> （击杀计数实时、`ExpKill` 要等结算）；S1 ⚠️ 被上方 0.5.3 修的订阅 bug 挡住。详见
-> [recon-findings-2026-10-19.md](recon-findings-2026-10-19.md)。
->
-> **第二轮实测（0.5.3 修复后，同一进程三连局）**：3 次 `raid started/ended`、每局开局 `OnBeingHit 已绑定`
-> （dispatcher 指针三局都是 `0x26DFE7244C0`，证实根因）、第 2/3 局都有 `本局第一发 OnBeingHit`；
-> 第 2 局收到 **99 条命中事件**（修复前是 0）。
->
-> **✅ S1–S4 全部回答完毕**：S1 命中侧 `ProfileId` 稳定且与击杀侧一致（第 2 局 9 个受害者逐一核对）；
-> S2 挨打事件 + 方向可用；S3 击杀计数实时、`ExpKill` 要等结算；S4 读 `LocalizationManager.Instance.Culture`。
-> **下一步按原计划进入 0.6：先拆 `KillFeedLayer`，再做 a / d，然后 b / c。**
-
-
----
-
-## 0.6 — 命中反馈加深（零补丁）
-
-**动卡片之前先拆 `Ui/KillFeedLayer.cs`**（原 1482 行）：横幅 / 骷髅行 / 标签行 / 军衔徽章拆成各自的视图类，否则 c 要往这个文件里继续堆。
-
-> **0.6 卡片拆分 ✅（2026-10-20）**：`KillFeedLayer` 1482 → **694 行**（只留模型 → 准备 → 布局 → 编排 + 进度条 / 分数 / 名字 / 详情）；
-> 新增 `KillCardBannerView`（271 行）/ `KillCardSkullRowView`（312）/ `KillCardTagRowView`（218）/ `KillCardBadgeView`（167），
-> 以及共用的 `KillCardAnim`（本帧动画参数）与 `KillCardPalette`（配色 / 描边缩放）。行为保持不变（纯提取，没有改版式 / 动效参数）。
-
-> **进度（2026-10-20/22）**：**a ✅ / b ✅ / c ✅ / d ✅ / e ✅ 已实现**（**0.6.0 已发布 2026-10-25**，离线测试 315 → 616 项；
-> b 保留了「一行向右」作为默认样式，新样式是设置项）。
-> `KillFeedLayer` 拆分 ✅ 已完成（见上）。
-> **实机验收 ✅ 已完成**（DebugHarness，主菜单）：53 张截图覆盖普通 ✕ / 爆头 ✕ / 护甲样式、
-> 卡片入场·稳定·退场、2~4 杀累加卡片；`排布方式 = 累加` 另跑 15 张验证 76→152→294→370 累计、击杀变红、多目标堆叠。
->
-> **2026-10-21 二次调整（用户目检后）**：护甲命中不再把标记换成盾形，改成**白色十字 + 蓝色辉光**，
-> 盾标缩小后画在**伤害数字右侧**（`HitmarkerLayer` 新增辉光层；`DamageNumberLayer` 两种排布都带盾标）；
-> `F8` 从「Shift 组合键模拟护甲」改成**随机命中**（伤害 / 护甲 / 爆头随机）。已用真实按键 + 日志验证随机生效，
-> 并另跑 `0.6-armor.txt` / `0.6b-accum-armor.txt` 出渲染图（暗底 / 白底 / 雪地、普通与累加两种排布）。
->
-> **0.6 e 受击方向 ✅（同日晚）**：屏幕中央透明椭圆盘（不画底盘，长轴水平，半径可调），
-> 自己被打时按攻击者方位亮起**二次函数突起**的粒子（底部密、顶部疏，伤害越高突起越大）；
-> 护甲吸收 = 白、普通 = 黄、肉体伤害 ≥ 35 = 红。`OnBeingHit` 里「受害者是我」的事件重新接入主线程，
-> 事件线程冻结 `MasterOrigin - HitPoint`，主线程按相机换算方位角；纯逻辑 `Ui/HitDirectionMath.cs`（31 条断言），
-> 视图 `Ui/HitDirectionLayer.cs`；harness 新增 `taken <角度°> [伤害] [armor]`，已出 12 张渲染图（四方位 + 三色 + 白底 / 雪地）。
->
-> **0.6 e 视觉重做 ✅（2026-10-22，用户目检后）**：随机散布的大柔光粒子 → **规则蜂窝点阵**（确定性，无随机）：
-> 点更小（白芯约 4px，带暗描边）、更多（76~180 个/簇）、排得更紧；轮廓改成收尖的 `(1-n²)(1-|n|)`，中心列永远是唯一峰尖，
-> 精确指向攻击者；透明度横向 × 纵向渐变；点阵按方位点切线平直排列（侧面不再扇形散开）。
-> 动画改成「一行行长出 → 停住 → 从峰尖收回 + 淡出」，每簇一个 CanvasGroup 容器、点只写一次。
-> 顺带修了两个问题：UI 缩放被乘了两次（CanvasScaler 已经缩放过）；持续挨打时池子上限 96 之外的粒子不销毁也不复用、对象无限增长（现在最多 6 簇，按簇复用）。
-> 离线预览 `--render-hitdir`；实机 `0.6e-hitdir.txt` 14 张（与重做前 12 张同名逐张对比 + 持续挨打 2 张）。
->
-> **0.6 验收复查（同日）**：累加数字的**击杀槽**在默认参数下（窗口 2 秒 > 淡出 0.9 秒）没有淡出段、0.9 秒后直接消失，
-> 比普通数字还短 —— 改成和普通槽同一条时间线（先全亮窗口、再淡出），只是从击杀时刻起算；连杀音效的三个自定义路径
-> 没进音效指纹，改了要等下一局才生效 —— 已补上。
->
-> **2026-10-25 实机两局复查**：两局都重绑了 `OnBeingHit`、都有「本局第一发」，受击 7 / 1 次各出 7 / 1 簇指示（第 2 局正常，0.5.3 的问题没有复发）。
-> 用户反馈点阵「有点过于遮挡视野」→ 外观参数全部做成设置项（面板「11. 受击方向」，出厂值不变、不需要配置升级），
-> 新增测试快捷键 `P`（随机受击）在游戏里边调边看；纯逻辑抽出 `HitDirectionStyle`，离线测试 580 → 616。
-> 用户目检后把调定的值设为出厂默认（半宽 25~54 / 高度 22~55 / 满强度伤害 57 / 护甲 0.73 / 尾巴 1.08 / 峰尖变淡 0.43 / 缩小 0.29 / 描边 0.51，一簇 23~75 点）。
-> 这些键从未进过已发布版本，不需要配置升级名单。
->
-> **0.6 c 助攻 ✅（2026-10-22，方案 A）**：`Game/AssistTracker.cs` 纯逻辑在主线程记账（最后一次命中时间 / 累计伤害 / 爆头），
-> `OnPlayerDead` 里非本地击杀者的记录也送到主线程，但只查助攻表、不进击杀卡片 / 得分 / 连杀；
-> 提示是击杀卡片风格的简化卡：**上方成就横幅样式「助攻 +伤害」，下方只显示阵营 + 名字**，
-> 固定在击杀卡片下方淡入淡出（不参与卡片累加模型）。harness 新增 `assist <N> [伤害]`，
-> 已出渲染图（暗底 / 白底 / 雪地 / 与击杀卡片同屏）。
->
-> 期间踩过一个加载 bug：0.6 新增的 11 个配置键漏了 `ConfigPanel.For` 的面板分类映射，插件在加载阶段直接
-> 抛 `ArgumentException: Missing configuration presentation` 整个失败。已补齐，并新增离线测试
-> `ConfigPresentationFacts`（静态对账 `AyaConfig` 的 Bind 与 `ConfigPanel.For`）挡住同类问题。
-
-| # | 功能 | 价值 | 成本 / 风险 |
-|---|---|---|---|
-| a ✅ | **护甲命中区分**：`DidBodyDamage == 0 && DidArmorDamage > 0` 时命中标记加蓝色辉光、伤害数字右侧带小盾标 | 塔科夫特有、信息量大：知道自己是不是一直在打防弹板。旧项目也没做 | 已完成：`IconShapes.ArmorMarker`（白芯 + 黑描边 + 辉光，像素契约测试 24 条）作为数字右侧小盾标；`HitmarkerLayer` 白色十字 + 蓝色辉光；护甲配色、配置开关 |
-| b ✅ | **战地 6 式累加伤害数字**：同一目标的伤害在同一位置滚动累计（`32 → 67 → 99`），击杀时变红 | README §9.2 记为未做 | 已完成：`Game/DamageAccum.cs` 纯逻辑（115 条断言）+ 视图垂直堆叠；受害者 `ProfileId` 冻结进 `HitRecord`；设置项 `排布方式 = 一行向右 / 累加`，默认保留旧样式 |
-| c ✅ | **助攻提示**：我打过的目标在 N 秒内被别人打死，在击杀卡片下方弹出一条简化卡（成就横幅样式「助攻 +伤害」+ 阵营 + 名字） | bot 混战、将来联机都有用 | 已完成（方案 A）：`Game/AssistTracker.cs` 纯逻辑（窗口 / 累计伤害 / 一次死亡只结算一次）；`OnPlayerDead` 的非我方击杀记录送到主线程只用于助攻表；`Ui/AssistCardLayer.cs` 复用击杀卡片的横幅 / 名字 / 阵营样式；配置开关 / 窗口 / 时长 |
-| d ✅ | **多杀 / 连杀音效**：可选 `double_kill` / `triple_kill` / `multi_kill` 文件 | 现在只有 4 个槽（`AudioBank.SoundKind`）；连杀数据已经算好，只交给了卡片，没交给声音 | 已完成：`SoundKind` 扩到 7 槽、可选文件缺失静默回退普通击杀音效、配置开关 + 三个自定义路径 |
-| e ✅ | **受击方向指示**（默认开，可关） | 新旧两个项目都没有；用户明确要「屏幕中央透明椭圆盘 + 二次函数突起粒子」 | 已完成：`Ui/HitDirectionMath.cs` 纯逻辑（方位角 / 收尖包络 / 蜂窝点阵 / 时间线）；`Ui/HitDirectionLayer.cs` 用 `IconShapes.LatticeDot` 点阵粒子 + 按簇复用的 `UiImageRow`（10-22 视觉重做，见上）；`OnBeingHit` 受害者是我时接入主线程；三色（护甲吸收白 / 普通黄 / 重伤红）+ 伤害越高突起越大；harness `taken` 出渲染图 |
-
-**0.6.0 已发布（2026-10-25）**：护甲样式 / 累加数字 / 受击方向 / 助攻提示均已实机验收（DebugHarness + 用户两局真实战局目检）。
-仍待真实战局确认的低优先级项（0.6 复查时记下，未修）：环境 / 流血等「击杀者不是我」的死亡可能被记成助攻、我阵亡后打过的目标被打死仍会弹助攻卡、极少数伤害若没有攻击者位置受击指示可能指错方向、击杀卡片很高时助攻卡可能与它重叠。
-
-**0.6.1 已发布（2026-10-25）**：修护甲命中几乎不可见 —— 一发击穿护甲的子弹会产生「板阶段 + 身体」两个事件，0.6.0 的 `body == 0` 判据只抓到前半段并被后半段当帧覆盖，真正被挡下的子弹（带少量钝伤）反而漏掉；现由 `PlateStageMerger` 合并并判「挡下 / 击穿」，护甲耐久伤害数字另起一行画在身体伤害上方（详见 README 0.6.1 护甲判据）。仍待真实战局确认：「被挡下」分支尚未在真实战局里遇到（只有离线回放 + 测试快捷键）；游戏自己的 `blunt` / `blockedBy` / `deflectedBy` 标志已写进 `[hit]` 日志，遇到挡下时对照一次，若可靠可换成更直接的判据。
-
----
-
-## 0.7 — 个性化与国际化（2026-10-26 实现并通过真实战局验收，待发布）
-
-> 进度：五项功能 + 命中级爆头修复**均已实现**，离线测试 701 → 1185 项，DebugHarness 在主菜单做了实机验证
-> （英文 11 张 / 战局小结 12 张 + 调度路径 / 预设 A 10 张 + B 9 张 / 与 0.6.1 的 16 张卡片逐像素比对）。详情见 README §6「0.7.0」与 §4「命中级爆头」。
-
-| # | 事项 | 状态 | 结果与证据 |
-|---|---|---|---|
-| 0 | **命中级爆头修复** | ✅ 已实现，✅ 真实战局验证通过 | 实机日志 106 条命中里 104 条 `BodyPartColliderType = None`（仅有的 2 条 `HeadCommon` 是铁丝网）：**0.6.1 及以前子弹命中的爆头判定从来没生效过**。改读 `HittedBallisticCollider` → `BodyPartCollider.BodyPartType`；`Game/HeadshotRules.cs` 纯逻辑 + 测试；合并器爆头标志取或；`[hit]` 日志新增 `headSrc/part/partCol/infoCol`，累计 30 次全读不到会告警。**真实战局（2026-10-26）**：98 条命中全部读到部位、`infoCol` 恒 -1、6 条头部命中判出爆头、无误判；发现游戏把颈部（`NeckFront/NeckBack`）算作胸部，后备规则已同步 |
-| 1 | **预设系统** | ✅ | 12 套（战地 6 默认 / 经典 / 极简 / 高对比 / 旧项目 8 套）；先复位「任一预设涉及的 69 个键」再写入 + 自动备份 cfg（`.bak-preset-时间戳`，保留 5 份）；`Game/Presets.cs` + `PresetApplier.cs`；`PresetFacts` 静态校验（键存在 / 类型 / 范围 / 不碰受保护的键）。实机：套用日志「复位 69 / 写入 29·14·30·15 / 钳制 0」，跑完 `preset restore` 后 cfg 与备份**字节级一致** |
-| 2 | **高对比 / 色盲配色** | ✅ | 7 个写死的卡片颜色抽成配置键（默认外观与 0.6.1 **逐像素一致**，16 张卡片截图）；`Game/ColorVision.cs`（Machado 2009 + ΔE76）；`HighContrast` 在红 / 绿 / 蓝色盲模拟下命中标记最难分的一对 ΔE 从 3.5 提到 49.6、受击方向 27.3 → 33.6、伤害数字 20.6 → 30.4、环形 6.9 → 33.6 |
-| 3 | **英文版** | ✅，✅ 面板切换与英文游戏字形已目检 | 约 70 条屏幕文案 + 206 条面板文案；`语言 = 自动 / 中文 / English`；`Game/Loc.cs` + `Game/ConfigTextEn.cs`；离线测试对账（每个键都有英文、无 CJK、交叉引用有效）。S4 已确认：`LocalizationManager.Instance.Culture` 取值是 `ch` / `en`，**启动初期先是 `en`、约 1 秒后变 `ch`**。ConfigurationManager 重新打开面板后会重读 `DispName / Description / Category`、英文游戏下字形正常（均为目检） |
-| 4 | **战局小结** | ✅，✅ 真实战局时序已验证（阵亡局） | `Game/RaidStats.cs`（累计 + `SummaryScheduler` 状态机）+ `Ui/RaidSummaryLayer.cs`；回到主菜单、菜单场景出现后再等 3 秒显示 8 秒；空局不弹、不覆盖真实小结；40 秒兜底。主菜单里 `summary end` 实测 Pending（t=21）→ 兜底 Armed（t=61）→ 显示（t=64）。**真实战局（一局阵亡）**：`raid ended` t=962.7 → 主菜单场景缺席后重现 t=979.9（**确认战局中会被卸载**，40 秒兜底没用到）→ 显示 t=982.9；画布层级目检没有被结算界面盖住。撤离 / 退出没有日志留档（目检正常） |
-| 5 | **昵称音译** | ✅ | `Game/NameTranslit.cs`（西里尔 → 拉丁，仅两处显示点；`VictimKey` / `NameKey` 仍用原名，音译有损会让复仇判定撞车） |
-
-**验收（2026-10-26，已完成）**：一局真实战局（诊断日志开）——`[hit] headSrc=` 全部读到部位、`[summary]` 时序与目检一致、`[lang]` 正常；游戏语言切英文看英文面板与字形、在 ConfigurationManager 里切语言 / 套用预设，均目检正常。
-
-**真实战局里的「连杀」缎带**（同日核对）：这局 9 杀只有最后两杀的间隔落进 10 秒窗口（`streak` 到 2），所以没出过猎手 / 狂战士——判定正确，是难触发。间隔 ≤ 2.5s 的算多杀、且压过天梯；要出天梯得「每杀间隔 2.5~10s」的三连。渲染用 `0.7-streak.txt` 核对过（枪手 / 猎手 / 狂战士 / 掠夺者）。要不要放宽（调大 `连杀时间窗口`，或改成「不死亡连杀」的计法）是产品决定，见 README §9.3。
-
-**调研中顺带发现、未处理**：
-- 0.7.0 的 `totalSessionExp`（游戏真实经验）可作为战局小结的可选一行：只能在战局中以 1Hz 缓存 `SessionCounters`（主玩家消失后读不到 Profile），`LongestShot` 实测不可靠。
-- 8 套旧配色里辉光相关的键在默认的程序化图标下不生效（辉光只对 `CustomFiles` 生效）。
-
----
-
-## 0.8 → 1.0 — 兼容与工程
-
-- **版本守卫**：启动时读游戏 build 号，不是 47965 就记一条「未在此版本验证」的警告。
-- **游戏更新流程**：重生成 interop → 更新 BuildRefs（`tools/release/buildrefs.lock.json` 三个字段一起改）→ 编译 →
-  跑新写的 `tools/verify/smoke.txt` 冒烟脚本（命中 / 击杀 / 阵亡 / `audio status` / 截图）。写进 [RELEASING.md](RELEASING.md)。
-- **扩大离线测试**：配置升级逻辑（`ApplyConfigMigration` 现在只能进游戏验）、命中标记「升级成击杀」的 0.06s 窗口状态机；
-  ~~0.6 的累加模型~~ ✅ 已完成（`Game/DamageAccum.cs`，测试总数 315 → 454）。
-- **截图回归**：用 OpenCV 把 DebugHarness 截图和基线图对比（本地跑，需要游戏）。
-- **性能指标**：`[diag]` 增加每帧 GC 分配量（`GC.GetAllocatedBytesForCurrentThread`）与 `Update` 耗时。
-- ~~热重载适配~~ ✅ 已完成并实测（见 0.5.2）：`Plugin.Unload()` 销毁 `AyaBehaviour`，`OnDestroy` 拆画布 / 音频宿主 / 图标与字体缓存 / TMP 材质实例；
-  `Plugin.PluginDirectory` 取 `Assembly.Location` 在引擎下可用（引擎垫了该值），所以**不要改它的来源**；DLL 不能同时部署到 `plugins/` 与 `scripts/`，由 csproj 的两个互斥 target 保证。
-- **1.0 的标准**：0.6 / 0.7 的功能都经过真实战局验收，有英文版，有版本守卫，有游戏更新流程文档。
-
-**待调研**：联机。SPTushonka 5.x 是否有类似 Fika 的联机模组？有的话 `IsYourPlayer` 对其他玩家的判定、助攻 / 复仇的归属都要重新确认。
-
----
+**条件性调研（不排期）**：联机。本机没有任何联机模组，联网也没查到可用结论；一旦出现类似 Fika 的联机模组，`IsYourPlayer` 对其他玩家的判定、助攻 / 复仇 / 击杀经验的归属都要重新确认。
 
 ## 明确不做
 
 - 不为了「用上框架」加 Harmony 补丁。真到非加不可，按 AGENTS.md §3.0 先确认目标方法体独立。
 - 不把 `Player.ApplyShot` / `Player.ApplyDamageInfo` 加回来（README §4）。
-- 不加第二个托管注入类型，不写自定义 `Graphic` / `MonoBehaviour`（§3.3）。
+- 不加第二个托管注入类型，不写自定义 `Graphic` / `MonoBehaviour`（AGENTS §3.3）。
 - 「肢体打黑」标签暂不做：要在主线程读健康状态，收益抵不过风险。
-- 不碰 BattlEye / `ConsistencyInfo` / `FilesChecker`（§3.7）。
+- 不碰 BattlEye / `ConsistencyInfo` / `FilesChecker`（AGENTS §3.8）。
+- 不改连杀判定的默认值（2026-10-29 用户决定：只在文档里说明，见 README §9.3）；不做「不死亡连杀」的规则重写。
+- 没有联机模组环境就不写联机相关逻辑。
 
-## 建议顺序
+## 风险与未知
 
-0.5.2（字体回退 + 2D 音效确认 + 文档对齐）→ 探查局 → 拆 `KillFeedLayer` → 0.6 a、d → 0.6 b、c → 0.7（✅ 已实现并通过真实战局验收，待发布）→ 0.8 / 1.0。
+- **经验特殊分支仍有未覆盖项**：MarkOfUnknown 减益遇到时隐藏经验；正数 bot 模板、bot 爆头和同组击杀仍需真实样本。
+- **截图非确定性的根因未知**（0.8 D）：可能是脚本时序而非插件问题；查不出就把回归阈值放宽并只比对结构区域。
+- **音效继续观察**：三局请求级静音均为 0、用户确认听感正常；未来场景 / 设备变化仍需保留恢复度量，不外推 Flat2D 已通过。
+- **版本守卫只警告**：游戏更新后字段改名会在编译期（升级 BuildRefs 后）而不是运行期暴露。
+- 每个版本的真实战局验收都需要打一局：0.7.1 的清单就是为了把这件事压到一局。
