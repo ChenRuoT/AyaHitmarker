@@ -245,12 +245,6 @@ internal sealed class AyaConfig
     internal ConfigEntry<float> LongShotDistance { get; }
     internal ConfigEntry<float> MarksmanDistance { get; }
     internal ConfigEntry<int> EliteLevel { get; }
-    internal ConfigEntry<int> ScoreBase { get; }
-    internal ConfigEntry<int> ScoreHeadshotBonus { get; }
-    internal ConfigEntry<int> ScoreLongShotBonus { get; }
-    internal ConfigEntry<int> ScoreRevengeBonus { get; }
-    internal ConfigEntry<int> ScoreMultiKillBonus { get; }
-    internal ConfigEntry<int> ScoreBossBonus { get; }
 
     // ---- 1. 命中提示（爆头变体 / 弹出）----
     internal ConfigEntry<string> HitMarkerHeadshotColor { get; }
@@ -337,7 +331,7 @@ internal sealed class AyaConfig
                 "护甲吸收的钝伤 = 白色，普通伤害 = 黄色，重伤 = 红色；伤害越高突起越明显。"));
         RaidSummaryEnabled = ConfigPanel.Bind(cfg, nameof(RaidSummaryEnabled), "6. 战局小结", "启用", true,
             new ConfigDescription(
-                "战局结束、回到主菜单后，在屏幕上显示几秒的本局统计：击杀 / 爆头击杀 / 最远一杀 / 最高连杀 / 得分 / 造成伤害 / 助攻 / 成就。" +
+                "战局结束、回到主菜单后，在屏幕上显示几秒的本局统计：击杀 / 爆头击杀 / 最远一杀 / 最高连杀 / 击杀经验 / 造成伤害 / 助攻 / 成就。" +
                 "什么都没发生的局（比如进出藏身处）不会显示。"));
         DamageTextEnabled = ConfigPanel.Bind(cfg, nameof(DamageTextEnabled), "2. 伤害数字", "启用", true);
         KillFeedEnabled = ConfigPanel.Bind(cfg, nameof(KillFeedEnabled), "3. 击杀信息", "启用", true);
@@ -558,14 +552,14 @@ internal sealed class AyaConfig
 
         // 得分（战地式：白字，在骷髅右边）
         ShowScore = ConfigPanel.Bind(cfg, nameof(ShowScore), "3. 击杀信息", "显示得分", true,
-            new ConfigDescription("显示卡片累计反馈得分。公式在「50. 成就与计分规则」，不是游戏经验值。"));
+            new ConfigDescription("显示按游戏规则计算的累计击杀经验，整局倍率按 ×1。数据不可用时不显示经验；不含伤害、拾取、治疗等经验。"));
         FontSizeScore = ConfigPanel.Bind(cfg, nameof(FontSizeScore), "3. 击杀信息", "得分字号", 34, new ConfigDescription("", null, new object[] { 8, 72 }));
         ScoreHorizontalOffset = ConfigPanel.Bind(cfg, nameof(ScoreHorizontalOffset), "3. 击杀信息", "得分水平偏移", 14f,
-            new ConfigDescription("得分文字的左缘相对脊线向右多少像素。", null, new object[] { -500f, 500f }));
+            new ConfigDescription("经验文字的左缘相对脊线向右多少像素。", null, new object[] { -500f, 500f }));
         ScoreCountDuration = ConfigPanel.Bind(cfg, nameof(ScoreCountDuration), "3. 击杀信息", "得分计数字时长(秒)", 0.25f,
             new ConfigDescription("数字从原来的分数滚到新分数的时间（战地 6 实录约 0.25 秒）；0 = 直接显示终值。", null, new object[] { 0f, 2f }));
         ScorePopScale = ConfigPanel.Bind(cfg, nameof(ScorePopScale), "3. 击杀信息", "得分弹出比例", 1.15f,
-            new ConfigDescription("得分每次变化时的缩放弹出比例，1 = 不弹。", null, new object[] { 1f, 3f }));
+            new ConfigDescription("经验每次变化时的缩放弹出比例，1 = 不弹。", null, new object[] { 1f, 3f }));
         ScorePopDuration = ConfigPanel.Bind(cfg, nameof(ScorePopDuration), "3. 击杀信息", "得分弹出时长(秒)", 0.18f,
             new ConfigDescription("", null, new object[] { 0.01f, 1f }));
 
@@ -680,12 +674,12 @@ internal sealed class AyaConfig
         RingExplosionThickness = ConfigPanel.Bind(cfg, nameof(RingExplosionThickness), "3b. 击杀特效", "爆炸粗细", 5.4f);
         RingExplosionColor = ConfigPanel.Bind(cfg, nameof(RingExplosionColor), "3b. 击杀特效", "爆炸颜色", "#F77F00FF");
 
-        EnableIconGlow = ConfigPanel.Bind(cfg, nameof(EnableIconGlow), "3b. 击杀特效", "启用图标辉光", true);
-        IconGlowColor = ConfigPanel.Bind(cfg, nameof(IconGlowColor), "3b. 击杀特效", "辉光颜色", "#FFFFFFFF");
+        EnableIconGlow = ConfigPanel.Bind(cfg, nameof(EnableIconGlow), "3b. 击杀特效", "启用图标辉光", true, new ConfigDescription("只对图标样式为 CustomFiles 时生效。"));
+        IconGlowColor = ConfigPanel.Bind(cfg, nameof(IconGlowColor), "3b. 击杀特效", "辉光颜色", "#FFFFFFFF", new ConfigDescription("只对图标样式为 CustomFiles 时生效。"));
         IconGlowIntensity = ConfigPanel.Bind(cfg, nameof(IconGlowIntensity), "3b. 击杀特效", "辉光强度", 0.45f,
-            new ConfigDescription("", null, new object[] { 0f, 2f }));
+            new ConfigDescription("只对图标样式为 CustomFiles 时生效。", null, new object[] { 0f, 2f }));
         IconGlowSize = ConfigPanel.Bind(cfg, nameof(IconGlowSize), "3b. 击杀特效", "辉光扩散(像素)", 4f,
-            new ConfigDescription("改动会触发辉光纹理重烘（有缓存）。", null, new object[] { 0f, 32f }));
+            new ConfigDescription("改动会触发辉光纹理重烘（有缓存）。只对图标样式为 CustomFiles 时生效。", null, new object[] { 0f, 32f }));
 
         // ---------------------------------------------------------------- 3c. 击杀成就 / 连杀
         // 「连杀重置窗口」复用 3. 击杀信息 里的「连杀时间窗口」，这里不重复给。
@@ -702,14 +696,6 @@ internal sealed class AyaConfig
         EliteLevel = ConfigPanel.Bind(cfg, nameof(EliteLevel), "3c. 击杀成就", "精锐等级阈值", 40,
             new ConfigDescription("击杀等级 ≥ 该值的 PMC 记为「精锐猎杀」。", null, new object[] { 1, 79 }));
 
-        ScoreBase = ConfigPanel.Bind(cfg, nameof(ScoreBase), "3c. 击杀成就", "得分基础值", 100, new ConfigDescription("", null, new object[] { 0, 10000 }));
-        ScoreHeadshotBonus = ConfigPanel.Bind(cfg, nameof(ScoreHeadshotBonus), "3c. 击杀成就", "得分_爆头加成", 50, new ConfigDescription("", null, new object[] { 0, 10000 }));
-        ScoreLongShotBonus = ConfigPanel.Bind(cfg, nameof(ScoreLongShotBonus), "3c. 击杀成就", "得分_远程加成", 50,
-            new ConfigDescription("距离 ≥ 上面「远程判定距离」时加。", null, new object[] { 0, 10000 }));
-        ScoreRevengeBonus = ConfigPanel.Bind(cfg, nameof(ScoreRevengeBonus), "3c. 击杀成就", "得分_复仇加成", 25, new ConfigDescription("", null, new object[] { 0, 10000 }));
-        ScoreMultiKillBonus = ConfigPanel.Bind(cfg, nameof(ScoreMultiKillBonus), "3c. 击杀成就", "得分_多杀加成", 25,
-            new ConfigDescription("每多一个连杀加一份。", null, new object[] { 0, 10000 }));
-        ScoreBossBonus = ConfigPanel.Bind(cfg, nameof(ScoreBossBonus), "3c. 击杀成就", "得分_首领加成", 200, new ConfigDescription("", null, new object[] { 0, 10000 }));
 
         // ---------------------------------------------------------------- 4. 音效
         // 旧 cfg: 命中 0.5 / 击杀 0.7，爆头不做区分
@@ -782,6 +768,7 @@ internal sealed class AyaConfig
             new ConfigDescription("统计行的字号；标题比它大 4，面板尺寸随字号缩放。", null, new object[] { 10, 48 }));
 
         ApplyConfigMigration(cfg);
+        ClearRetiredScoreEntries(cfg);
     }
 
     /// <summary>
@@ -893,6 +880,26 @@ internal sealed class AyaConfig
         }
     }
 
+    private static void ClearRetiredScoreEntries(ConfigFile cfg)
+    {
+        try
+        {
+            var prop = typeof(ConfigFile).GetProperty("OrphanedEntries",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+            if (prop?.GetValue(cfg) is not System.Collections.IDictionary orphans) return;
+            bool changed = false;
+            foreach (string key in new[] { "得分基础值", "得分_爆头加成", "得分_远程加成", "得分_复仇加成", "得分_多杀加成", "得分_首领加成" })
+            {
+                var definition = new ConfigDefinition("3c. 击杀成就", key);
+                if (!orphans.Contains(definition)) continue;
+                orphans.Remove(definition);
+                changed = true;
+            }
+            if (changed) cfg.Save();
+        }
+        catch (Exception ex) { Plugin.Logger.LogWarning($"[config] 清理旧计分键失败（不影响经验显示）: {ex.Message}"); }
+    }
+
     /// <summary>
     /// 把配置读成判定引擎用的阈值结构。每次都重新构造（纯结构体拷贝，开销可忽略），
     /// 这样 ConfigurationManager 里改完立即生效。
@@ -906,12 +913,12 @@ internal sealed class AyaConfig
         longShotDistance: LongShotDistance.Value,
         marksmanDistance: MarksmanDistance.Value,
         eliteLevel: EliteLevel.Value,
-        scoreBase: ScoreBase.Value,
-        scoreHeadshotBonus: ScoreHeadshotBonus.Value,
-        scoreLongShotBonus: ScoreLongShotBonus.Value,
-        scoreRevengeBonus: ScoreRevengeBonus.Value,
-        scoreMultiKillBonus: ScoreMultiKillBonus.Value,
-        scoreBossBonus: ScoreBossBonus.Value);
+        scoreBase: 0,
+        scoreHeadshotBonus: 0,
+        scoreLongShotBonus: 0,
+        scoreRevengeBonus: 0,
+        scoreMultiKillBonus: 0,
+        scoreBossBonus: 0);
 
     private static string SoundHint(string fileName)
         => $"留空 = 自动到 Sounds/ 找 {fileName}.ogg / .wav / .mp3。也可以写绝对路径或相对插件目录的路径。";

@@ -34,7 +34,7 @@ public sealed class Plugin : BasePlugin
     public const string PluginVersion = ReleaseVersion.Value;
 
     internal static Plugin Instance { get; private set; } = null!;
-    internal static ManualLogSource Logger { get; private set; } = null!;
+    internal static DiagnosticLogger Logger { get; private set; } = null!;
     internal static AyaConfig Cfg { get; private set; } = null!;
 
     /// <summary>插件所在目录（BepInEx/plugins/AyaHitmarker）。</summary>
@@ -65,7 +65,7 @@ public sealed class Plugin : BasePlugin
     public override void Load()
     {
         Instance = this;
-        Logger = base.Log;
+        Logger = new DiagnosticLogger(base.Log);
         Cfg = new AyaConfig(Config);
 
         // 界面语言：先按设置里的强制值生效（自动档要等游戏的 LocalizationManager 就绪，AyaBehaviour 约 1Hz 重新解析）。

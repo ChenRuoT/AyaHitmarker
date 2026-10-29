@@ -64,7 +64,7 @@ internal static class ConfigPanel
             }
             else
             {
-                attr.DispName = null;
+                attr.DispName = Entries.TryGetValue(name, out var entry) ? entry.Definition.Key.Replace("得分", "经验") : null;
                 attr.Description = null;
                 attr.Category = meta.ZhCategory;
             }
@@ -250,12 +250,6 @@ internal static class ConfigPanel
         "LongShotDistance" => new("50. 成就与计分规则", -6, true),
         "MarksmanDistance" => new("50. 成就与计分规则", -7, true),
         "EliteLevel" => new("50. 成就与计分规则", -8, true),
-        "ScoreBase" => new("50. 成就与计分规则", -9, true),
-        "ScoreHeadshotBonus" => new("50. 成就与计分规则", -10, true),
-        "ScoreLongShotBonus" => new("50. 成就与计分规则", -11, true),
-        "ScoreRevengeBonus" => new("50. 成就与计分规则", -12, true),
-        "ScoreMultiKillBonus" => new("50. 成就与计分规则", -13, true),
-        "ScoreBossBonus" => new("50. 成就与计分规则", -14, true),
         "SoundEnabled" => new("60. 音效", 999, false),
         "SoundHitEnabled" => new("60. 音效", 998, false),
         "SoundKillEnabled" => new("60. 音效", 997, false),
@@ -349,11 +343,7 @@ internal static class ConfigPanel
         "HitMarkerPopDuration" or "DamageTextPopDuration" or "SkullPopDuration" or "ScorePopDuration"
             => "从弹出比例回到正常大小所需的时间，单位为秒。",
         "KillMarkerDuration" => "击杀确认标记从出现到完全消失的时间，单位为秒。",
-        "LongShotDistance" => "击杀距离达到此值时触发远程判定与远程得分加成，单位为米。",
-        "ScoreBase" => "每次击杀的基础反馈分数；此分数不是游戏经验值。",
-        "ScoreHeadshotBonus" => "爆头击杀额外获得的反馈分数。",
-        "ScoreRevengeBonus" => "复仇击杀额外获得的反馈分数。",
-        "ScoreBossBonus" => "击杀首领额外获得的反馈分数。",
+        "LongShotDistance" => "击杀距离达到此值时触发远程成就判定（不增加击杀经验），单位为米。",
         "RingEffectDelay" => "击杀后等待多久开始播放环形特效，单位为秒。",
         "RingEffectDuration" => "环形特效扩散与淡出的总时长，单位为秒。",
         "RingExplosionSecondRingDelay" => "爆炸击杀的第二个环相对第一个环的延迟，单位为秒。",

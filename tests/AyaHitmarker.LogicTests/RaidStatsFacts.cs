@@ -16,7 +16,7 @@ internal static class RaidStatsFacts
             headshot, false, false, false, boss, pmc);
 
     private static KillAnalysis Kill(KillStreakTracker t, float at, KillFact fact)
-        => t.Register(at, fact, KillStreakSettings.Default);
+        => t.Register(at, fact, KillStreakSettings.Default).WithExperience(55);
 
     private static RaidSummary SomethingHappened()
     {
@@ -27,6 +27,19 @@ internal static class RaidStatsFacts
 
     internal static void Run()
     {
+        Assert.Suite("小结: 经验缺失");
+        {
+            var stats = new RaidStats();
+            var tracker = new KillStreakTracker();
+            stats.NoteKill(Kill(tracker, 0, Fact()), false, 10);
+            stats.NoteKill(Kill(tracker, 1, Fact()).WithExperience(null), false, 10);
+            Assert.Equal(55, stats.Snapshot().Score, "保留已知部分供日志对账");
+            Assert.Equal(1, stats.Snapshot().MissingExperienceKills, "缺失击杀单独计数");
+            Loc.Current = Lang.Zh;
+            Assert.True(RaidStats.Rows(stats.Snapshot()).Exists(r => r.Label == "击杀经验" && r.Value == "不可用"), "小结不把已知部分当总数");
+            stats.Reset();
+            Assert.Equal(0, stats.Snapshot().MissingExperienceKills, "换局清掉缺失状态");
+        }
         Assert.Suite("小结: 击杀口径");
         {
             var tracker = new KillStreakTracker();
@@ -45,7 +58,7 @@ internal static class RaidStatsFacts
             Assert.Equal(2, s.HeadshotKills, "两个爆头击杀");
             Assert.Near(250f, s.LongestKill, 1e-4, "最远一杀 250m（不是最后一杀就是最大值）");
             Assert.Equal(3, s.BestStreak, "最高连杀 3");
-            Assert.Equal(a1.Score + a2.Score + a3.Score, s.Score, "得分 = 每一杀得分之和");
+            Assert.Equal(165, s.Score, "得分 = 每一杀经验之和");
             Assert.True(s.HasActivity, "有击杀 → 有活动");
 
             // 最远一杀不会被更近的覆盖
@@ -150,7 +163,7 @@ internal static class RaidStatsFacts
                 rows = RaidStats.Rows(full);
                 var labels = new List<string>();
                 foreach (var r in rows) labels.Add(r.Label);
-                Assert.Equal("击杀,爆头击杀,最远击杀,最高连杀,得分,造成伤害,助攻,承受伤害,阵亡,,四杀,爆头",
+                Assert.Equal("击杀,爆头击杀,最远击杀,最高连杀,击杀经验,造成伤害,助攻,承受伤害,阵亡,,四杀,爆头",
                     string.Join(",", labels), "行顺序：统计 → 分隔 → 成就");
                 Assert.Equal("187 m", rows[2].Value, "最远击杀取整并带单位");
                 Assert.Equal("1342", rows[5].Value, "伤害取整");

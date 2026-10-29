@@ -148,9 +148,10 @@ internal sealed class KillFeedLayer
             rec.Explosive,
             rec.SniperDamage,
             rec.Distance,
-            analysis.HasScore ? analysis.Score : 0,
+            analysis.Experience ?? 0,
             ribbon,
-            analysis.MultiCount);
+            analysis.MultiCount,
+            analysis.Experience.HasValue);
 
         float exitDuration = Mathf.Max(0f, cfg.CardExitDuration.Value);
         float hold = Mathf.Max(0.3f, cfg.KillFeedDuration.Value - exitDuration);
@@ -441,7 +442,7 @@ internal sealed class KillFeedLayer
     {
         if (_score == null || _scoreFlash == null) return;
 
-        if (!cfg.ShowScore.Value || _model.TotalScore <= 0)
+        if (!cfg.ShowScore.Value || !_model.ExperienceComplete || _model.TotalScore <= 0)
         {
             _score.Hide();
             _scoreFlash.Hide();

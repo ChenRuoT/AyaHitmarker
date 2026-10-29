@@ -70,7 +70,9 @@ internal static class ReconProbe
         {
             Plugin.Logger.LogInfo(
                 $"[recon-kill] victimLocal={victimIsLocal} killerLocal={killerIsLocal} " +
-                $"victim={Nick(dead)}({Id(dead)}) killer={Nick(killer)}({Id(killer)})");
+                $"victim={Nick(dead)}({Id(dead)}) killer={Nick(killer)}({Id(killer)}) " +
+                $"side={dead?.Profile?.Info?.Side} role={dead?.Profile?.Info?.Settings?.Role} " +
+                $"templateXp={dead?.Profile?.Info?.Settings?.Experience} group={dead?.Profile?.Info?.GroupId}");
         }
         catch (Exception ex)
         {

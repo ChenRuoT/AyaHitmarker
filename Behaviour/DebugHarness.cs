@@ -62,6 +62,7 @@ internal sealed class DebugHarness
 
     internal sealed class Hooks
     {
+        internal Action ProbeXp = () => { };
         /// <summary>命中：headshot / 护甲命中变体 / 目标序号（与 <c>kill</c> 共用，累加样式下用来对上同一个目标）。</summary>
         internal Action<bool, HitVariant, int> Hit = (_, _, _) => { };
 
@@ -309,6 +310,9 @@ internal sealed class DebugHarness
                 break;
             }
 
+            case "xp":
+                _hooks.ProbeXp();
+                break;
             case "audio":
                 _hooks.Audio(arg1);
                 break;

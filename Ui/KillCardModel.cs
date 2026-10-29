@@ -23,6 +23,7 @@ internal readonly struct CardKillInput
     internal readonly bool Sniper;
     internal readonly float Distance;
     internal readonly int Score;
+    internal readonly bool ExperienceKnown;
 
     /// <summary>这一杀触发的成就；<see cref="KillAchievement.None"/> 表示没有。</summary>
     internal readonly KillAchievement Ribbon;
@@ -38,7 +39,8 @@ internal readonly struct CardKillInput
         float distance,
         int score,
         KillAchievement ribbon,
-        int multiCount)
+        int multiCount,
+        bool experienceKnown = true)
     {
         Headshot = headshot;
         Melee = melee;
@@ -46,6 +48,7 @@ internal readonly struct CardKillInput
         Sniper = sniper;
         Distance = distance;
         Score = score;
+        ExperienceKnown = experienceKnown;
         Ribbon = ribbon;
         MultiCount = multiCount;
     }
@@ -108,6 +111,7 @@ internal sealed class KillCardModel
     internal int KillCount { get; private set; }
 
     internal int TotalScore { get; private set; }
+    internal bool ExperienceComplete { get; private set; } = true;
 
     /// <summary>上一次累加前<b>屏幕上显示的</b>分数 —— 数字滚动从这里出发，而不是从 0。</summary>
     internal int PreviousScore { get; private set; }
@@ -181,6 +185,7 @@ internal sealed class KillCardModel
         // ---- 分数 ----
         PreviousScore = fresh ? 0 : Math.Max(0, displayedScore);
         TotalScore += Math.Max(0, k.Score);
+        ExperienceComplete &= k.ExperienceKnown;
         ScoreChangedAt = now;
 
         // ---- 骷髅 ----
@@ -237,6 +242,7 @@ internal sealed class KillCardModel
         LastKillTime = 0f;
         KillCount = 0;
         TotalScore = 0;
+        ExperienceComplete = true;
         PreviousScore = 0;
         ScoreChangedAt = 0f;
         LastDistance = 0f;

@@ -1,5 +1,6 @@
 using System;
 using AyaHitmarker.Assets;
+using AyaHitmarker.Game;
 using UnityEngine;
 
 namespace AyaHitmarker.Audio;
@@ -78,6 +79,7 @@ internal sealed class SoundPlayer
         // 每一条提前返回都必须说得出理由（上一版 `clip == null` 静默返回，排查成本极高）
         if (!cfg.SoundEnabled.Value)
         {
+            AudioBank.Metrics.NoteSilent(AudioMetrics.SilentReason.Disabled);
             WarnOnce(kind, "总开关关闭");
             return;
         }
@@ -85,6 +87,7 @@ internal sealed class SoundPlayer
         bool isKill = kind >= SoundKind.Kill;
         if (isKill ? !cfg.SoundKillEnabled.Value : !cfg.SoundHitEnabled.Value)
         {
+            AudioBank.Metrics.NoteSilent(AudioMetrics.SilentReason.Disabled);
             WarnOnce(kind, isKill ? "击杀音效开关关闭" : "命中音效开关关闭");
             return;
         }
@@ -95,6 +98,7 @@ internal sealed class SoundPlayer
             var clip = AudioBank.Get(kind);
             if (clip == null)
             {
+                AudioBank.Metrics.NoteSilent(AudioMetrics.SilentReason.MissingClip);
                 // 注意这里要区分两种完全不同的失败：还没加载好 vs clip 被销毁。
                 // 上一版把两者写成同一句话，多花了一轮排查。
                 WarnOnce(kind, $"clip 不可用 [{AudioBank.DebugStatus()}]" +
@@ -105,6 +109,7 @@ internal sealed class SoundPlayer
             var source = EnsureSource();
             if (source == null)
             {
+                AudioBank.Metrics.NoteSilent(AudioMetrics.SilentReason.Other);
                 WarnOnce(kind, "AudioSource 创建失败");
                 return;
             }
@@ -121,6 +126,7 @@ internal sealed class SoundPlayer
 
             if (vol <= 0.0001f)
             {
+                AudioBank.Metrics.NoteSilent(AudioMetrics.SilentReason.ZeroVolume);
                 WarnOnce(kind, "音量算下来是 0");
                 return;
             }
@@ -134,6 +140,7 @@ internal sealed class SoundPlayer
         }
         catch (Exception ex)
         {
+            AudioBank.Metrics.NoteSilent(AudioMetrics.SilentReason.Other);
             Plugin.Logger.LogError($"[audio] 播放 {kind} 失败: {ex}");
         }
     }

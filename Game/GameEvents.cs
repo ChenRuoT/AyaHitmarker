@@ -401,7 +401,8 @@ internal static class GameEvents
                 DamageMethod.IsExplosive(damageType),
                 DamageMethod.IsSniper(damageType),
                 killerIsLocal ? SafeDistance(killer!, dead) : 0f,
-                killerIsLocal);
+                killerIsLocal,
+                FreezeExperience(dead, killer, role));
 
             if (Plugin.Cfg.DebugEnabled.Value && (victimIsLocal || killerIsLocal))
             {
@@ -417,6 +418,22 @@ internal static class GameEvents
         {
             Plugin.Logger.LogError($"[events] OnPlayerDead 处理失败: {ex}");
         }
+    }
+
+    private static KillExperienceInput FreezeExperience(Player? dead, IPlayer? killer, WildSpawnType role)
+    {
+        try
+        {
+            var info = dead?.Profile?.Info;
+            var settings = info?.Settings;
+            var attacker = killer?.Profile?.Info;
+            if (info == null || settings == null || attacker == null) return default;
+            int side = role == WildSpawnType.pmcBEAR ? 2 : role == WildSpawnType.pmcUSEC ? 1 : (int)info.Side;
+            bool sameGroup = !string.IsNullOrEmpty(info.GroupId) && !string.IsNullOrEmpty(attacker.GroupId)
+                && string.Equals(info.GroupId, attacker.GroupId, StringComparison.Ordinal);
+            return new KillExperienceInput(true, side, settings.Experience, sameGroup, dead!.IsAI);
+        }
+        catch { return default; }
     }
 
     // ------------------------------------------------------------------ 安全取值

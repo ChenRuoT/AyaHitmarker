@@ -25,6 +25,9 @@ internal static class Program
         Console.WriteLine("AyaHitmarker offline logic tests");
         Console.WriteLine("(compiles the pure-logic files directly — no Unity, no game assemblies)");
 
+        DiagClockFacts.Run();
+        KillExperienceFacts.Run();
+        AudioMetricsFacts.Run();
         KillStreakFacts.Run();
         BodyPartFacts.Run();
         KillCardLayoutFacts.Run();

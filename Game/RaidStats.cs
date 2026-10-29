@@ -28,6 +28,7 @@ internal sealed class RaidSummary
     internal float LongestKill;
     internal int BestStreak;
     internal int Score;
+    internal int MissingExperienceKills;
 
     /// <summary>打在人身上的伤害（<b>身体</b>伤害）。护甲耐久伤害不是打在人身上的，单列、不并入（AGENTS.md §3.1）。</summary>
     internal float BodyDamage;
@@ -82,7 +83,7 @@ internal readonly struct SummaryRow
 ///   <item>爆头只算**爆头击杀**（<c>OnPlayerDeadStatic</c> 的 <c>EBodyPart</c>）。命中级爆头靠碰撞体信息，
 ///         0.7.0 才修好（见 <see cref="HeadshotRules"/>），小结不依赖它；</item>
 ///   <item>伤害只算<b>身体</b>伤害；护甲耐久伤害单列，不并入；</item>
-///   <item>得分是本插件自编的公式（基础 + 爆头 / 远程 / 复仇 / 多杀 / 首领加成），<b>不是游戏的经验值</b>，文案写“得分”；</item>
+///   <item>经验来自游戏规则计算，缺少任一击杀输入时不显示不完整的总数；</item>
 ///   <item>成就按“种类 + 标题”计数；战局中途切换界面语言会让同一种成就按两个标题各算一次，罕见，不处理。</item>
 /// </list>
 /// </summary>
@@ -95,6 +96,7 @@ internal sealed class RaidStats
     private float _longestKill;
     private int _bestStreak;
     private int _score;
+    private int _missingExperienceKills;
     private float _bodyDamage;
     private float _armorDamage;
     private int _assists;
@@ -121,6 +123,7 @@ internal sealed class RaidStats
         _longestKill = 0f;
         _bestStreak = 0;
         _score = 0;
+        _missingExperienceKills = 0;
         _bodyDamage = 0f;
         _armorDamage = 0f;
         _assists = 0;
@@ -151,7 +154,8 @@ internal sealed class RaidStats
         if (headshot) _headshotKills++;
         if (distance > _longestKill) _longestKill = distance;
         if (analysis.Streak > _bestStreak) _bestStreak = analysis.Streak;
-        _score += analysis.Score;
+        if (analysis.Experience.HasValue) _score += analysis.Experience.Value;
+        else _missingExperienceKills++;
 
         var ribbon = analysis.Ribbon;
         if (ribbon.Kind != KillAchievementKind.None && ribbon.HasTitle) NoteAchievement(ribbon);
@@ -208,6 +212,7 @@ internal sealed class RaidStats
             LongestKill = _longestKill,
             BestStreak = _bestStreak,
             Score = _score,
+            MissingExperienceKills = _missingExperienceKills,
             BodyDamage = _bodyDamage,
             ArmorDamage = _armorDamage,
             Assists = _assists,
@@ -234,7 +239,9 @@ internal sealed class RaidStats
         if (s.HeadshotKills > 0) rows.Add(new SummaryRow(en ? "Headshot Kills" : "爆头击杀", s.HeadshotKills.ToString()));
         if (s.LongestKill >= 1f) rows.Add(new SummaryRow(en ? "Longest Kill" : "最远击杀", Math.Round(s.LongestKill).ToString("0") + " m"));
         if (s.BestStreak >= 2) rows.Add(new SummaryRow(en ? "Best Streak" : "最高连杀", s.BestStreak.ToString()));
-        if (s.Score > 0) rows.Add(new SummaryRow(en ? "Score" : "得分", s.Score.ToString()));
+        if (s.MissingExperienceKills > 0)
+            rows.Add(new SummaryRow(en ? "Kill XP" : "击杀经验", en ? "Unavailable" : "不可用"));
+        else if (s.Score > 0) rows.Add(new SummaryRow(en ? "Kill XP" : "击杀经验", s.Score.ToString()));
         if (s.BodyDamage >= 0.5f) rows.Add(new SummaryRow(en ? "Damage Dealt" : "造成伤害", Math.Round(s.BodyDamage).ToString("0")));
         if (s.Assists > 0) rows.Add(new SummaryRow(en ? "Assists" : "助攻", s.Assists.ToString()));
         if (s.DamageTaken >= 0.5f) rows.Add(new SummaryRow(en ? "Damage Taken" : "承受伤害", Math.Round(s.DamageTaken).ToString("0")));

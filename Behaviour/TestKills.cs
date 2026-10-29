@@ -110,6 +110,7 @@ internal static class TestKills
             explosive,
             sniperDamage: false,
             distance,
-            killerIsLocalPlayer: true);
+            killerIsLocalPlayer: true,
+            experienceInput: new KillExperienceInput(true, BotTypeMapping.IsPmc(botType) ? 1 : 4, 55, false, true));
     }
 }

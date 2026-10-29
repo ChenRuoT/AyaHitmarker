@@ -32,6 +32,18 @@ internal static class KillCardModelFacts
 
     internal static void Run()
     {
+        Assert.Suite("CardModel: incomplete XP");
+        {
+            var model = new KillCardModel();
+            Add(model, 0, Kill(score: 55));
+            Assert.True(model.ExperienceComplete, "known first kill");
+            Add(model, 1, new CardKillInput(false, false, false, false, 10, 0, KillAchievement.None, 2, false));
+            Assert.False(model.ExperienceComplete, "missing merged kill hides partial total");
+            Add(model, 2, Kill(score: 55));
+            Assert.False(model.ExperienceComplete, "later known XP cannot repair unknown kill");
+            Add(model, 20, Kill(score: 55));
+            Assert.True(model.ExperienceComplete, "new card restores known status");
+        }
         Assert.Suite("CardModel: 第一杀开卡");
         {
             var m = new KillCardModel();

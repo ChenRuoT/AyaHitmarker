@@ -14,6 +14,9 @@
     新增可测文件时把它加到这里，并保持它不引用 Unity/EFT（见 AGENTS.md §2）。
   -->
   <ItemGroup>
+    <Compile Include="../../Game/DiagClock.cs" Link="Game/DiagClock.cs" />
+    <Compile Include="../../Game/KillExperience.cs" Link="Game/KillExperience.cs" />
+    <Compile Include="../../Game/AudioMetrics.cs" Link="Game/AudioMetrics.cs" />
     <Compile Include="../../Game/KillStreak.cs" Link="Game/KillStreak.cs" />
     <Compile Include="../../Game/NameKey.cs" Link="Game/NameKey.cs" />
     <Compile Include="../../Game/BodyPartNames.cs" Link="Game/BodyPartNames.cs" />

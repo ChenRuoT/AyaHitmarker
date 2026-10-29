@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.IO;
+using AyaHitmarker.Game;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -27,6 +28,7 @@ internal enum SoundKind
 /// </summary>
 internal static class AudioBank
 {
+    internal static readonly AudioMetrics Metrics = new();
     private const int SlotCount = (int)SoundKind.MultiKill + 1;
 
     /// <summary>可选音效（双杀 / 三杀 / 四杀及以上）：文件缺失是正常情况，不按告警刷屏。</summary>
@@ -86,6 +88,7 @@ internal static class AudioBank
         var clip = _clips[i];
         if (!IsUsable(clip, out string reason))
         {
+            Metrics.NoteInvalid(i, AudioMetrics.NowMs);
             // 不碰 IO：这里只记状态，由 AyaBehaviour 的主线程协程异步恢复。
             _state[i] = 2;
             if (_retries[i] < MaxRetries)
@@ -140,7 +143,12 @@ internal static class AudioBank
 
             for (int i = 0; i < SlotCount; i++)
             {
-                if (_state[i] == 1 && IsUsable(_clips[i], out _)) continue;
+                if (_state[i] == 1)
+                {
+                    if (IsUsable(_clips[i], out _)) continue;
+                    // 重载可能先于下一次健康轮询发现其余损坏槽，也要记首次观察时间。
+                    Metrics.NoteInvalid(i, AudioMetrics.NowMs);
+                }
                 if (_state[i] == 2 && _retries[i] >= MaxRetries) continue;
 
                 ReleaseSlot(i);
@@ -298,6 +306,9 @@ internal static class AudioBank
                 _sources[i] = path;
                 _state[i] = 1;
                 _retries[i] = 0;
+                double? recoveryMs = Metrics.NoteRecovered(i, AudioMetrics.NowMs);
+                if (recoveryMs.HasValue)
+                    Plugin.Logger.LogInfo($"[audio] {kind} 失效重载完成 recoveryMs={recoveryMs.Value:0}");
             }
             catch (Exception ex)
             {

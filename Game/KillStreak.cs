@@ -514,6 +514,7 @@ internal sealed class KillStreakTracker
 /// <summary>一次击杀的完整判定结果。</summary>
 internal readonly struct KillAnalysis
 {
+    internal readonly int? Experience;
     internal readonly KillAchievement Ribbon;
     internal readonly int Streak;
     internal readonly int MultiCount;
@@ -529,7 +530,8 @@ internal readonly struct KillAnalysis
         int multiCount,
         int raidKills,
         int score,
-        float streakProgress)
+        float streakProgress,
+        int? experience = null)
     {
         Ribbon = ribbon;
         Streak = streak;
@@ -537,9 +539,12 @@ internal readonly struct KillAnalysis
         RaidKills = raidKills;
         Score = score;
         StreakProgress = streakProgress;
+        Experience = experience;
     }
 
     internal bool HasScore => Score > 0;
+    internal KillAnalysis WithExperience(int? experience) => new KillAnalysis(
+        Ribbon, Streak, MultiCount, RaidKills, Score, StreakProgress, experience);
 
     internal static readonly KillAnalysis Empty = default;
 }

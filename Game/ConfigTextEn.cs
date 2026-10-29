@@ -64,7 +64,7 @@ internal static class ConfigTextEn
             "HighContrast = high contrast / colour-blind safe; Tactical / Operator / Bloodbath / Headhunter / Slick / NightOps / Inferno / Plague = the old project's 8 color themes. " +
             "Before applying, the cfg is backed up as com.aya.ayahitmarker.cfg.bak-preset-<timestamp> (the 5 newest are kept). " +
             "Every setting any preset touches is reset first and then written, so values you tuned by hand in those settings are overwritten; " +
-            "position offsets, sound, hotkeys, scoring rules and debug options are never affected. " +
+            "position offsets, sound, hotkeys, achievement rules and debug options are never affected. " +
             "Kill cards and hit-direction clusters pick up the new look from the next kill / hit."),
         ["UiFontName"] = E("Font Name",
             "Leave empty = use the game's own TMP font (recommended). Its fallback chain already covers Chinese and Latin, so nothing needs to be filled in. " +
@@ -180,7 +180,7 @@ internal static class ConfigTextEn
             "How long the summary stays (including a 0.35 s fade-in and a 0.6 s fade-out)."),
         ["RaidSummaryEnabled"] = E("Enabled",
             "After a raid, once you are back at the main menu, show this raid's stats on screen for a few seconds: " +
-            "kills / headshot kills / longest kill / best streak / score / damage dealt / assists / achievements. " +
+            "kills / headshot kills / longest kill / best streak / XP / damage dealt / assists / achievements. " +
             "Raids where nothing happened (e.g. entering and leaving the hideout) are not shown."),
         ["RaidSummaryFontSize"] = E("Font Size",
             "Font size of the stat rows; the title is 4 larger, and the panel size scales with the font."),
@@ -233,7 +233,7 @@ internal static class ConfigTextEn
         ["AssistWindowSeconds"] = E("Assist Window (s)",
             "How long after your last hit a target killed by someone else still counts as an assist."),
         ["CardGlitchEnabled"] = E("Glitch Effect",
-            "Battlefield-style glitch animation: elements flash in as solid color blocks and then resolve, and the score digits tumble to their final value; " +
+            "Battlefield-style glitch animation: elements flash in as solid color blocks and then resolve, and the XP digits tumble to their final value; " +
             "on exit they flicker out staggered. Off = plain fade in / out (turn it off if you are sensitive to flicker)."),
         ["KillFeedDuration"] = E("Card Duration (s)",
             "Total time from the last kill until the card has fully disappeared (including the final flicker-out). " +
@@ -256,8 +256,8 @@ internal static class ConfigTextEn
             "Show method tags such as 'Melee / Explosive / Sniper…'; firearm kills show none (it is the default method, writing it would only be noise)."),
         ["ShowLevelChip"] = E("Show Level on Badge", "The small level chip at the lower right of the rank badge."),
         ["ShowPlayerName"] = E("Show Player Name", "Show the nickname of the latest kill's target."),
-        ["ShowScore"] = E("Show Score",
-            "Show the card's accumulated feedback score. The formula is in '50. Achievements & Scoring'; it is not the game's experience points."),
+        ["ShowScore"] = E("Show XP",
+            "Show accumulated kill XP calculated from game rules at a match multiplier of 1. Hidden when inputs are unavailable. Excludes damage, looting and healing XP."),
         ["ShowSkull"] = E("Show Skull", "Show the skull icons on the kill card."),
         ["ShowStreakBar"] = E("Show Streak Progress Bar",
             "The thin bar under the main row showing progress toward the next streak title."),
@@ -279,19 +279,19 @@ internal static class ConfigTextEn
         ["FontSizeAchievement"] = E("Achievement Font Size"),
         ["FontSizeKillDetails"] = E("Kill Details Font Size"),
         ["FontSizePlayerName"] = E("Player Name Font Size"),
-        ["FontSizeScore"] = E("Score Font Size"),
+        ["FontSizeScore"] = E("XP Font Size"),
         ["FontSizeTag"] = E("Tag Font Size"),
         ["KillFeedHorizontalOffset"] = E("Horizontal Center Offset",
             "Pixels the card spine (the right-aligned edge of skull / name / tags) sits to the left of the screen center. Positive = left, negative = right. " +
-            "The score extends about 110 px to the right of the spine, so the default 190 puts it just left of the crosshair without covering the hit marker " +
+            "The XP extends about 110 px to the right of the spine, so the default 190 puts it just left of the crosshair without covering the hit marker " +
             "(the old project's 107 would cover it)."),
         ["KillFeedLineSpacing"] = E("Line Spacing", "Gap between adjacent card rows."),
         ["KillFeedMaxSkulls"] = E("Max Skulls",
             "Maximum number of skulls side by side on one card; beyond that the oldest is pushed out."),
         ["KillFeedVerticalOffset"] = E("Vertical Center Offset",
-            "Position of the main row's (skull + score) center. Positive = down, negative = up."),
-        ["ScoreHorizontalOffset"] = E("Score Horizontal Offset",
-            "Pixels the score text's left edge sits to the right of the spine."),
+            "Position of the main row's (skull + XP) center. Positive = down, negative = up."),
+        ["ScoreHorizontalOffset"] = E("XP Horizontal Offset",
+            "Pixels the XP text's left edge sits to the right of the spine."),
         ["SkullSize"] = E("Skull Size", "Height of the skull body (pixels)."),
         ["SkullSpacing"] = E("Skull Spacing", "Gap between adjacent skulls (pixels)."),
         ["StreakBarGap"] = E("Progress Bar Gap from Skull",
@@ -317,7 +317,7 @@ internal static class ConfigTextEn
         ["ColorCardHeadshot"] = E("Skull Color: Headshot",
             "Skull color for headshot kills (coral red). Headshot skulls also have a V-shaped crack on top, so they are not told apart by color alone."),
         ["ColorCardNormal"] = E("Skull Color: Normal",
-            "Color of skulls on normal kills, plus the multi-kill emblem and the score flash (Battlefield 6's ice white)."),
+            "Color of skulls on normal kills, plus the multi-kill emblem and the XP flash (Battlefield 6's ice white)."),
         ["ColorFaction"] = E("Faction Text Color"),
         ["ColorFollower"] = E("Color: Follower"),
         ["ColorKillDetails"] = E("Kill Details Color"),
@@ -326,7 +326,7 @@ internal static class ConfigTextEn
         ["ColorRAIDER"] = E("Color: RAIDER"),
         ["ColorRouges"] = E("Color: Rouges"),
         ["ColorSCAV"] = E("Color: SCAV"),
-        ["ColorScore"] = E("Score Color"),
+        ["ColorScore"] = E("XP Color"),
         ["ColorSectant"] = E("Color: Sectant"),
         ["ColorStreakBar"] = E("Progress Bar Color"),
         ["ColorStreakBarBack"] = E("Progress Bar Background Color"),
@@ -338,11 +338,11 @@ internal static class ConfigTextEn
 
         // ---------------------------------------------------------------- 33 Kill Card · Animation
         ["CardExitDuration"] = E("Card Fade-Out Duration (s)",
-            "How long the card's final exit animation lasts (skull + name flicker out first, tags follow, the score cuts last)."),
-        ["ScoreCountDuration"] = E("Score Count Duration (s)",
-            "Time for the number to roll from the old score to the new one (about 0.25 s in the Battlefield 6 recordings); 0 = jump straight to the final value."),
-        ["ScorePopDuration"] = E("Score Pop Duration (s)", "Time to settle from the pop scale back to normal size, in seconds."),
-        ["ScorePopScale"] = E("Score Pop Scale", "Pop-scale ratio each time the score changes; 1 = no pop."),
+            "How long the card's final exit animation lasts (skull + name flicker out first, tags follow, the XP cuts last)."),
+        ["ScoreCountDuration"] = E("XP Count Duration (s)",
+            "Time for the number to roll from the old XP to the new one (about 0.25 s in the Battlefield 6 recordings); 0 = jump straight to the final value."),
+        ["ScorePopDuration"] = E("XP Pop Duration (s)", "Time to settle from the pop scale back to normal size, in seconds."),
+        ["ScorePopScale"] = E("XP Pop Scale", "Pop-scale ratio each time XP changes; 1 = no pop."),
         ["SkullPopDuration"] = E("Skull Pop Duration (s)", "Time to settle from the pop scale back to normal size, in seconds."),
         ["SkullPopScale"] = E("Skull Pop Scale",
             "Scale at the moment a new skull appears (above 1 = it grows first, then settles)."),
@@ -351,12 +351,12 @@ internal static class ConfigTextEn
 
         // ---------------------------------------------------------------- 40 Kill Icon Effects
         ["EnableIconGlow"] = E("Enable Icon Glow",
-            "Adds a glow to the kill skull; when off, glow color, intensity and spread have no effect."),
+            "Adds a glow to the kill skull; when off, glow color, intensity and spread have no effect. Only applies when icon style is CustomFiles."),
         ["EnableRingEffect"] = E("Enable Ring Effect",
             "Plays a kill ring feedback at the skull position; when off, the ring settings below have no effect."),
-        ["IconGlowColor"] = E("Glow Color"),
-        ["IconGlowIntensity"] = E("Glow Intensity", "Opacity multiplier of the glow; 0 = no glow."),
-        ["IconGlowSize"] = E("Glow Spread (px)", "Changing it triggers a glow texture re-bake (cached)."),
+        ["IconGlowColor"] = E("Glow Color", "Only applies when icon style is CustomFiles."),
+        ["IconGlowIntensity"] = E("Glow Intensity", "Opacity multiplier of the glow; 0 = no glow. Only applies when icon style is CustomFiles."),
+        ["IconGlowSize"] = E("Glow Spread (px)", "Changing it triggers a glow texture re-bake (cached). Only applies when icon style is CustomFiles."),
         ["RingCritColor"] = E("Crit Color"),
         ["RingCritRadius"] = E("Crit Radius"),
         ["RingCritThickness"] = E("Crit Thickness"),
@@ -377,20 +377,13 @@ internal static class ConfigTextEn
         ["EliteLevel"] = E("Elite Level Threshold", "Killing a PMC at or above this level counts as an 'Elite Kill'."),
         ["GunnerWindow"] = E("Gunner Window (s)", "BF6 'Gunner': kill another with a different weapon within the window."),
         ["LongShotDistance"] = E("Long Shot Distance (m)",
-            "Kill distance at which the long-shot check and the long-shot score bonus trigger, in meters."),
+            "Kill distance at which the long-shot achievement triggers, in meters. Does not add kill XP."),
         ["MarauderWindow"] = E("Marauder Window (s)", "BF6 'Marauder': kill another within the window after the 4th kill."),
         ["MarksmanDistance"] = E("Marksman Distance (m)", "'Headshot + reaching this distance' = Marksman."),
         ["MultiKillWindow"] = E("Multi-Kill Window (s)",
             "Two kills closer together than this → Double Kill / Triple Kill / Multi Kill."),
         ["RevengeWindow"] = E("Revenge Window (s)",
             "Remembers who killed you; killing the same one within this window = Avenger."),
-        ["ScoreBase"] = E("Score: Base Value",
-            "Base feedback score for each kill; this score is not the game's experience points."),
-        ["ScoreBossBonus"] = E("Score: Boss Bonus", "Extra feedback score for killing a boss."),
-        ["ScoreHeadshotBonus"] = E("Score: Headshot Bonus", "Extra feedback score for a headshot kill."),
-        ["ScoreLongShotBonus"] = E("Score: Long Shot Bonus", "Added when the distance is at or above the 'Long Shot Distance' above."),
-        ["ScoreMultiKillBonus"] = E("Score: Multi-Kill Bonus", "One share added for each extra kill in the chain."),
-        ["ScoreRevengeBonus"] = E("Score: Revenge Bonus", "Extra feedback score for a revenge kill."),
         ["StreakWindow"] = E("Streak Time Window (s)",
             "Two kills closer together than this count as a streak (used by streak titles and the progress bar)."),
 

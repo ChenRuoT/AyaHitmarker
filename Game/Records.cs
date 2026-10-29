@@ -90,6 +90,7 @@ internal readonly struct HitRecord : IArmorSample
 /// </summary>
 internal readonly struct KillRecord
 {
+    internal readonly KillExperienceInput ExperienceInput;
     internal readonly string VictimName;
 
     /// <summary>归一化昵称（去空白 + 小写），只用于复仇判定，不显示。</summary>
@@ -144,7 +145,8 @@ internal readonly struct KillRecord
         bool explosive,
         bool sniperDamage,
         float distance,
-        bool killerIsLocalPlayer)
+        bool killerIsLocalPlayer,
+        KillExperienceInput experienceInput = default)
     {
         VictimName = victimName;
         VictimKey = victimKey;
@@ -164,6 +166,7 @@ internal readonly struct KillRecord
         SniperDamage = sniperDamage;
         Distance = distance;
         KillerIsLocalPlayer = killerIsLocalPlayer;
+        ExperienceInput = experienceInput;
     }
 
     /// <summary>转成判定引擎用的纯数据快照。</summary>

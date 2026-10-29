@@ -29,6 +29,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     // 0.7.0 战局小结：本局累计 + 显示时机状态机（见 Game/RaidStats.cs）
     private readonly RaidStats _stats = new RaidStats();
+    private readonly KillExperienceRuntime _experience = new();
     private readonly SummaryScheduler _summary = new SummaryScheduler();
     private float _nextMenuPoll;
     private bool _menuLoaded;
@@ -74,6 +75,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
             // 事件源存活检查：GlobalEventDispatcher 跨局不变，战局边界以主玩家出现 / 消失为准（见 GameEvents.PollNow）
             GameEvents.Poll();
+            _experience.Tick();
 
             UpdateLanguage();
 
@@ -225,6 +227,8 @@ internal sealed class AyaBehaviour : MonoBehaviour
         Cleanup("audio-load", StopAudioLoad);
         Cleanup("audio-host", () => _sound.Shutdown());
         Cleanup("audio-bank", () => AudioBank.Invalidate(resetRetries: true));
+        Cleanup("audio-metrics", AudioBank.Metrics.EndRaid);
+        Cleanup("experience", _experience.Reset);
 
         // 热重载路径：画布根是 DontDestroyOnLoad 的，静态图标缓存也会钉住旧纹理。
         // 不在这里清掉，重载一次就多一层画布 / 一套纹理。
@@ -299,6 +303,11 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
     private DebugHarness.Hooks MakeHarnessHooks() => new DebugHarness.Hooks
     {
+        ProbeXp = () =>
+        {
+            int? value = _experience.Evaluate(TestKills.At(1), 1);
+            Plugin.Logger.LogInfo($"[harness] xp backend probe={(value.HasValue ? value.Value.ToString() : "unavailable")} (synthetic victim, live backend rules)");
+        },
         Hit = (headshot, variant, targetIndex) =>
         {
             var target = TestKills.At(targetIndex);
@@ -410,6 +419,12 @@ internal sealed class AyaBehaviour : MonoBehaviour
                 case "kill": _sound.PlayKill(false); break;
                 case "killhead": _sound.PlayKill(true); break;
                 case "status": break;
+                case "metricsbegin": AudioBank.Metrics.BeginRaid(); break;
+                case "metricsend":
+                    Plugin.Logger.LogInfo($"[harness] audio metrics silentPlays={AudioBank.Metrics.SilentPlays} missing={AudioBank.Metrics.MissingClips} " +
+                        $"recoveries={AudioBank.Metrics.Reloads} longestMs={AudioBank.Metrics.LongestRecoveryMs:0} pending={AudioBank.Metrics.PendingRecoveries}");
+                    AudioBank.Metrics.EndRaid();
+                    break;
                 case "unload": AudioBank.DebugUnloadData(); break;
                 case "cleanup": _ = Resources.UnloadUnusedAssets(); GC.Collect(); break;
                 default: throw new ArgumentException($"未知音频指令: {command}");
@@ -477,6 +492,8 @@ internal sealed class AyaBehaviour : MonoBehaviour
     {
         _stats.Reset();
         _summary.OnRaidStarted();
+        _experience.Reset();
+        AudioBank.Metrics.BeginRaid();
         _ui.ResetAll();
         _streaks.Reset();
         _assists.Reset();
@@ -493,6 +510,9 @@ internal sealed class AyaBehaviour : MonoBehaviour
         try { DrainFeedback(); }
         catch (Exception ex) { Plugin.Logger.LogWarning($"[summary] 战局结束时排空事件队列失败（小结可能少算最后几个事件）: {ex.Message}"); }
         ScheduleSummary();
+        Plugin.Logger.LogInfo($"[audio] 本局静音播放 {AudioBank.Metrics.SilentPlays} 次，失效重载 {AudioBank.Metrics.Reloads} 次，最长恢复 {AudioBank.Metrics.LongestRecoveryMs:0} ms " +
+            $"clipMissing={AudioBank.Metrics.MissingClips} disabled={AudioBank.Metrics.DisabledPlays} zeroVolume={AudioBank.Metrics.ZeroVolumePlays} otherFailures={AudioBank.Metrics.OtherFailures} pending={AudioBank.Metrics.PendingRecoveries}");
+        AudioBank.Metrics.EndRaid();
         _stats.Reset();
 
         _ui.ResetAll();
@@ -515,6 +535,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
         Plugin.Logger.LogInfo(
             $"[summary] 战局结束 t={Time.unscaledTime:0.0}: kills={snapshot.Kills} 爆头击杀={snapshot.HeadshotKills} " +
             $"伤害={snapshot.BodyDamage:0} 受击={snapshot.HitsTaken} 助攻={snapshot.Assists} 阵亡={snapshot.Deaths} " +
+            $"killXp={snapshot.Score} missingXp={snapshot.MissingExperienceKills} matchMult=1 " +
             $"有活动={snapshot.HasActivity} → " +
             (!enabled ? "已在设置里关闭，不排队" : snapshot.HasActivity ? "排队等主菜单" : "无活动（藏身处 / 空局），忽略"));
     }
@@ -702,6 +723,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
 
             // 阈值每次重读配置：ConfigurationManager 里改完立即生效（连杀状态不重建）
             var analysis = _streaks.Register(UiClock.Now, kill.ToFact(), Plugin.Cfg.BuildStreakSettings());
+            analysis = analysis.WithExperience(_experience.Evaluate(kill, analysis.RaidKills));
 
             if (cfg.DebugEnabled.Value)
             {
@@ -763,6 +785,10 @@ internal sealed class AyaBehaviour : MonoBehaviour
     private void FireTestKill(KillRecord rec, bool playSound)
     {
         var analysis = _streaks.Register(UiClock.Now, rec.ToFact(), Plugin.Cfg.BuildStreakSettings());
+        // 明确的模拟输入，只用于 UI 验收；真实路径必须读后端配置。
+        var sampleRules = new KillExperience.Rules(120, 55, 1.2f, 1.1f, new[] { 0, 20, 30, 40, 50, 60, 70, 80, 90, 100 });
+        KillExperience.TryCalculate(rec.ExperienceInput, sampleRules, rec.Headshot, analysis.RaidKills, out var sampleXp);
+        analysis = analysis.WithExperience(sampleXp.Total);
         Plugin.Logger.LogInfo(
             $"[debug] 判定: score={analysis.Score} streak={analysis.Streak} multi={analysis.MultiCount} " +
             $"ribbon={analysis.Ribbon.Title}");
@@ -950,7 +976,7 @@ internal sealed class AyaBehaviour : MonoBehaviour
             $"font={(UiTheme.Font != null ? "ok" : "MISSING")} rankIcons={IconBank.RankIconStatus} " +
             $"streak={_streaks.CurrentStreak} raidKills={_streaks.RaidKills} lang={Loc.Current}({_lastGameCulture ?? "?"}) " +
             $"reconHits={ReconProbe.RawHitEvents} reconKills={ReconProbe.RawKillEvents} " +
-            $"audioLoading={AudioBank.IsLoading} audio[{AudioBank.DebugStatus()}] " +
+            $"silentPlays={AudioBank.Metrics.SilentPlays} audioLoading={AudioBank.IsLoading} audio[{AudioBank.DebugStatus()}] " +
             $"hit={AudioBank.SourceOf(SoundKind.Hit)}");
     }
 }

@@ -1,0 +1,42 @@
+# 主菜单验证：显示用固定模拟目标；xp 指令另外读取实际后端规则。
+waitmenu 120
+wait 20
+log 0.7.1 smoke start
+clock manual
+bg dark
+lang zh
+reset
+xp
+kill 1
+step 0.8
+shot xp_body
+step 0.3
+kill 2
+step 0.8
+shot xp_combo
+step 5
+summary
+step 0.5
+shot xp_summary_zh
+summary hide
+lang en
+reset
+kill 2
+step 5
+summary
+step 0.5
+shot xp_summary_en
+glyphs 击杀经验不可用 Kill XP Unavailable
+summary hide
+audio status
+audio metricsbegin
+audio unload
+audio hit
+wait 4
+audio status
+audio metricsend
+lang auto
+bg off
+log 0.7.1 smoke done
+wait 3
+quit
