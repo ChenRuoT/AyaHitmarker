@@ -44,4 +44,4 @@ ZIP 顶层只有 BepInEx，没有多余版本目录；不带 cfg，不覆盖玩�
 ## 验证边界
 
 CI 验证可执行逻辑、编译与安装目录/资源完整性。图标预览作为独立 artifact 保存，方便肉眼查看。
-Unity 渲染、逐帧动画、音效及 ConfigurationManager 实际排版仍需 README 中的 DebugHarness / 游戏验证。
+Unity 渲染、逐帧动画、音效及 ConfigurationManager 实际排版仍需 [开发记录 §11](DEVELOPMENT.md#diagnostics) 中的 DebugHarness / 游戏验证。

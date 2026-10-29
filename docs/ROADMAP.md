@@ -2,8 +2,8 @@
 
 > 写于 2026-10-29，基线 **0.7.1**（2026-10-29）。这是计划，不是承诺。
 >
-> **这是唯一的路线图，只写还没做的事。** 一项做完：在 [README §13](../README.md) 加一行变更记录、写进 `docs/releases/<版本>.md`，
-> 然后**从这里删掉**，不在这里留「✅ 已完成」。已发布版本的进度、证据和实测结论都在 README（§4 事件源 / §6 配置 / §9 卡片设计 / §10 已知限制 / §13 变更记录）
+> **这是唯一的路线图，只写还没做的事。** 一项做完：在 [开发记录 §13](DEVELOPMENT.md#changelog) 加一行变更记录、写进 `docs/releases/<版本>.md`，
+> 然后**从这里删掉**，不在这里留「✅ 已完成」。已发布版本的进度、证据和实测结论都在 [开发与实测记录](DEVELOPMENT.md)（§4 事件源 / §6 配置 / §9 卡片设计 / §10 已知限制 / §13 变更记录）
 > 与 `docs/recon-*.md`，不要在这里重复。
 >
 > 所有条目都必须遵守 [AGENTS.md](../AGENTS.md) §3 的约束（零补丁、两个事件源、单一注入 MonoBehaviour、主线程边界、uGUI 写入纪律）。
@@ -30,7 +30,7 @@
 | 0.5.1 | 2026-10-12 | 修战局中音效数据清空后持续无声 | [releases/0.5.1.md](releases/0.5.1.md) |
 | 0.5.0 | 2026-10-12 | 设置面板分类与控件、程序化徽记、完整资源安装 ZIP、CI 自动发布 | [releases/0.5.0.md](releases/0.5.0.md) |
 
-完整变更记录（含 0.1–0.4）见 [README §13](../README.md)。
+完整变更记录（含 0.1–0.4）见 [开发记录 §13](DEVELOPMENT.md#changelog)。
 
 ## 探查局（0.6 之前做过一次，结论）
 
@@ -93,7 +93,7 @@
 
 - `[diag]` 增加：每 20 秒窗口内的托管分配量（`GC.GetAllocatedBytesForCurrentThread` 差值 ÷ 帧数）、`Update` 平均 / 最大耗时（`Stopwatch`，**仅 `DebugEnabled` 时**）。
 - 先量后改：每帧路径目前没发现明显热点（分配几乎都在出生时的 `Show`），只有 `KillFeedLayer.ScoreString` 在分数滚动动画期间每帧 `ToString()`。有数据再决定是否优化。
-- 在战局里 / 主菜单各记一份基线数字进 README §11。
+- 在战局里 / 主菜单各记一份基线数字进开发记录 §11。
 
 **验证**：离线测试（预计 1185+ → 1250+）；Release `-warnaserror`；`smoke.txt` + `smoke-check.ps1` 在当前 build 上全绿；`regress.ps1` 对 0.7.1 基线 0 差异；一局真实战局看 `[diag]` 的分配与耗时。
 
@@ -118,11 +118,11 @@
 ## 明确不做
 
 - 不为了「用上框架」加 Harmony 补丁。真到非加不可，按 AGENTS.md §3.0 先确认目标方法体独立。
-- 不把 `Player.ApplyShot` / `Player.ApplyDamageInfo` 加回来（README §4）。
+- 不把 `Player.ApplyShot` / `Player.ApplyDamageInfo` 加回来（[开发记录 §4](DEVELOPMENT.md#events)）。
 - 不加第二个托管注入类型，不写自定义 `Graphic` / `MonoBehaviour`（AGENTS §3.3）。
 - 「肢体打黑」标签暂不做：要在主线程读健康状态，收益抵不过风险。
 - 不碰 BattlEye / `ConsistencyInfo` / `FilesChecker`（AGENTS §3.8）。
-- 不改连杀判定的默认值（2026-10-29 用户决定：只在文档里说明，见 README §9.3）；不做「不死亡连杀」的规则重写。
+- 不改连杀判定的默认值（2026-10-29 用户决定：只在文档里说明，见[开发记录 §9.3](DEVELOPMENT.md#achievements)）；不做「不死亡连杀」的规则重写。
 - 没有联机模组环境就不写联机相关逻辑。
 
 ## 风险与未知
